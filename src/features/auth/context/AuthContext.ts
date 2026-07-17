@@ -3,7 +3,7 @@ import { createContext } from "react";
 import type { AuthState } from "@/features/auth/types/auth.types";
 
 export type AuthContextType = AuthState & {
-  login: () => Promise<void>;
+  login: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 

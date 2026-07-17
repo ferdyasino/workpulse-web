@@ -18,13 +18,13 @@ export default function AuthProvider({ children }: Props) {
     isLoading: false,
   });
 
-  async function login() {
+  async function login(token: string) {
     setState((current) => ({
       ...current,
       isLoading: true,
     }));
 
-    const user = await loginWithGoogle();
+    const user = await loginWithGoogle(token);
 
     setState({
       user,
