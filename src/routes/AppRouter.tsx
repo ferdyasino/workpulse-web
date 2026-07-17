@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import ProtectedRoute from "./ProtectedRoute";
+
 import LoginPage from "@/features/auth/pages/LoginPage";
 import NotFoundPage from "@/features/common/pages/NotFoundPage";
 
@@ -17,9 +19,11 @@ export default function AppRouter() {
         <Route
           path="/dashboard"
           element={
-            <AppLayout>
-              <DashboardPage />
-            </AppLayout>
+            <ProtectedRoute>
+              <AppLayout>
+                <DashboardPage />
+              </AppLayout>
+            </ProtectedRoute>
           }
         />
 
