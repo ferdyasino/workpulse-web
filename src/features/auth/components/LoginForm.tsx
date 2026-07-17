@@ -1,9 +1,11 @@
 import { Button, Divider, Stack, TextField } from "@mui/material";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 import GoogleIcon from "@mui/icons-material/Google";
 
 export default function LoginForm() {
+  const navigate = useNavigate();
   const { login, isLoading } = useAuth();
 
   return (
@@ -23,8 +25,11 @@ export default function LoginForm() {
         size="large"
         startIcon={<GoogleIcon />}
         fullWidth
-        onClick={login}
         disabled={isLoading}
+        onClick={async () => {
+          await login();
+          navigate("/dashboard");
+        }}
       >
         Continue with Google
       </Button>

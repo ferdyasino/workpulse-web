@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { loginWithGoogle, logout } from "@/features/auth/services/auth.service";
+import { getStoredUser, loginWithGoogle, logout } from "@/features/auth/services/auth.service";
 
 import type { AuthState } from "@/features/auth/types/auth.types";
 
@@ -13,8 +13,8 @@ type Props = {
 
 export default function AuthProvider({ children }: Props) {
   const [state, setState] = useState<AuthState>({
-    user: null,
-    isAuthenticated: false,
+    user: getStoredUser(),
+    isAuthenticated: Boolean(getStoredUser()),
     isLoading: false,
   });
 
@@ -42,6 +42,18 @@ export default function AuthProvider({ children }: Props) {
       isLoading: false,
     });
   }
+
+  useEffect(() => {
+    const user = getStoredUser();
+
+    if (user) {
+      setState({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    }
+  }, []);
 
   return (
     <AuthContext.Provider
