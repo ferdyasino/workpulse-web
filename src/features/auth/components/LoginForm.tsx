@@ -1,8 +1,11 @@
 import { Button, Divider, Stack, TextField } from "@mui/material";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import GoogleIcon from "@mui/icons-material/Google";
 
 export default function LoginForm() {
+  const { login, isLoading } = useAuth();
+
   return (
     <Stack spacing={2}>
       <TextField label="Email" type="email" fullWidth />
@@ -15,7 +18,14 @@ export default function LoginForm() {
 
       <Divider>OR</Divider>
 
-      <Button variant="outlined" size="large" startIcon={<GoogleIcon />} fullWidth>
+      <Button
+        variant="outlined"
+        size="large"
+        startIcon={<GoogleIcon />}
+        fullWidth
+        onClick={login}
+        disabled={isLoading}
+      >
         Continue with Google
       </Button>
     </Stack>
