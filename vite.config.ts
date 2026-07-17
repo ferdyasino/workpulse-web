@@ -6,4 +6,13 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    proxy: {
+      "/gas": {
+        target: "https://script.google.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/gas/, ""),
+      },
+    },
+  },
 });
