@@ -1,19 +1,29 @@
-import "./index.css";
-
-import App from "./App.tsx";
-
-import GoogleProvider from "@/providers/GoogleProvider";
-import AuthProvider from "@/providers/AuthProvider";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap-icons/font/bootstrap-icons.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import CssBaseline from "@mui/material/CssBaseline";
+import { ThemeProvider } from "@mui/material/styles";
+
+import App from "./App";
+
+import theme from "@/theme";
+
+import AuthProvider from "@/providers/AuthProvider";
+import GoogleProvider from "@/providers/GoogleProvider";
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <GoogleProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </GoogleProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+
+      <GoogleProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </GoogleProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

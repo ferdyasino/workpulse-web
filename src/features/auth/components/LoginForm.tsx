@@ -1,15 +1,16 @@
-import { Button, Divider, Stack, TextField } from "@mui/material";
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { Box, Divider, Stack, TextField, Typography } from "@mui/material";
+
+import { Button, GoogleButton } from "@/components/ui";
 import { useNavigate } from "react-router-dom";
 
-import { GoogleLogin } from "@react-oauth/google";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export default function LoginForm() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={3}>
       <TextField label="Email" type="email" fullWidth />
 
       <TextField label="Password" type="password" fullWidth />
@@ -18,20 +19,37 @@ export default function LoginForm() {
         Sign In
       </Button>
 
-      <Divider>OR</Divider>
+      <Divider>
+        <Typography variant="body2" color="text.secondary">
+          OR
+        </Typography>
+      </Divider>
 
-      <GoogleLogin
-        onSuccess={async (credentialResponse) => {
-          if (credentialResponse.credential) {
-            await login(credentialResponse.credential);
-
-            navigate("/dashboard");
-          }
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          width: "100%",
+          "& > div": {
+            width: "100%",
+            maxWidth: 360,
+            display: "flex",
+            justifyContent: "center",
+          },
         }}
-        onError={() => {
-          console.log("Google login failed");
-        }}
-      />
+      >
+        <GoogleButton
+          onSuccess={async (credentialResponse) => {
+            if (credentialResponse.credential) {
+              await login(credentialResponse.credential);
+              navigate("/dashboard");
+            }
+          }}
+          onError={() => {
+            console.log("Google login failed");
+          }}
+        />
+      </Box>
     </Stack>
   );
 }

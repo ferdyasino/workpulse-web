@@ -1,0 +1,416 @@
+.app-page,
+.glass,
+.glass-card {
+  position: relative;
+  z-index: 1;
+}
+
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+}
+
+.glass-card {
+  padding: 1.5rem;
+  transition: 0.2s ease;
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* =====================================================
+   FORMS (BASE)
+===================================================== */
+
+.form-control,
+.form-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.15);
+}
+
+.btn {
+  border-radius: var(--radius-sm);
+}
+
+/* PRIMARY */
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+/* GLASS BASE */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+
+  /* important for stable rendering */
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+  will-change: transform;
+}
+
+/* GLASS HOVER */
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main); /* ensures text never fades */
+  transform: scale(1.05);
+}
+
+/* DANGER GLASS */
+.btn-glass-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+/* DANGER HOVER */
+.btn-glass-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ffffff;
+  transform: translateY(-1px) scale(1.03);
+}
+/* =====================================================
+   TABLE
+===================================================== */
+
+.table {
+  color: var(--text-main);
+  margin-bottom: 0;
+}
+
+.table th {
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.table td {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* =====================================================
+   BADGES
+===================================================== */
+
+.badge-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+}
+.badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+/* =====================================================
+   TOAST SYSTEM
+===================================================== */
+
+.toast-host {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toast-item {
+  min-width: 260px;
+  max-width: 340px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(var(--blur));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+  display: flex;
+  justify-content: space-between;
+}
+
+.toast-success {
+  background: rgba(34, 197, 94, 0.15);
+}
+.toast-error {
+  background: rgba(239, 68, 68, 0.15);
+}
+.toast-info {
+  background: rgba(56, 189, 248, 0.15);
+}
+.toast-warning {
+  background: rgba(245, 158, 11, 0.15);
+}
+
+/* =====================================================
+   LOADER
+===================================================== */
+
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#loader,
+.app-loader,
+.global-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 999999 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =====================================================
+   AVATAR
+===================================================== */
+
+.avatar-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+/* =====================================================
+   SELECT DROPDOWN FIX (FINAL OVERRIDE)
+===================================================== */
+
+.form-select {
+  border-radius: 14px !important;
+  overflow: hidden !important;
+
+  background-color: rgba(15, 23, 42, 0.85) !important;
+  color: var(--text-main) !important;
+
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+
+  padding: 10px 14px;
+
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  display: block;
+}
+/* focus */
+.form-select:focus {
+  border-radius: 14px !important;
+  outline: none;
+  box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.15) !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+}
+
+/* dropdown options */
+.form-select option {
+  background: #0f172a !important;
+  color: #fff !important;
+}
+
+.btn-break-ended {
+  background: rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+/* =====================================================
+   REPORTS PAGE IMPROVEMENT LAYER
+   (drop-in override only for reports page)
+===================================================== */
+
+.page-container {
+  max-width: 1400px;
+  margin: auto;
+  padding: 24px;
+}
+
+/* =====================================================
+   HEADER
+===================================================== */
+.page-container .glass-card h4 {
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.3px;
+}
+
+.page-container .glass-card small {
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+/* =====================================================
+   KPI CARDS (IMPORTANT FIX)
+===================================================== */
+.page-container .glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.page-container .glass-card .text-muted {
+  color: var(--text-secondary) !important;
+  font-size: 0.82rem;
+  letter-spacing: 0.3px;
+}
+
+/* BIG NUMBERS */
+.page-container .glass-card .fs-3,
+.page-container .glass-card .fs-4 {
+  color: var(--text-main);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* COLOR EMPHASIS FIX */
+#repOTHours {
+  color: #fbbf24 !important; /* stronger amber */
+}
+
+#repPresent {
+  color: #22c55e !important;
+}
+
+#repAbsent {
+  color: #ef4444 !important;
+}
+
+/* =====================================================
+   KPI GRID VISUAL BALANCE
+===================================================== */
+.page-container .row.g-3 > div > .glass-card {
+  height: 100%;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* =====================================================
+   SECOND ROW (LESS IMPORTANT METRICS)
+===================================================== */
+#repLate,
+#repWorkdays {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+/* =====================================================
+   REPORT TABLE VISIBILITY FIX
+   (PLACE AT VERY BOTTOM OF CSS)
+===================================================== */
+
+.page-container .table,
+.page-container .table * {
+  color: #f8fafc !important;
+}
+
+/* Header */
+.page-container .table thead th {
+  color: #cbd5e1 !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+  font-weight: 600;
+}
+
+/* Body */
+.page-container .table tbody td {
+  color: #f8fafc !important;
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Alternate rows */
+.page-container .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: #f8fafc !important;
+}
+
+.page-container .table-striped > tbody > tr:nth-of-type(even) > * {
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+
+/* Hover */
+.page-container .table-hover > tbody > tr:hover > * {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+/* Links */
+.page-container .table a {
+  color: #7dd3fc !important;
+}
+
+/* Small text */
+.page-container .table small,
+.page-container .table .text-muted {
+  color: #cbd5e1 !important;
+}
+
+/* Bootstrap utility overrides */
+.page-container .table .text-dark,
+.page-container .table .text-black,
+.page-container .table .text-body,
+.page-container .table .text-secondary {
+  color: #f8fafc !important;
+}
+
+/* Status badge text */
+.page-container .badge {
+  color: #fff !important;
+}

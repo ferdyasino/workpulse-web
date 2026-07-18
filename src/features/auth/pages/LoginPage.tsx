@@ -14,32 +14,25 @@ export default function LoginPage() {
       }}
     >
       <Paper
-        elevation={3}
+        elevation={0}
         sx={{
           width: "100%",
           maxWidth: 420,
-          p: 4,
+          p: 5,
         }}
       >
         <Typography
           variant="h4"
+          align="center"
+          gutterBottom
           sx={{
-            textAlign: "center",
             fontWeight: 700,
           }}
-          gutterBottom
         >
           WorkPulse
         </Typography>
 
-        <Typography
-          variant="body2"
-          sx={{
-            textAlign: "center",
-            mb: 3,
-          }}
-          color="text.secondary"
-        >
+        <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 4 }}>
           Attendance & Payroll System
         </Typography>
 
