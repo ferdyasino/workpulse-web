@@ -6,7 +6,7 @@ import { GoogleLogin } from "@react-oauth/google";
 
 export default function LoginForm() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login } = useAuth();
 
   return (
     <Stack spacing={2}>
