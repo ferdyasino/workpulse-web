@@ -1,21 +1,13 @@
-import { apiRequest } from "@/utils/api";
+import { gasRequest } from "@/utils/api";
 
 import type { User } from "@/features/auth/types/auth.types";
 
 const STORAGE_KEY = "workpulse_user";
 
 export async function loginWithGoogle(workspaceSlug: string, credential: string): Promise<User> {
-  const body = new URLSearchParams();
-
-  body.append("action", "logingoogle");
-  body.append("workspaceSlug", workspaceSlug || "");
-  body.append("credential", credential);
-
-  const user = await apiRequest<User>("", {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-    },
-    body: body.toString(),
+  const user = await gasRequest<User>("logingoogle", {
+    workspaceSlug,
+    credential,
   });
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
@@ -34,5 +26,5 @@ export function getStoredUser(): User | null {
     return null;
   }
 
-  return JSON.parse(value);
+  return JSON.parse(value) as User;
 }

@@ -1,6 +1,6 @@
-import { apiRequest } from "@/utils/api";
+import { gasRequest } from "@/utils/api";
 
-import type { TimeLogAction } from "../types/attendance.types";
+import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 
 export type SubmitTimeLogPayload = {
   user_id: string;
@@ -14,11 +14,33 @@ export type SubmitTimeLogPayload = {
   timestamp: string;
 };
 
-export async function submitTimeLog(workspaceId: string, payload: SubmitTimeLogPayload) {
-  return apiRequest("/submitTimeLogAction", {
-    body: JSON.stringify({
-      workspace_id: workspaceId,
-      ...payload,
-    }),
+export type SubmitTimeLogResponse = {
+  success: boolean;
+  message: string;
+  log_id?: string;
+  state?: AttendanceState;
+};
+
+export async function submitTimeLogAction(workspaceId: string, payload: SubmitTimeLogPayload) {
+  const { action, ...rest } = payload;
+
+  return gasRequest<SubmitTimeLogResponse>("timelogs", {
+    workspace_id: workspaceId,
+    action_type: action,
+    ...rest,
+  });
+}
+
+export async function getCurrentAttendanceState(
+  workspaceId: string,
+  email: string,
+  shiftId?: string,
+  date?: string,
+) {
+  return gasRequest<AttendanceState>("getcurrentstate", {
+    workspace_id: workspaceId,
+    email,
+    shift_id: shiftId,
+    date,
   });
 }

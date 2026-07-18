@@ -1,12 +1,20 @@
+import { useCallback } from "react";
+
 import { Button, Grid, Paper } from "@mui/material";
 
-export default function TimeLogger() {
-  const handleAction = (action: string) => {
-    console.log(action);
+import { useAttendance } from "../hooks/useAttendance";
 
-    // TODO:
-    // logTime(action)
-  };
+export default function TimeLogger() {
+  const { logTime, isSubmitting } = useAttendance();
+
+  const handleClick = useCallback(
+    (action: Parameters<typeof logTime>[0]) => {
+      if (isSubmitting) return;
+
+      void logTime(action);
+    },
+    [logTime, isSubmitting],
+  );
 
   return (
     <Paper
@@ -23,7 +31,8 @@ export default function TimeLogger() {
             variant="contained"
             color="success"
             size="large"
-            onClick={() => handleAction("time_in")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("time_in")}
           >
             Time In
           </Button>
@@ -35,7 +44,8 @@ export default function TimeLogger() {
             variant="contained"
             color="error"
             size="large"
-            onClick={() => handleAction("time_out")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("time_out")}
           >
             Time Out
           </Button>
@@ -47,7 +57,8 @@ export default function TimeLogger() {
             variant="contained"
             color="warning"
             size="large"
-            onClick={() => handleAction("break_start")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("break_start")}
           >
             Break Start
           </Button>
@@ -59,7 +70,8 @@ export default function TimeLogger() {
             variant="outlined"
             color="warning"
             size="large"
-            onClick={() => handleAction("break_end")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("break_end")}
           >
             Break End
           </Button>
@@ -71,7 +83,8 @@ export default function TimeLogger() {
             variant="contained"
             color="inherit"
             size="large"
-            onClick={() => handleAction("lunch_start")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("lunch_start")}
           >
             Lunch Start
           </Button>
@@ -83,7 +96,8 @@ export default function TimeLogger() {
             variant="contained"
             color="info"
             size="large"
-            onClick={() => handleAction("lunch_end")}
+            disabled={isSubmitting}
+            onClick={() => handleClick("lunch_end")}
           >
             Lunch End
           </Button>

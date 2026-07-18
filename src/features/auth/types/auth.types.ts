@@ -1,10 +1,36 @@
-export type UserRole = "OWNER" | "ADMIN" | "HR" | "USER";
+export type UserRole = "OWNER" | "ADMIN" | "HR" | "USER" | "SUPERADMIN";
+
+export type Shift = {
+  shift_name: string;
+  start_time: string;
+  end_time: string;
+  grace_minutes: string;
+};
 
 export type User = {
-  id: string;
+  auth_user_id: string;
+  user_id: string;
+
   email: string;
-  name: string;
-  role: UserRole;
+  fullname: string;
+
+  role: UserRole | string;
+  status: string;
+
+  dept_name: string;
+
+  shift_id: string;
+  sched: Shift;
+
+  workspace_id: string;
+  workspace_url: string;
+  timelog_spreadsheet_id: string;
+
+  meta?: {
+    resolved_by?: string;
+    bootstrap?: boolean;
+    workspace_source?: string;
+  };
 };
 
 export type AuthState = {
