@@ -1,27 +1,33 @@
-import { Drawer, List, ListItem, ListItemText } from "@mui/material";
+import { Box } from "@mui/material";
 
-const menuItems = ["Dashboard", "Users", "Attendance", "Payroll", "Reports", "Settings"];
+import { Clock } from "@/components/ui";
+import TodaySummary from "@/features/dashboard/components/TodaySummary";
 
 export default function Sidebar() {
   return (
-    <Drawer
-      variant="permanent"
+    <Box
       sx={{
-        width: 240,
-        flexShrink: 0,
-        "& .MuiDrawer-paper": {
-          width: 240,
-          boxSizing: "border-box",
+        width: {
+          xs: "100%",
+          md: 420,
         },
+        p: 2,
       }}
     >
-      <List>
-        {menuItems.map((item) => (
-          <ListItem key={item}>
-            <ListItemText primary={item} />
-          </ListItem>
-        ))}
-      </List>
-    </Drawer>
+      <Clock timezone="America/New_York" />
+
+      {/* Desktop only */}
+      <Box
+        sx={{
+          display: {
+            xs: "none",
+            md: "block",
+          },
+          mt: 3,
+        }}
+      >
+        <TodaySummary />
+      </Box>
+    </Box>
   );
 }

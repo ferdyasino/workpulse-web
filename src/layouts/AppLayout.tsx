@@ -1,39 +1,61 @@
+import type { ReactNode } from "react";
+
 import { Box } from "@mui/material";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 
 type Props = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export default function AppLayout({ children }: Props) {
   return (
     <Box
       sx={{
-        display: "flex",
         minHeight: "100vh",
+        bgcolor: "background.default",
       }}
     >
-      <Sidebar />
+      <Header />
 
       <Box
         sx={{
-          flexGrow: 1,
-          display: "flex",
-          flexDirection: "column",
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: "420px 1fr",
+          },
+          gap: 3,
+          p: 2,
         }}
       >
-        <Header />
+        {/* DESKTOP SIDEBAR / MOBILE CLOCK */}
+        <Sidebar />
 
+        {/* DASHBOARD */}
         <Box
           component="main"
           sx={{
-            flexGrow: 1,
-            p: 3,
+            order: {
+              xs: 2,
+              md: 2,
+            },
           }}
         >
           {children}
+        </Box>
+
+        {/* MOBILE ONLY SUMMARY POSITION */}
+        <Box
+          sx={{
+            display: {
+              xs: "block",
+              md: "none",
+            },
+          }}
+        >
+          {/* TodaySummary moves here */}
         </Box>
       </Box>
     </Box>
