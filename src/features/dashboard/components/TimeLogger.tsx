@@ -1,20 +1,19 @@
-import { useCallback } from "react";
-
 import { Button, Grid, Paper } from "@mui/material";
 
 import { useAttendance } from "../hooks/useAttendance";
 
+import type { TimeLogAction } from "../types/attendance.types";
+
 export default function TimeLogger() {
   const { logTime, isSubmitting } = useAttendance();
 
-  const handleClick = useCallback(
-    (action: Parameters<typeof logTime>[0]) => {
-      if (isSubmitting) return;
+  const handleClick = (action: TimeLogAction) => {
+    if (isSubmitting) {
+      return;
+    }
 
-      void logTime(action);
-    },
-    [logTime, isSubmitting],
-  );
+    void logTime(action);
+  };
 
   return (
     <Paper

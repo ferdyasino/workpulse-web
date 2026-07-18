@@ -9,10 +9,13 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 export function useAttendance() {
   const { user } = useAuth();
 
-  const mounted = useRef(false);
+  const initialized = useRef(false);
+  const submitting = useRef(false);
 
   const [state, setState] = useState<AttendanceState | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -22,9 +25,9 @@ export function useAttendance() {
       return null;
     }
 
-    setIsLoading(true);
-
     try {
+      setIsLoading(true);
+
       const attendance = await getCurrentAttendanceState(
         user.workspace_id,
         user.email,
@@ -41,7 +44,7 @@ export function useAttendance() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user?.workspace_id, user?.email, user?.shift_id]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
@@ -49,68 +52,31 @@ export function useAttendance() {
         throw new Error("User is not authenticated.");
       }
 
-      if (isSubmitting) {
+      if (submitting.current) {
         return;
       }
 
+      submitting.current = true;
       setIsSubmitting(true);
 
       try {
-        let location: GeolocationPosition | null = null;
-        let locationStatus = "UNAVAILABLE";
-        let locationMessage = "Geolocation unavailable";
-
-        try {
-          location = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0,
-            });
-          });
-
-          locationStatus = "OK";
-          locationMessage = "";
-        } catch (error) {
-          if (error instanceof GeolocationPositionError) {
-            switch (error.code) {
-              case error.PERMISSION_DENIED:
-                locationStatus = "DENIED";
-                locationMessage = "Location permission denied.";
-                break;
-
-              case error.POSITION_UNAVAILABLE:
-                locationStatus = "UNAVAILABLE";
-                locationMessage = "Location unavailable.";
-                break;
-
-              case error.TIMEOUT:
-                locationStatus = "TIMEOUT";
-                locationMessage = "Location request timed out.";
-                break;
-
-              default:
-                locationStatus = "ERROR";
-                locationMessage = error.message;
-            }
-          }
-        }
-
         const response = await submitTimeLogAction(user.workspace_id, {
           user_id: user.user_id,
+
           email: user.email,
+
           shift_id: user.shift_id,
+
           action,
+
           device_info: navigator.userAgent,
-          location: location
-            ? {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                accuracy: location.coords.accuracy,
-              }
-            : null,
-          location_status: locationStatus,
-          location_message: locationMessage,
+
+          location: null,
+
+          location_status: "DISABLED",
+
+          location_message: "Location tracking is temporarily disabled.",
+
           timestamp: new Date().toISOString(),
         });
 
@@ -126,21 +92,26 @@ export function useAttendance() {
 
         return response;
       } finally {
+        submitting.current = false;
         setIsSubmitting(false);
       }
     },
-    [user, refresh, isSubmitting],
+    [user, refresh],
   );
 
   useEffect(() => {
-    if (mounted.current) {
+    if (!user) {
       return;
     }
 
-    mounted.current = true;
+    if (initialized.current) {
+      return;
+    }
+
+    initialized.current = true;
 
     void refresh();
-  }, [refresh]);
+  }, [user, refresh]);
 
   return {
     state,
