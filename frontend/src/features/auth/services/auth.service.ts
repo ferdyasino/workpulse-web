@@ -5,17 +5,18 @@ import type { User } from "@/features/auth/types/auth.types";
 
 const STORAGE_KEY = "workpulse_user";
 
+type ApplicationContext = {
+  user: User;
+  workspace: unknown;
+};
+
 export async function loginWithGoogle(_workspaceSlug: string, credential: string): Promise<User> {
-  const { data, error } = await supabase.auth.signInWithIdToken({
+  const { error } = await supabase.auth.signInWithIdToken({
     provider: "google",
     token: credential,
   });
 
-  console.groupCollapsed("[AUTH]");
-  console.log("signInWithIdToken", { data, error });
-
   if (error) {
-    console.groupEnd();
     throw error;
   }
 
@@ -23,15 +24,12 @@ export async function loginWithGoogle(_workspaceSlug: string, credential: string
     data: { session },
   } = await supabase.auth.getSession();
 
-  console.log("session", session);
-
   if (!session) {
-    console.groupEnd();
     throw new Error("Failed to establish a Supabase session.");
   }
 
-  const user = await invokeFunction<
-    User,
+  const context = await invokeFunction<
+    ApplicationContext,
     {
       action: "ME";
     }
@@ -39,8 +37,9 @@ export async function loginWithGoogle(_workspaceSlug: string, credential: string
     action: "ME",
   });
 
-  console.log("user", user);
-  console.groupEnd();
+  const user = context.user;
+
+  console.log("AUTH USER:", user);
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
 

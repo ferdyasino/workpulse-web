@@ -19,8 +19,8 @@ export type User = {
 
   dept_name: string;
 
-  shift_id: string;
-  sched: Shift;
+  shift_id?: string | null;
+  sched?: Shift | null;
 
   workspace_id: string;
   workspace_url: string;

@@ -9,17 +9,18 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 export function useAttendance() {
   const { user } = useAuth();
 
+  console.log("CURRENT AUTH USER:", user);
+
   const initialized = useRef(false);
   const submitting = useRef(false);
 
   const [state, setState] = useState<AttendanceState | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!user) {
+    if (!user || !user.workspace_id || !user.email) {
       setState(null);
       setIsLoading(false);
       return null;
@@ -31,12 +32,8 @@ export function useAttendance() {
       const attendance = await getCurrentAttendanceState(
         user.workspace_id,
         user.email,
-        user.shift_id,
+        user.shift_id || undefined,
       );
-
-      if ((attendance as any)?.success === false) {
-        throw new Error((attendance as any).message);
-      }
 
       setState(attendance);
 
@@ -48,8 +45,8 @@ export function useAttendance() {
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
-      if (!user) {
-        throw new Error("User is not authenticated.");
+      if (!user || !user.workspace_id || !user.email || !user.user_id) {
+        throw new Error("Incomplete user context.");
       }
 
       if (submitting.current) {
@@ -65,13 +62,12 @@ export function useAttendance() {
 
           email: user.email,
 
-          shift_id: user.shift_id,
-
+          shift_id: user.shift_id || undefined,
           action,
 
           device_info: navigator.userAgent,
 
-          location: null,
+          location: "",
 
           location_status: "DISABLED",
 
@@ -100,7 +96,15 @@ export function useAttendance() {
   );
 
   useEffect(() => {
+    initialized.current = false;
+  }, [user?.workspace_id]);
+
+  useEffect(() => {
     if (!user) {
+      return;
+    }
+
+    if (!user.workspace_id || !user.email) {
       return;
     }
 

@@ -6,11 +6,17 @@ export type SubmitTimeLogPayload = {
   user_id: string;
   email: string;
   shift_id?: string;
+
   action: TimeLogAction;
+
   device_info: string;
+
   location: unknown;
+
   location_status: string;
+
   location_message: string;
+
   timestamp: string;
 };
 
@@ -25,6 +31,10 @@ export async function submitTimeLogAction(
   workspaceId: string,
   payload: SubmitTimeLogPayload,
 ): Promise<SubmitTimeLogResponse> {
+  if (!workspaceId) {
+    throw new Error("workspaceId is required");
+  }
+
   const { action, ...rest } = payload;
 
   return invokeFunction<
@@ -48,6 +58,14 @@ export async function getCurrentAttendanceState(
   shiftId?: string,
   date?: string,
 ): Promise<AttendanceState> {
+  if (!workspaceId) {
+    throw new Error("workspaceId is required");
+  }
+
+  if (!email) {
+    throw new Error("email is required");
+  }
+
   return invokeFunction<
     AttendanceState,
     {
@@ -59,9 +77,21 @@ export async function getCurrentAttendanceState(
     }
   >("api", {
     action: "getcurrentstate",
+
     workspace_id: workspaceId,
+
     email,
-    shift_id: shiftId,
-    date,
+
+    ...(shiftId
+      ? {
+          shift_id: shiftId,
+        }
+      : {}),
+
+    ...(date
+      ? {
+          date,
+        }
+      : {}),
   });
 }
