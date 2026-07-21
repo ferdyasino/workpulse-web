@@ -9,5 +9,7 @@ function required(value: string | undefined, name: string): string {
 export const env = {
   googleClientId: required(import.meta.env.VITE_GOOGLE_CLIENT_ID, "VITE_GOOGLE_CLIENT_ID"),
 
-  apiUrl: required(import.meta.env.VITE_API_URL, "VITE_API_URL"),
+  supabaseUrl: required(import.meta.env.VITE_SUPABASE_URL, "VITE_SUPABASE_URL"),
+
+  supabaseAnonKey: required(import.meta.env.VITE_SUPABASE_ANON_KEY, "VITE_SUPABASE_ANON_KEY"),
 };

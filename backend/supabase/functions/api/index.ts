@@ -1,82 +1,46 @@
 import { createClient } from "@supabase/supabase-js";
-import { getWorkspace } from "./modules/workspace.ts";
-import { getUserContext } from "./modules/users.ts";
+
+import { handleRequest, type ApiRequest } from "./routes/index.ts";
+import type { Database } from "./types/database.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+const supabaseAdmin = createClient<Database>(supabaseUrl, serviceRoleKey);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
+    return new Response(null, {
       headers: corsHeaders,
     });
   }
 
+  if (req.method !== "POST") {
+    return Response.json(
+      {
+        success: false,
+        message: "Method Not Allowed",
+      },
+      {
+        status: 405,
+        headers: corsHeaders,
+      },
+    );
+  }
+
   try {
-    const body = await req.json();
-    const { action, email } = body;
+    const body = (await req.json()) as ApiRequest;
 
-    let response;
+    const result = await handleRequest(req, body, supabaseAdmin);
 
-    switch (action) {
-      case "GET_WORKSPACE":
-        response = await getWorkspace(supabaseAdmin);
-        break;
-
-      case "GET_USER_CONTEXT": {
-        response = await getUserContext(supabaseAdmin, email);
-
-        break;
-      }
-
-      case "test-users": {
-        const { data, error } = await supabaseAdmin
-          .from("users")
-          .select("*")
-          .limit(5);
-
-        response = {
-          data,
-          error,
-        };
-
-        break;
-      }
-
-      case "test-db": {
-        const { data, error } = await supabaseAdmin
-          .from("workspaces")
-          .select("*")
-          .limit(5);
-
-        response = {
-          data,
-          error,
-        };
-        break;
-      }
-
-      default:
-        return Response.json(
-          {
-            error: "Unknown action",
-          },
-          {
-            status: 400,
-            headers: corsHeaders,
-          },
-        );
-    }
-
-    return Response.json(response, {
+    return Response.json(result, {
       headers: corsHeaders,
     });
   } catch (error) {
@@ -84,8 +48,9 @@ Deno.serve(async (req) => {
 
     return Response.json(
       {
-        error,
-        message: error instanceof Error ? error.message : String(error),
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Internal Server Error",
       },
       {
         status: 500,

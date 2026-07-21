@@ -1,4 +1,4 @@
-import { gasRequest } from "@/utils/api";
+import { invokeFunction } from "@/utils/api";
 
 import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 
@@ -21,10 +21,21 @@ export type SubmitTimeLogResponse = {
   state?: AttendanceState;
 };
 
-export async function submitTimeLogAction(workspaceId: string, payload: SubmitTimeLogPayload) {
+export async function submitTimeLogAction(
+  workspaceId: string,
+  payload: SubmitTimeLogPayload,
+): Promise<SubmitTimeLogResponse> {
   const { action, ...rest } = payload;
 
-  return gasRequest<SubmitTimeLogResponse>("timelogs", {
+  return invokeFunction<
+    SubmitTimeLogResponse,
+    {
+      action: "timelogs";
+      workspace_id: string;
+      action_type: TimeLogAction;
+    } & Omit<SubmitTimeLogPayload, "action">
+  >("api", {
+    action: "timelogs",
     workspace_id: workspaceId,
     action_type: action,
     ...rest,
@@ -36,8 +47,18 @@ export async function getCurrentAttendanceState(
   email: string,
   shiftId?: string,
   date?: string,
-) {
-  return gasRequest<AttendanceState>("getcurrentstate", {
+): Promise<AttendanceState> {
+  return invokeFunction<
+    AttendanceState,
+    {
+      action: "getcurrentstate";
+      workspace_id: string;
+      email: string;
+      shift_id?: string;
+      date?: string;
+    }
+  >("api", {
+    action: "getcurrentstate",
     workspace_id: workspaceId,
     email,
     shift_id: shiftId,
