@@ -29,9 +29,15 @@ export async function createTimeLog(
   supabaseAdmin: SupabaseClient<Database>,
   payload: SubmitTimeLogPayload,
 ) {
-  /**
-   * Resolve user shift
-   */
+  console.log(
+    "SHIFT LOOKUP",
+    JSON.stringify({
+      user_id: payload.user_id,
+      workspace_id: payload.workspace_id,
+      shift_id: payload.shift_id,
+    }),
+  );
+
   const userShiftQuery = supabaseAdmin
     .from("user_shifts")
     .select("id")
@@ -48,13 +54,12 @@ export async function createTimeLog(
     throw shiftError;
   }
 
+  console.log("USER SHIFT RESULT", JSON.stringify(userShift));
+
   if (!userShift) {
     throw new Error("No active user shift found.");
   }
 
-  /**
-   * Insert time log
-   */
   const { data, error } = await supabaseAdmin
     .from("time_logs")
     .insert({
@@ -64,7 +69,7 @@ export async function createTimeLog(
 
       user_shift_id: userShift.id,
 
-      event_type: payload.action_type,
+      event_type: payload.action_type.toUpperCase(),
 
       event_time_utc: payload.timestamp,
 
@@ -78,11 +83,8 @@ export async function createTimeLog(
 
       metadata: {
         device_info: payload.device_info,
-
         location: JSON.stringify(payload.location),
-
         location_status: payload.location_status,
-
         location_message: payload.location_message,
       } as Json,
     })

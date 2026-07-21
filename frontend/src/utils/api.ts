@@ -9,6 +9,17 @@ export async function invokeFunction<TResponse, TBody extends object | undefined
   });
 
   if (error) {
+    console.error("EDGE FUNCTION ERROR:", error);
+
+    if (error.context) {
+      try {
+        const response = await error.context.json();
+        console.error("EDGE FUNCTION RESPONSE:", response);
+      } catch {
+        console.error("EDGE FUNCTION RAW:", await error.context.text());
+      }
+    }
+
     throw error;
   }
 

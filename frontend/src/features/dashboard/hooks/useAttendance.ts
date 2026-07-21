@@ -29,11 +29,7 @@ export function useAttendance() {
     try {
       setIsLoading(true);
 
-      const attendance = await getCurrentAttendanceState(
-        user.workspace_id,
-        user.email,
-        user.shift_id || undefined,
-      );
+      const attendance = await getCurrentAttendanceState(user.workspace_id, user.email);
 
       setState(attendance);
 
@@ -62,7 +58,8 @@ export function useAttendance() {
 
           email: user.email,
 
-          shift_id: user.shift_id || undefined,
+          shift_id: undefined,
+
           action,
 
           device_info: navigator.userAgent,
