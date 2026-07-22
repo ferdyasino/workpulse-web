@@ -5,7 +5,7 @@ import { useAttendance } from "../hooks/useAttendance";
 import type { TimeLogAction } from "../types/attendance.types";
 
 export default function TimeLogger() {
-  const { logTime, isSubmitting } = useAttendance();
+  const { state, logTime, isSubmitting } = useAttendance();
 
   const handleClick = (action: TimeLogAction) => {
     if (isSubmitting) {
@@ -14,6 +14,22 @@ export default function TimeLogger() {
 
     void logTime(action);
   };
+
+  const session = state?.current_session;
+
+  const hasActiveSession = !!session && !session.time_out;
+
+  const activeBreak = session?.breaks.at(-1);
+
+  const hasActiveBreak = !!activeBreak && !!activeBreak.in && !activeBreak.out;
+
+  const hasActiveLunch = !!session?.lunch.in && !session.lunch.out;
+
+  const isWorking = hasActiveSession && !hasActiveBreak && !hasActiveLunch;
+
+  const isBreak = hasActiveBreak;
+
+  const isLunch = hasActiveLunch;
 
   return (
     <Paper
@@ -30,7 +46,7 @@ export default function TimeLogger() {
             variant="contained"
             color="success"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || hasActiveSession}
             onClick={() => handleClick("TIME_IN")}
           >
             Time In
@@ -43,7 +59,7 @@ export default function TimeLogger() {
             variant="contained"
             color="error"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hasActiveSession || hasActiveBreak || hasActiveLunch}
             onClick={() => handleClick("TIME_OUT")}
           >
             Time Out
@@ -56,7 +72,7 @@ export default function TimeLogger() {
             variant="contained"
             color="warning"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isWorking}
             onClick={() => handleClick("BREAK_START")}
           >
             Break Start
@@ -69,7 +85,7 @@ export default function TimeLogger() {
             variant="outlined"
             color="warning"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isBreak}
             onClick={() => handleClick("BREAK_END")}
           >
             Break End
@@ -82,7 +98,7 @@ export default function TimeLogger() {
             variant="contained"
             color="inherit"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isWorking}
             onClick={() => handleClick("LUNCH_START")}
           >
             Lunch Start
@@ -95,7 +111,7 @@ export default function TimeLogger() {
             variant="contained"
             color="info"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isLunch}
             onClick={() => handleClick("LUNCH_END")}
           >
             Lunch End

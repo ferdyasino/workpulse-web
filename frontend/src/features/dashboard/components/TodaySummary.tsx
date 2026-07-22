@@ -1,6 +1,25 @@
-import { Paper, Typography } from "@mui/material";
+import { Paper, Stack, Typography } from "@mui/material";
+
+import { useAttendance } from "../hooks/useAttendance";
+
+function formatTime(value: string | null | undefined) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function TodaySummary() {
+  const { state } = useAttendance();
+
+  const session = state?.current_session;
+
+  const activeBreak = session?.breaks.at(-1);
+
   return (
     <>
       <Typography
@@ -23,7 +42,29 @@ export default function TodaySummary() {
           border: "1px solid rgba(255,255,255,0.12)",
         }}
       >
-        <Typography color="text.secondary">No attendance yet</Typography>
+        <Stack spacing={1}>
+          <Typography>
+            Status: <strong>{state?.status ?? "OFF"}</strong>
+          </Typography>
+
+          <Typography>Work Date: {state?.work_date ?? "--"}</Typography>
+
+          <Typography>Time In: {formatTime(session?.time_in)}</Typography>
+
+          <Typography>Time Out: {formatTime(session?.time_out)}</Typography>
+
+          <Typography>Breaks: {session?.breaks.length ?? 0}</Typography>
+
+          <Typography>
+            Current Break: {activeBreak && !activeBreak.out ? formatTime(activeBreak.in) : "None"}
+          </Typography>
+
+          <Typography>
+            Lunch: {!session?.lunch.in ? "Not started" : session.lunch.out ? "Completed" : "Active"}
+          </Typography>
+
+          <Typography>Sessions Today: {state?.sessions.length ?? 0}</Typography>
+        </Stack>
       </Paper>
     </>
   );

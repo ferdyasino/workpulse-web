@@ -11,6 +11,16 @@ export type LunchSession = {
   out: string | null;
 };
 
+export type AttendanceSession = {
+  time_in: string | null;
+
+  time_out: string | null;
+
+  breaks: BreakSession[];
+
+  lunch: LunchSession;
+};
+
 export type TimeLog = {
   log_id?: string;
 
@@ -21,14 +31,15 @@ export type TimeLog = {
   date: string;
 };
 
+export type AttendanceStatus =
+  "OFF" | "WORKING" | "ON_BREAK" | "ON_LUNCH" | "CLOCKED_OUT" | "ABSENT";
+
 export type AttendanceState = {
-  status: "OFF" | "WORKING" | "BREAK" | "LUNCH" | "CLOCKED_OUT";
+  status: AttendanceStatus;
 
-  time_in: string | null;
+  work_date: string;
 
-  time_out: string | null;
+  sessions: AttendanceSession[];
 
-  breaks: BreakSession[];
-
-  lunch: LunchSession;
+  current_session: AttendanceSession | null;
 };

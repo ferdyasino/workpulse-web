@@ -1,6 +1,24 @@
 import { Avatar, Box, Paper, Typography } from "@mui/material";
 
+import { useAuth } from "@/features/auth/hooks/useAuth";
+
+import { useAttendance } from "../hooks/useAttendance";
+
 export default function ProfileCard() {
+  const { user } = useAuth();
+  const { state } = useAttendance();
+
+  const name = user?.email?.split("@")[0] ?? "Guest User";
+
+  const initials = name
+    .split(/[.\s_-]/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const status = state?.status ?? "OFF";
+
   return (
     <Paper
       elevation={0}
@@ -25,7 +43,7 @@ export default function ProfileCard() {
             flexShrink: 0,
           }}
         >
-          GU
+          {initials}
         </Avatar>
 
         <Box>
@@ -35,7 +53,7 @@ export default function ProfileCard() {
               fontWeight: 700,
             }}
           >
-            Guest User
+            {name}
           </Typography>
 
           <Typography
@@ -45,11 +63,11 @@ export default function ProfileCard() {
               mt: 0.5,
             }}
           >
-            Agent
+            {user?.role ?? "Employee"}
           </Typography>
 
           <Typography variant="body2" color="text.secondary">
-            1st Shift
+            Shift: {user?.shift_id ?? "Unassigned"}
           </Typography>
 
           <Typography
@@ -58,7 +76,7 @@ export default function ProfileCard() {
               fontWeight: 700,
             }}
           >
-            NOT STARTED
+            {status}
           </Typography>
         </Box>
       </Box>

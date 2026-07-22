@@ -23,6 +23,7 @@ export function useAttendance() {
     if (!user || !user.workspace_id || !user.email) {
       setState(null);
       setIsLoading(false);
+
       return null;
     }
 
@@ -68,9 +69,7 @@ export function useAttendance() {
 
         const response = await submitTimeLogAction(user.workspace_id, {
           user_id: user.user_id,
-
           email: user.email,
-
           shift_id: user.shift_id ?? undefined,
 
           action,
