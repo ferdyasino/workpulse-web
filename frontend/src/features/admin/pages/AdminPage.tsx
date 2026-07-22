@@ -1,6 +1,6 @@
 import { Paper, Typography } from "@mui/material";
 
-export default function ReportsPage() {
+export default function AdminPage() {
   return (
     <Paper
       elevation={0}
@@ -10,7 +10,7 @@ export default function ReportsPage() {
       }}
     >
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Reports
+        Admin Dashboard
       </Typography>
 
       <Typography
@@ -19,7 +19,7 @@ export default function ReportsPage() {
           mt: 1,
         }}
       >
-        Attendance reports will appear here.
+        Administration features coming soon.
       </Typography>
     </Paper>
   );
