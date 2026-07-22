@@ -9,8 +9,6 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 export function useAttendance() {
   const { user } = useAuth();
 
-  console.log("CURRENT AUTH USER:", user);
-
   const initialized = useRef(false);
   const submitting = useRef(false);
 
@@ -96,8 +94,6 @@ export function useAttendance() {
 
           setState(response.state);
         } else {
-          console.log("Refreshing attendance state...");
-
           await refresh();
         }
 
@@ -112,10 +108,12 @@ export function useAttendance() {
     [user, refresh],
   );
 
+  // reset initialization when workspace changes
   useEffect(() => {
     initialized.current = false;
   }, [user?.workspace_id]);
 
+  // initial load
   useEffect(() => {
     if (!user) {
       return;
@@ -135,6 +133,36 @@ export function useAttendance() {
 
     void refresh();
   }, [user, refresh]);
+
+  // auto sync every 30 seconds
+  useEffect(() => {
+    if (!user?.workspace_id || !user.email) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      void refresh();
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user, refresh]);
+
+  // refresh when returning to tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refresh]);
 
   return {
     state,
