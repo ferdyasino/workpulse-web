@@ -3,8 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 import { handleRequest, type ApiRequest } from "./routes/index.ts";
 import type { Database } from "./types/database.ts";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+console.log("SUPABASE URL EXISTS:", !!supabaseUrl);
+console.log("SERVICE KEY EXISTS:", !!serviceRoleKey);
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error("Missing Supabase environment variables");
+}
 
 const supabaseAdmin = createClient<Database>(supabaseUrl, serviceRoleKey);
 

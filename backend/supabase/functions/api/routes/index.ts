@@ -10,26 +10,32 @@ import { getCurrentAttendanceState } from "../services/attendance.ts";
 
 import type { Database } from "../types/database.ts";
 
+export type TimeLogAction =
+  | "TIME_IN"
+  | "TIME_OUT"
+  | "BREAK_START"
+  | "BREAK_END"
+  | "LUNCH_START"
+  | "LUNCH_END";
+
 export type ApiRequest =
   | {
-      action: "ME";
+      action: "AUTH_ME";
     }
   | {
-      action: "GET_WORKSPACE";
+      action: "WORKSPACE_GET";
     }
   | {
-      action: "GET_USER_CONTEXT";
+      action: "USER_CONTEXT_GET";
     }
   | {
-      action: "timelogs";
+      action: "TIMELOG_CREATE";
 
       workspace_id: string;
-      action_type: string;
 
       user_id: string;
-      email: string;
 
-      shift_id?: string;
+      action_type: TimeLogAction;
 
       device_info: string;
 
@@ -42,13 +48,11 @@ export type ApiRequest =
       timestamp: string;
     }
   | {
-      action: "getcurrentstate";
+      action: "ATTENDANCE_STATE_GET";
 
       workspace_id: string;
 
       email: string;
-
-      shift_id?: string;
 
       date?: string;
     };
@@ -61,26 +65,18 @@ export async function handleRequest(
   try {
     console.log("REQUEST BODY:", JSON.stringify(body));
 
+    const authUser = await getAuthenticatedUser(req);
+
+    if (!authUser.email) {
+      throw new Error("Authenticated user email is missing");
+    }
+
     switch (body.action) {
-      case "ME": {
-        const authUser = await getAuthenticatedUser(req);
-
-        if (!authUser.email) {
-          throw new Error("Authenticated user email is missing");
-        }
-
-        console.log("AUTH EMAIL:", authUser.email);
-
+      case "AUTH_ME": {
         return await getApplicationContext(supabaseAdmin, authUser.email);
       }
 
-      case "GET_WORKSPACE": {
-        const authUser = await getAuthenticatedUser(req);
-
-        if (!authUser.email) {
-          throw new Error("Authenticated user email is missing");
-        }
-
+      case "WORKSPACE_GET": {
         const user = await getUserContext(supabaseAdmin, authUser.email);
 
         if (!user.workspace_id) {
@@ -101,37 +97,25 @@ export async function handleRequest(
         return data;
       }
 
-      case "GET_USER_CONTEXT": {
-        const authUser = await getAuthenticatedUser(req);
-
-        if (!authUser.email) {
-          throw new Error("Authenticated user email is missing");
-        }
-
+      case "USER_CONTEXT_GET": {
         return await getUserContext(supabaseAdmin, authUser.email);
       }
 
-      case "timelogs": {
-        await getAuthenticatedUser(req);
-
+      case "TIMELOG_CREATE": {
         console.log("TIMELOG REQUEST:", JSON.stringify(body));
 
         if (!body.user_id) {
-          throw new Error("timelogs: user_id is missing");
+          throw new Error("TIMELOG_CREATE: user_id is missing");
         }
 
         if (!body.workspace_id) {
-          throw new Error("timelogs: workspace_id is missing");
+          throw new Error("TIMELOG_CREATE: workspace_id is missing");
         }
 
         const log = await createTimeLog(supabaseAdmin, {
           workspace_id: body.workspace_id,
 
           user_id: body.user_id,
-
-          email: body.email,
-
-          shift_id: body.shift_id,
 
           action_type: body.action_type,
 
@@ -155,17 +139,13 @@ export async function handleRequest(
         };
       }
 
-      case "getcurrentstate": {
-        await getAuthenticatedUser(req);
-
+      case "ATTENDANCE_STATE_GET": {
         console.log("CURRENT STATE REQUEST:", JSON.stringify(body));
 
         return await getCurrentAttendanceState(supabaseAdmin, {
           workspace_id: body.workspace_id,
 
           email: body.email,
-
-          shift_id: body.shift_id,
 
           date: body.date,
         });

@@ -4,8 +4,6 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 
 export type SubmitTimeLogPayload = {
   user_id: string;
-  email: string;
-  shift_id?: string;
 
   action: TimeLogAction;
 
@@ -22,8 +20,11 @@ export type SubmitTimeLogPayload = {
 
 export type SubmitTimeLogResponse = {
   success: boolean;
+
   message: string;
+
   log_id?: string;
+
   state?: AttendanceState;
 };
 
@@ -40,14 +41,19 @@ export async function submitTimeLogAction(
   return invokeFunction<
     SubmitTimeLogResponse,
     {
-      action: "timelogs";
+      action: "TIMELOG_CREATE";
+
       workspace_id: string;
+
       action_type: TimeLogAction;
     } & Omit<SubmitTimeLogPayload, "action">
   >("api", {
-    action: "timelogs",
+    action: "TIMELOG_CREATE",
+
     workspace_id: workspaceId,
+
     action_type: action,
+
     ...rest,
   });
 }
@@ -55,7 +61,6 @@ export async function submitTimeLogAction(
 export async function getCurrentAttendanceState(
   workspaceId: string,
   email: string,
-  shiftId?: string,
   date?: string,
 ): Promise<AttendanceState> {
   if (!workspaceId) {
@@ -69,24 +74,20 @@ export async function getCurrentAttendanceState(
   return invokeFunction<
     AttendanceState,
     {
-      action: "getcurrentstate";
+      action: "ATTENDANCE_STATE_GET";
+
       workspace_id: string;
+
       email: string;
-      shift_id?: string;
+
       date?: string;
     }
   >("api", {
-    action: "getcurrentstate",
+    action: "ATTENDANCE_STATE_GET",
 
     workspace_id: workspaceId,
 
     email,
-
-    ...(shiftId
-      ? {
-          shift_id: shiftId,
-        }
-      : {}),
 
     ...(date
       ? {

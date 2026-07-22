@@ -7,6 +7,7 @@ const STORAGE_KEY = "workpulse_user";
 
 type ApplicationContext = {
   user: User;
+
   workspace: unknown;
 };
 
@@ -31,10 +32,10 @@ export async function loginWithGoogle(_workspaceSlug: string, credential: string
   const context = await invokeFunction<
     ApplicationContext,
     {
-      action: "ME";
+      action: "AUTH_ME";
     }
   >("api", {
-    action: "ME",
+    action: "AUTH_ME",
   });
 
   const user = context.user;

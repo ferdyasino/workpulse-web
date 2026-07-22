@@ -10,7 +10,7 @@ type GetCurrentAttendanceStatePayload = {
 };
 
 export type AttendanceState = {
-  status: "OFF" | "WORKING" | "BREAK" | "LUNCH";
+  status: "OFF" | "WORKING" | "BREAK" | "LUNCH" | "CLOCKED_OUT";
 
   time_in: string | null;
 
@@ -34,6 +34,128 @@ type TimeLogEvent =
   | "BREAK_END"
   | "LUNCH_START"
   | "LUNCH_END";
+
+function createEmptyState(): AttendanceState {
+  return {
+    status: "OFF",
+
+    time_in: null,
+
+    time_out: null,
+
+    breaks: [],
+
+    lunch: {
+      in: null,
+      out: null,
+    },
+  };
+}
+
+function buildAttendanceState(
+  logs: Array<Database["public"]["Tables"]["time_logs"]["Row"]>,
+): AttendanceState {
+  const state = createEmptyState();
+
+  for (const log of logs) {
+    const eventType = log.event_type as TimeLogEvent;
+
+    switch (eventType) {
+      case "TIME_IN": {
+        state.status = "WORKING";
+
+        state.time_in = log.event_time_utc;
+
+        state.time_out = null;
+
+        state.breaks = [];
+
+        state.lunch = {
+          in: null,
+          out: null,
+        };
+
+        break;
+      }
+
+      case "BREAK_START": {
+        if (!state.time_in || state.time_out) {
+          break;
+        }
+
+        state.status = "BREAK";
+
+        state.breaks.push({
+          in: log.event_time_utc,
+          out: null,
+        });
+
+        break;
+      }
+
+      case "BREAK_END": {
+        const currentBreak = state.breaks[state.breaks.length - 1];
+
+        if (currentBreak && !currentBreak.out) {
+          currentBreak.out = log.event_time_utc;
+
+          state.status = "WORKING";
+        }
+
+        break;
+      }
+
+      case "LUNCH_START": {
+        if (!state.time_in || state.time_out) {
+          break;
+        }
+
+        state.status = "LUNCH";
+
+        state.lunch = {
+          in: log.event_time_utc,
+          out: null,
+        };
+
+        break;
+      }
+
+      case "LUNCH_END": {
+        if (state.lunch.in && !state.lunch.out) {
+          state.lunch.out = log.event_time_utc;
+
+          state.status = "WORKING";
+        }
+
+        break;
+      }
+
+      case "TIME_OUT": {
+        if (!state.time_in) {
+          break;
+        }
+
+        state.status = "CLOCKED_OUT";
+
+        state.time_out = log.event_time_utc;
+
+        const activeBreak = state.breaks[state.breaks.length - 1];
+
+        if (activeBreak && !activeBreak.out) {
+          activeBreak.out = log.event_time_utc;
+        }
+
+        if (state.lunch.in && !state.lunch.out) {
+          state.lunch.out = log.event_time_utc;
+        }
+
+        break;
+      }
+    }
+  }
+
+  return state;
+}
 
 export async function getCurrentAttendanceState(
   supabaseAdmin: SupabaseClient<Database>,
@@ -76,16 +198,7 @@ export async function getCurrentAttendanceState(
   }
 
   if (!userShift) {
-    return {
-      status: "OFF",
-      time_in: null,
-      time_out: null,
-      breaks: [],
-      lunch: {
-        in: null,
-        out: null,
-      },
-    };
+    return createEmptyState();
   }
 
   const workDate = payload.date ?? new Date().toISOString().slice(0, 10);
@@ -105,74 +218,20 @@ export async function getCurrentAttendanceState(
     throw logsError;
   }
 
-  const state: AttendanceState = {
-    status: "OFF",
+  const state = buildAttendanceState(logs ?? []);
 
-    time_in: null,
-
-    time_out: null,
-
-    breaks: [],
-
-    lunch: {
-      in: null,
-      out: null,
-    },
-  };
-
-  for (const log of logs ?? []) {
-    const eventType = log.event_type as TimeLogEvent;
-
-    switch (eventType) {
-      case "TIME_IN": {
-        state.status = "WORKING";
-        state.time_in = log.event_time_utc;
-        state.time_out = null;
-        break;
-      }
-
-      case "TIME_OUT": {
-        state.status = "OFF";
-        state.time_out = log.event_time_utc;
-        break;
-      }
-
-      case "BREAK_START": {
-        state.status = "BREAK";
-
-        state.breaks.push({
-          in: log.event_time_utc,
-          out: null,
-        });
-
-        break;
-      }
-
-      case "BREAK_END": {
-        state.status = "WORKING";
-
-        const currentBreak = state.breaks[state.breaks.length - 1];
-
-        if (currentBreak) {
-          currentBreak.out = log.event_time_utc;
-        }
-
-        break;
-      }
-
-      case "LUNCH_START": {
-        state.status = "LUNCH";
-        state.lunch.in = log.event_time_utc;
-        break;
-      }
-
-      case "LUNCH_END": {
-        state.status = "WORKING";
-        state.lunch.out = log.event_time_utc;
-        break;
-      }
-    }
-  }
+  console.log(
+    "ATTENDANCE STATE",
+    JSON.stringify({
+      email,
+      workDate,
+      logs: logs?.map((x) => ({
+        type: x.event_type,
+        time: x.event_time_utc,
+      })),
+      state,
+    }),
+  );
 
   return state;
 }

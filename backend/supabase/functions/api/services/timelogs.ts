@@ -2,16 +2,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
+import type { TimeLogAction } from "../routes/index.ts";
+
 type SubmitTimeLogPayload = {
   workspace_id: string;
+
   user_id: string;
-  email: string;
-  shift_id?: string;
-  action_type: string;
+
+  action_type: TimeLogAction;
 
   device_info: string;
+
   location: unknown;
+
   location_status: string;
+
   location_message: string;
 
   timestamp: string;
@@ -30,31 +35,43 @@ export async function createTimeLog(
   payload: SubmitTimeLogPayload,
 ) {
   console.log(
-    "SHIFT LOOKUP",
+    "TIMELOG CREATE",
     JSON.stringify({
       user_id: payload.user_id,
       workspace_id: payload.workspace_id,
-      shift_id: payload.shift_id,
+      action_type: payload.action_type,
     }),
   );
 
-  const userShiftQuery = supabaseAdmin
+  /*
+   * Resolve user shift assignment
+   *
+   * Temporary:
+   * Get primary shift assignment.
+   *
+   * Later:
+   * Resolve using effective_from/effective_to
+   * and event timezone.
+   */
+
+  const { data: userShift, error: shiftError } = await supabaseAdmin
     .from("user_shifts")
-    .select("id")
+    .select(
+      `
+        id,
+        shift_id,
+        attendance_policy_id
+      `,
+    )
     .eq("user_id", payload.user_id)
     .eq("workspace_id", payload.workspace_id)
     .eq("is_primary", true)
-    .is("deleted_at", null);
-
-  const { data: userShift, error: shiftError } = payload.shift_id
-    ? await userShiftQuery.eq("shift_id", payload.shift_id).maybeSingle()
-    : await userShiftQuery.maybeSingle();
+    .is("deleted_at", null)
+    .maybeSingle();
 
   if (shiftError) {
     throw shiftError;
   }
-
-  console.log("USER SHIFT RESULT", JSON.stringify(userShift));
 
   if (!userShift) {
     throw new Error("No active user shift found.");
@@ -69,7 +86,7 @@ export async function createTimeLog(
 
       user_shift_id: userShift.id,
 
-      event_type: payload.action_type.toUpperCase(),
+      event_type: payload.action_type.toUpperCase() as TimeLogAction,
 
       event_time_utc: payload.timestamp,
 
@@ -77,14 +94,23 @@ export async function createTimeLog(
 
       timezone: "UTC",
 
+      /*
+       * Temporary.
+       *
+       * Will move to shift timezone
+       * resolver.
+       */
       work_date: payload.timestamp.slice(0, 10),
 
       log_no: crypto.randomUUID(),
 
       metadata: {
         device_info: payload.device_info,
+
         location: JSON.stringify(payload.location),
+
         location_status: payload.location_status,
+
         location_message: payload.location_message,
       } as Json,
     })

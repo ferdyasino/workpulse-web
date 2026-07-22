@@ -1,5 +1,5 @@
 export type TimeLogAction =
-  "time_in" | "time_out" | "break_start" | "break_end" | "lunch_start" | "lunch_end";
+  "TIME_IN" | "TIME_OUT" | "BREAK_START" | "BREAK_END" | "LUNCH_START" | "LUNCH_END";
 
 export type BreakSession = {
   in?: string;
@@ -13,8 +13,11 @@ export type LunchSession = {
 
 export type TimeLog = {
   log_id?: string;
+
   action: TimeLogAction;
+
   timestamp: string;
+
   date: string;
 };
 
@@ -24,8 +27,11 @@ export type AttendanceState = {
   status: string;
 
   is_clocked_in: boolean;
+
   is_on_break: boolean;
+
   is_at_lunch: boolean;
+
   is_clocked_out: boolean;
 
   breaks: BreakSession[];
