@@ -75,3 +75,6 @@ Thumbs.db
 # ======================================================
 
 backend/supabase/.temp/
+
+# Standalone tools
+tools/ptree/
