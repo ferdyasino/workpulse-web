@@ -15,14 +15,15 @@
     "resolveJsonModule": true,
 
     "skipLibCheck": true,
-
     "forceConsistentCasingInFileNames": true,
 
     "isolatedModules": true,
 
     "noUncheckedIndexedAccess": true,
-
     "exactOptionalPropertyTypes": true,
+
+    "verbatimModuleSyntax": true,
+    "noEmitOnError": true,
 
     "types": ["node"]
   },
