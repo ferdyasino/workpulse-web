@@ -1,4 +1,4 @@
-import { resolveWorkDate } from "./work-date.ts";
+import { resolveWorkDate } from "./workdate.ts";
 
 export type ResolveWorkWindowOptions = {
   timestamp: Date;
