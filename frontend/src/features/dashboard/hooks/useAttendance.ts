@@ -29,15 +29,25 @@ export function useAttendance() {
     try {
       setIsLoading(true);
 
-      const attendance = await getCurrentAttendanceState(user.workspace_id, user.email);
+      console.group("ATTENDANCE REFRESH");
+
+      const attendance = await getCurrentAttendanceState(
+        user.workspace_id,
+        user.email,
+        user.shift_id ?? undefined,
+      );
+
+      console.log("REFRESH RESULT:", attendance);
 
       setState(attendance);
+
+      console.groupEnd();
 
       return attendance;
     } finally {
       setIsLoading(false);
     }
-  }, [user?.workspace_id, user?.email, user?.shift_id]);
+  }, [user]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
@@ -46,6 +56,7 @@ export function useAttendance() {
       }
 
       if (submitting.current) {
+        console.warn("Duplicate submit ignored.");
         return;
       }
 
@@ -53,12 +64,14 @@ export function useAttendance() {
       setIsSubmitting(true);
 
       try {
+        console.group(`ATTENDANCE ACTION → ${action}`);
+
         const response = await submitTimeLogAction(user.workspace_id, {
           user_id: user.user_id,
 
           email: user.email,
 
-          shift_id: undefined,
+          shift_id: user.shift_id ?? undefined,
 
           action,
 
@@ -73,15 +86,23 @@ export function useAttendance() {
           timestamp: new Date().toISOString(),
         });
 
+        console.log("ACTION RESPONSE:", response);
+
         if (!response.success) {
           throw new Error(response.message);
         }
 
         if (response.state) {
+          console.log("STATE FROM RESPONSE:", response.state);
+
           setState(response.state);
         } else {
+          console.log("Refreshing attendance state...");
+
           await refresh();
         }
+
+        console.groupEnd();
 
         return response;
       } finally {
@@ -111,14 +132,20 @@ export function useAttendance() {
 
     initialized.current = true;
 
+    console.log("Initial attendance refresh.");
+
     void refresh();
   }, [user, refresh]);
 
   return {
     state,
+
     isLoading,
+
     isSubmitting,
+
     refresh,
+
     logTime,
   };
 }

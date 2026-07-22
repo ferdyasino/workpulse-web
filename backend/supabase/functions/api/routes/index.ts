@@ -6,7 +6,8 @@ import { getApplicationContext } from "../services/context.ts";
 import { getUserContext } from "../services/users.ts";
 
 import { createTimeLog } from "../services/timelogs.ts";
-import { getCurrentAttendanceState } from "../services/attendance.ts";
+import { getCurrentAttendanceState } from "../services/attendance/state.ts";
+import { validateAttendanceAction } from "../services/attendance/validation.ts";
 
 import type { Database } from "../types/database.ts";
 
@@ -35,6 +36,10 @@ export type ApiRequest =
 
       user_id: string;
 
+      email: string;
+
+      shift_id?: string;
+
       action_type: TimeLogAction;
 
       device_info: string;
@@ -53,6 +58,8 @@ export type ApiRequest =
       workspace_id: string;
 
       email: string;
+
+      shift_id?: string;
 
       date?: string;
     };
@@ -104,6 +111,8 @@ export async function handleRequest(
       case "TIMELOG_CREATE": {
         console.log("TIMELOG REQUEST:", JSON.stringify(body));
 
+        console.log("ACTION TYPE:", body.action_type);
+
         if (!body.user_id) {
           throw new Error("TIMELOG_CREATE: user_id is missing");
         }
@@ -111,6 +120,37 @@ export async function handleRequest(
         if (!body.workspace_id) {
           throw new Error("TIMELOG_CREATE: workspace_id is missing");
         }
+
+        const currentState = await getCurrentAttendanceState(supabaseAdmin, {
+          workspace_id: body.workspace_id,
+          email: authUser.email,
+          shift_id: body.shift_id,
+          date: new Date().toISOString().slice(0, 10),
+        });
+
+        console.log("CURRENT STATE:", JSON.stringify(currentState));
+
+        console.log("BEFORE VALIDATION");
+
+        const validation = validateAttendanceAction(
+          currentState,
+          body.action_type,
+        );
+
+        console.log("VALIDATION RESULT:", JSON.stringify(validation));
+
+        if (!validation.valid) {
+          console.warn("TIMELOG REJECTED:", validation.message);
+
+          return {
+            success: false,
+            message: validation.message,
+          };
+        }
+
+        console.log("AFTER VALIDATION");
+
+        console.log("BEFORE CREATE TIMELOG");
 
         const log = await createTimeLog(supabaseAdmin, {
           workspace_id: body.workspace_id,
@@ -130,11 +170,11 @@ export async function handleRequest(
           timestamp: body.timestamp,
         });
 
+        console.log("AFTER CREATE TIMELOG");
+
         return {
           success: true,
-
           message: "Timelog created successfully",
-
           log_id: log.id,
         };
       }
@@ -146,6 +186,8 @@ export async function handleRequest(
           workspace_id: body.workspace_id,
 
           email: body.email,
+
+          shift_id: body.shift_id,
 
           date: body.date,
         });

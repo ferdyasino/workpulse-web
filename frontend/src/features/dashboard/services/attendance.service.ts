@@ -5,6 +5,10 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 export type SubmitTimeLogPayload = {
   user_id: string;
 
+  email: string;
+
+  shift_id?: string;
+
   action: TimeLogAction;
 
   device_info: string;
@@ -38,7 +42,14 @@ export async function submitTimeLogAction(
 
   const { action, ...rest } = payload;
 
-  return invokeFunction<
+  console.group(`TIMELOG_CREATE → ${action}`);
+  console.log("REQUEST:", {
+    workspace_id: workspaceId,
+    action_type: action,
+    ...rest,
+  });
+
+  const response = await invokeFunction<
     SubmitTimeLogResponse,
     {
       action: "TIMELOG_CREATE";
@@ -56,11 +67,17 @@ export async function submitTimeLogAction(
 
     ...rest,
   });
+
+  console.log("RESPONSE:", response);
+  console.groupEnd();
+
+  return response;
 }
 
 export async function getCurrentAttendanceState(
   workspaceId: string,
   email: string,
+  shiftId?: string,
   date?: string,
 ): Promise<AttendanceState> {
   if (!workspaceId) {
@@ -71,7 +88,15 @@ export async function getCurrentAttendanceState(
     throw new Error("email is required");
   }
 
-  return invokeFunction<
+  console.group("ATTENDANCE_STATE_GET");
+  console.log("REQUEST:", {
+    workspace_id: workspaceId,
+    email,
+    shift_id: shiftId,
+    date,
+  });
+
+  const state = await invokeFunction<
     AttendanceState,
     {
       action: "ATTENDANCE_STATE_GET";
@@ -79,6 +104,8 @@ export async function getCurrentAttendanceState(
       workspace_id: string;
 
       email: string;
+
+      shift_id?: string;
 
       date?: string;
     }
@@ -89,10 +116,21 @@ export async function getCurrentAttendanceState(
 
     email,
 
+    ...(shiftId
+      ? {
+          shift_id: shiftId,
+        }
+      : {}),
+
     ...(date
       ? {
           date,
         }
       : {}),
   });
+
+  console.log("STATE:", state);
+  console.groupEnd();
+
+  return state;
 }
