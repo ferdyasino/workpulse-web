@@ -31,7 +31,7 @@ export default function TimeLogger() {
             color="success"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("time_in")}
+            onClick={() => handleClick("TIME_IN")}
           >
             Time In
           </Button>
@@ -44,7 +44,7 @@ export default function TimeLogger() {
             color="error"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("time_out")}
+            onClick={() => handleClick("TIME_OUT")}
           >
             Time Out
           </Button>
@@ -57,7 +57,7 @@ export default function TimeLogger() {
             color="warning"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("break_start")}
+            onClick={() => handleClick("BREAK_START")}
           >
             Break Start
           </Button>
@@ -70,7 +70,7 @@ export default function TimeLogger() {
             color="warning"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("break_end")}
+            onClick={() => handleClick("BREAK_END")}
           >
             Break End
           </Button>
@@ -83,7 +83,7 @@ export default function TimeLogger() {
             color="inherit"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("lunch_start")}
+            onClick={() => handleClick("LUNCH_START")}
           >
             Lunch Start
           </Button>
@@ -96,7 +96,7 @@ export default function TimeLogger() {
             color="info"
             size="large"
             disabled={isSubmitting}
-            onClick={() => handleClick("lunch_end")}
+            onClick={() => handleClick("LUNCH_END")}
           >
             Lunch End
           </Button>

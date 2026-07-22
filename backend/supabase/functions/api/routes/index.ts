@@ -1,19 +1,67 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAuthenticatedUser } from "../lib/auth.ts";
+
+import { getApplicationContext } from "../services/context.ts";
 import { getUserContext } from "../services/users.ts";
-import { getWorkspace } from "../services/workspace.ts";
+
+import { createTimeLog } from "../services/timelogs.ts";
+import { getCurrentAttendanceState } from "../services/attendance/state.ts";
+import { validateAttendanceAction } from "../services/attendance/validation.ts";
+
 import type { Database } from "../types/database.ts";
+
+export type TimeLogAction =
+  | "TIME_IN"
+  | "TIME_OUT"
+  | "BREAK_START"
+  | "BREAK_END"
+  | "LUNCH_START"
+  | "LUNCH_END";
 
 export type ApiRequest =
   | {
-      action: "ME";
+      action: "AUTH_ME";
     }
   | {
-      action: "GET_WORKSPACE";
+      action: "WORKSPACE_GET";
     }
   | {
-      action: "GET_USER_CONTEXT";
+      action: "USER_CONTEXT_GET";
+    }
+  | {
+      action: "TIMELOG_CREATE";
+
+      workspace_id: string;
+
+      user_id: string;
+
+      email: string;
+
+      shift_id?: string;
+
+      action_type: TimeLogAction;
+
+      device_info: string;
+
+      location: unknown;
+
+      location_status: string;
+
+      location_message: string;
+
+      timestamp: string;
+    }
+  | {
+      action: "ATTENDANCE_STATE_GET";
+
+      workspace_id: string;
+
+      email: string;
+
+      shift_id?: string;
+
+      date?: string;
     };
 
 export async function handleRequest(
@@ -21,49 +69,137 @@ export async function handleRequest(
   body: ApiRequest,
   supabaseAdmin: SupabaseClient<Database>,
 ) {
-  console.log("ACTION:", body.action);
+  try {
+    console.log("REQUEST BODY:", JSON.stringify(body));
 
-  switch (body.action) {
-    case "ME": {
-      const authUser = await getAuthenticatedUser(req);
+    const authUser = await getAuthenticatedUser(req);
 
-      console.log("AUTH USER:", authUser.email);
-
-      try {
-        const user = await getUserContext(supabaseAdmin, authUser.email!);
-
-        console.log("USER FOUND");
-
-        return user;
-      } catch (err) {
-        console.error("ME ERROR:", err);
-        throw err;
-      }
+    if (!authUser.email) {
+      throw new Error("Authenticated user email is missing");
     }
 
-    case "GET_WORKSPACE": {
-      await getAuthenticatedUser(req);
+    switch (body.action) {
+      case "AUTH_ME": {
+        return await getApplicationContext(supabaseAdmin, authUser.email);
+      }
 
-      try {
-        return await getWorkspace(supabaseAdmin);
-      } catch (err) {
-        console.error("WORKSPACE ERROR:", err);
-        throw err;
+      case "WORKSPACE_GET": {
+        const user = await getUserContext(supabaseAdmin, authUser.email);
+
+        if (!user.workspace_id) {
+          throw new Error("User workspace_id is missing");
+        }
+
+        const { data, error } = await supabaseAdmin
+          .from("workspaces")
+          .select("*")
+          .eq("id", user.workspace_id)
+          .is("deleted_at", null)
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        return data;
+      }
+
+      case "USER_CONTEXT_GET": {
+        return await getUserContext(supabaseAdmin, authUser.email);
+      }
+
+      case "TIMELOG_CREATE": {
+        console.log("TIMELOG REQUEST:", JSON.stringify(body));
+
+        console.log("ACTION TYPE:", body.action_type);
+
+        if (!body.user_id) {
+          throw new Error("TIMELOG_CREATE: user_id is missing");
+        }
+
+        if (!body.workspace_id) {
+          throw new Error("TIMELOG_CREATE: workspace_id is missing");
+        }
+
+        const currentState = await getCurrentAttendanceState(supabaseAdmin, {
+          workspace_id: body.workspace_id,
+          email: authUser.email,
+          shift_id: body.shift_id,
+          date: new Date().toISOString().slice(0, 10),
+        });
+
+        console.log("CURRENT STATE:", JSON.stringify(currentState));
+
+        console.log("BEFORE VALIDATION");
+
+        const validation = validateAttendanceAction(
+          currentState,
+          body.action_type,
+        );
+
+        console.log("VALIDATION RESULT:", JSON.stringify(validation));
+
+        if (!validation.valid) {
+          console.warn("TIMELOG REJECTED:", validation.message);
+
+          return {
+            success: false,
+            message: validation.message,
+          };
+        }
+
+        console.log("AFTER VALIDATION");
+
+        console.log("BEFORE CREATE TIMELOG");
+
+        const log = await createTimeLog(supabaseAdmin, {
+          workspace_id: body.workspace_id,
+
+          user_id: body.user_id,
+
+          action_type: body.action_type,
+
+          device_info: body.device_info,
+
+          location: body.location,
+
+          location_status: body.location_status,
+
+          location_message: body.location_message,
+
+          timestamp: body.timestamp,
+        });
+
+        console.log("AFTER CREATE TIMELOG");
+
+        return {
+          success: true,
+          message: "Timelog created successfully",
+          log_id: log.id,
+        };
+      }
+
+      case "ATTENDANCE_STATE_GET": {
+        console.log("CURRENT STATE REQUEST:", JSON.stringify(body));
+
+        return await getCurrentAttendanceState(supabaseAdmin, {
+          workspace_id: body.workspace_id,
+
+          email: body.email,
+
+          shift_id: body.shift_id,
+
+          date: body.date,
+        });
+      }
+
+      default: {
+        throw new Error(`Unknown action: ${(body as any).action}`);
       }
     }
+  } catch (error) {
+    console.error("API ERROR:", error);
 
-    case "GET_USER_CONTEXT": {
-      const authUser = await getAuthenticatedUser(req);
-
-      try {
-        return await getUserContext(supabaseAdmin, authUser.email!);
-      } catch (err) {
-        console.error("USER_CONTEXT ERROR:", err);
-        throw err;
-      }
-    }
-
-    default:
-      throw new Error("Unknown action");
+    throw error;
   }
 }

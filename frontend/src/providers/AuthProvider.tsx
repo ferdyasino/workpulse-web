@@ -12,9 +12,11 @@ type Props = {
 };
 
 export default function AuthProvider({ children }: Props) {
+  const storedUser = getStoredUser();
+
   const [state, setState] = useState<AuthState>({
-    user: getStoredUser(),
-    isAuthenticated: Boolean(getStoredUser()),
+    user: storedUser,
+    isAuthenticated: Boolean(storedUser),
     isLoading: false,
   });
 
@@ -24,13 +26,23 @@ export default function AuthProvider({ children }: Props) {
       isLoading: true,
     }));
 
-    const user = await loginWithGoogle("", credential);
+    try {
+      const user = await loginWithGoogle("", credential);
 
-    setState({
-      user,
-      isAuthenticated: true,
-      isLoading: false,
-    });
+      setState({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+
+      throw error;
+    }
   }
 
   async function signOut() {
