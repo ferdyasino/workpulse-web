@@ -2,16 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../../types/database.ts";
 
+import type {
+  AttendanceSession,
+  AttendanceState,
+  AttendanceStateRequest,
+} from "@shared/types/attendance.types.ts";
+
 import {
   buildAttendanceSessions,
   getCurrentAttendanceSession,
 } from "./sessions.ts";
-
-import type {
-  AttendanceSession,
-  AttendanceState,
-  GetCurrentAttendanceStatePayload,
-} from "./types.ts";
 
 function createEmptyState(workDate: string): AttendanceState {
   return {
@@ -63,7 +63,7 @@ export function buildAttendanceState(
 
 export async function getCurrentAttendanceState(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: GetCurrentAttendanceStatePayload,
+  payload: AttendanceStateRequest,
 ): Promise<AttendanceState> {
   const { workspace_id, email, shift_id } = payload;
 
@@ -75,7 +75,9 @@ export async function getCurrentAttendanceState(
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (userError) throw userError;
+  if (userError) {
+    throw userError;
+  }
 
   if (!user) {
     throw new Error("User not found.");
@@ -95,7 +97,9 @@ export async function getCurrentAttendanceState(
 
   const { data: userShift, error: shiftError } = await shiftQuery.maybeSingle();
 
-  if (shiftError) throw shiftError;
+  if (shiftError) {
+    throw shiftError;
+  }
 
   const workDate = payload.date ?? new Date().toISOString().slice(0, 10);
 
@@ -112,9 +116,11 @@ export async function getCurrentAttendanceState(
     .eq("work_date", workDate)
     .order("event_time_utc");
 
-  if (logsError) throw logsError;
+  if (logsError) {
+    throw logsError;
+  }
 
-  const sessions = logs ? buildAttendanceSessions(logs) : [];
+  const sessions = logs.length > 0 ? buildAttendanceSessions(logs) : [];
 
   const currentSession = getCurrentAttendanceSession(sessions);
 
@@ -125,9 +131,7 @@ export async function getCurrentAttendanceState(
     JSON.stringify({
       email,
       workDate,
-      logs: logs?.length ?? 0,
-      sessions,
-      currentSession,
+      logs: logs.length,
       state,
     }),
   );

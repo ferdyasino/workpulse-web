@@ -9,7 +9,7 @@ export type ResolveWorkDateOptions = {
 };
 
 function toMinutes(time: string): number {
-  const [hour, minute] = time.split(":").map(Number);
+  const [hour = 0, minute = 0] = time.split(":").map(Number);
 
   return hour * 60 + minute;
 }
@@ -19,7 +19,7 @@ function formatDate(date: Date): string {
 }
 
 export function resolveWorkDate(options: ResolveWorkDateOptions): string {
-  const { timestamp, shiftStart, shiftEnd, isOvernight } = options;
+  const { timestamp, shiftEnd, isOvernight } = options;
 
   if (!isOvernight) {
     return formatDate(timestamp);

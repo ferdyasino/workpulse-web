@@ -2,37 +2,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
-import type { TimeLogAction } from "../routes/index.ts";
-
-type SubmitTimeLogPayload = {
-  workspace_id: string;
-
-  user_id: string;
-
-  action_type: TimeLogAction;
-
-  device_info: string;
-
-  location: unknown;
-
-  location_status: string;
-
-  location_message: string;
-
-  timestamp: string;
-};
+import type { SubmitTimeLogRequest } from "@shared/types/attendance.types.ts";
 
 type Json =
   | string
   | number
   | boolean
   | null
-  | { [key: string]: Json | undefined }
+  | {
+      [key: string]: Json | undefined;
+    }
   | Json[];
+
+const DEFAULT_TIMEZONE = "UTC";
 
 export async function createTimeLog(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: SubmitTimeLogPayload,
+  payload: SubmitTimeLogRequest,
 ) {
   console.log(
     "TIMELOG CREATE",
@@ -42,17 +28,6 @@ export async function createTimeLog(
       action_type: payload.action_type,
     }),
   );
-
-  /*
-   * Resolve user shift assignment
-   *
-   * Temporary:
-   * Get primary shift assignment.
-   *
-   * Later:
-   * Resolve using effective_from/effective_to
-   * and event timezone.
-   */
 
   const { data: userShift, error: shiftError } = await supabaseAdmin
     .from("user_shifts")
@@ -77,6 +52,8 @@ export async function createTimeLog(
     throw new Error("No active user shift found.");
   }
 
+  const workDate = payload.timestamp.slice(0, 10);
+
   const { data, error } = await supabaseAdmin
     .from("time_logs")
     .insert({
@@ -86,21 +63,15 @@ export async function createTimeLog(
 
       user_shift_id: userShift.id,
 
-      event_type: payload.action_type.toUpperCase() as TimeLogAction,
+      event_type: payload.action_type,
 
       event_time_utc: payload.timestamp,
 
       client_timestamp: payload.timestamp,
 
-      timezone: "UTC",
+      timezone: DEFAULT_TIMEZONE,
 
-      /*
-       * Temporary.
-       *
-       * Will move to shift timezone
-       * resolver.
-       */
-      work_date: payload.timestamp.slice(0, 10),
+      work_date: workDate,
 
       log_no: crypto.randomUUID(),
 

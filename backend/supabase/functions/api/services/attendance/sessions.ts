@@ -1,25 +1,13 @@
 import type { Tables } from "../../types/database.ts";
 
 import type {
-  AttendanceBreak,
-  AttendanceLunch,
+  AttendanceSession,
   TimeLogEvent,
-} from "./types.ts";
-
-export type AttendanceSession = {
-  time_in: string | null;
-
-  time_out: string | null;
-
-  breaks: AttendanceBreak[];
-
-  lunch: AttendanceLunch;
-};
+} from "@shared/types/attendance.types.ts";
 
 export function createEmptyAttendanceSession(): AttendanceSession {
   return {
     time_in: null,
-
     time_out: null,
 
     breaks: [],
@@ -45,7 +33,7 @@ export function buildAttendanceSessions(
       case "TIME_IN": {
         if (current && !current.time_out) {
           console.warn(
-            `TIME_IN encountered before TIME_OUT. Closing previous session.`,
+            "TIME_IN encountered before TIME_OUT. Closing previous session.",
             log.id,
           );
 
@@ -160,11 +148,11 @@ export function buildAttendanceSessions(
 export function getCurrentAttendanceSession(
   sessions: AttendanceSession[],
 ): AttendanceSession | null {
-  if (!sessions.length) {
+  const session = sessions.at(-1);
+
+  if (!session) {
     return null;
   }
-
-  const session = sessions.at(-1)!;
 
   if (session.time_out) {
     return null;

@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { handleRequest, type ApiRequest } from "./routes/index.ts";
+import { handleRequest } from "./routes/index.ts";
+import type { ApiRequest } from "@shared/types/api.types.ts";
+
 import type { Database } from "./types/database.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");

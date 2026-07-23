@@ -1,68 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getAuthenticatedUser } from "../lib/auth.ts";
-
-import { getApplicationContext } from "../services/context.ts";
-import { getUserContext } from "../services/users.ts";
-
-import { createTimeLog } from "../services/timelogs.ts";
-import { getCurrentAttendanceState } from "../services/attendance/state.ts";
-import { validateAttendanceAction } from "../services/attendance/validation.ts";
+import type { ApiRequest } from "@shared/types/api.types.ts";
 
 import type { Database } from "../types/database.ts";
 
-export type TimeLogAction =
-  | "TIME_IN"
-  | "TIME_OUT"
-  | "BREAK_START"
-  | "BREAK_END"
-  | "LUNCH_START"
-  | "LUNCH_END";
+import { getAuthenticatedUser } from "../lib/auth.ts";
 
-export type ApiRequest =
-  | {
-      action: "AUTH_ME";
-    }
-  | {
-      action: "WORKSPACE_GET";
-    }
-  | {
-      action: "USER_CONTEXT_GET";
-    }
-  | {
-      action: "TIMELOG_CREATE";
+import { getApplicationContext } from "../services/context.ts";
+import { getUserContext, listUsers } from "../services/users.ts";
 
-      workspace_id: string;
+import { createTimeLog } from "../services/timelogs.ts";
 
-      user_id: string;
-
-      email: string;
-
-      shift_id?: string;
-
-      action_type: TimeLogAction;
-
-      device_info: string;
-
-      location: unknown;
-
-      location_status: string;
-
-      location_message: string;
-
-      timestamp: string;
-    }
-  | {
-      action: "ATTENDANCE_STATE_GET";
-
-      workspace_id: string;
-
-      email: string;
-
-      shift_id?: string;
-
-      date?: string;
-    };
+import { getCurrentAttendanceState } from "../services/attendance/state.ts";
+import { validateAttendanceAction } from "../services/attendance/validation.ts";
 
 export async function handleRequest(
   req: Request,
@@ -108,29 +58,30 @@ export async function handleRequest(
         return await getUserContext(supabaseAdmin, authUser.email);
       }
 
+      case "EMPLOYEE_LIST": {
+        console.log("EMPLOYEE LIST REQUEST:", JSON.stringify(body));
+
+        return await listUsers(supabaseAdmin, body.workspace_id);
+      }
+
       case "TIMELOG_CREATE": {
         console.log("TIMELOG REQUEST:", JSON.stringify(body));
 
-        console.log("ACTION TYPE:", body.action_type);
-
-        if (!body.user_id) {
-          throw new Error("TIMELOG_CREATE: user_id is missing");
-        }
-
-        if (!body.workspace_id) {
-          throw new Error("TIMELOG_CREATE: workspace_id is missing");
-        }
-
         const currentState = await getCurrentAttendanceState(supabaseAdmin, {
           workspace_id: body.workspace_id,
+
           email: authUser.email,
-          shift_id: body.shift_id,
+
+          ...(body.shift_id
+            ? {
+                shift_id: body.shift_id,
+              }
+            : {}),
+
           date: new Date().toISOString().slice(0, 10),
         });
 
         console.log("CURRENT STATE:", JSON.stringify(currentState));
-
-        console.log("BEFORE VALIDATION");
 
         const validation = validateAttendanceAction(
           currentState,
@@ -140,17 +91,11 @@ export async function handleRequest(
         console.log("VALIDATION RESULT:", JSON.stringify(validation));
 
         if (!validation.valid) {
-          console.warn("TIMELOG REJECTED:", validation.message);
-
           return {
             success: false,
             message: validation.message,
           };
         }
-
-        console.log("AFTER VALIDATION");
-
-        console.log("BEFORE CREATE TIMELOG");
 
         const log = await createTimeLog(supabaseAdmin, {
           workspace_id: body.workspace_id,
@@ -168,9 +113,13 @@ export async function handleRequest(
           location_message: body.location_message,
 
           timestamp: body.timestamp,
-        });
 
-        console.log("AFTER CREATE TIMELOG");
+          ...(body.shift_id
+            ? {
+                shift_id: body.shift_id,
+              }
+            : {}),
+        });
 
         return {
           success: true,
@@ -187,14 +136,24 @@ export async function handleRequest(
 
           email: body.email,
 
-          shift_id: body.shift_id,
+          ...(body.shift_id
+            ? {
+                shift_id: body.shift_id,
+              }
+            : {}),
 
-          date: body.date,
+          ...(body.date
+            ? {
+                date: body.date,
+              }
+            : {}),
         });
       }
 
       default: {
-        throw new Error(`Unknown action: ${(body as any).action}`);
+        const _exhaustiveCheck: never = body;
+
+        throw new Error(`Unknown action: ${_exhaustiveCheck}`);
       }
     }
   } catch (error) {
