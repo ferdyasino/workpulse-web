@@ -1,11 +1,11 @@
 import { Button, Grid, Paper } from "@mui/material";
 
-import { useAttendance } from "../hooks/useAttendance";
+import { useAttendanceContext } from "@/providers/AttendanceProvider";
 
 import type { TimeLogAction } from "../types/attendance.types";
 
 export default function TimeLogger() {
-  const { state, logTime, isSubmitting } = useAttendance();
+  const { state, logTime, isSubmitting } = useAttendanceContext();
 
   const handleClick = (action: TimeLogAction) => {
     if (isSubmitting) {

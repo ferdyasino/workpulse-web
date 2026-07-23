@@ -1,12 +1,11 @@
 import { Avatar, Box, Paper, Typography } from "@mui/material";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-
-import { useAttendance } from "../hooks/useAttendance";
+import { useAttendanceContext } from "@/providers/AttendanceProvider";
 
 export default function ProfileCard() {
   const { user } = useAuth();
-  const { state } = useAttendance();
+  const { state } = useAttendanceContext();
 
   const name = user?.email?.split("@")[0] ?? "Guest User";
 

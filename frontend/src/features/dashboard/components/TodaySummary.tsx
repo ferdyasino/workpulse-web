@@ -1,6 +1,6 @@
 import { Paper, Stack, Typography } from "@mui/material";
 
-import { useAttendance } from "../hooks/useAttendance";
+import { useAttendanceContext } from "@/providers/AttendanceProvider";
 
 function formatTime(value: string | null | undefined) {
   if (!value) {
@@ -14,7 +14,7 @@ function formatTime(value: string | null | undefined) {
 }
 
 export default function TodaySummary() {
-  const { state } = useAttendance();
+  const { state } = useAttendanceContext();
 
   const session = state?.current_session;
 

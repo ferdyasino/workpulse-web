@@ -9,7 +9,6 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 export function useAttendance() {
   const { user } = useAuth();
 
-  const initialized = useRef(false);
   const submitting = useRef(false);
 
   const [state, setState] = useState<AttendanceState | null>(null);
@@ -18,7 +17,7 @@ export function useAttendance() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!user || !user.workspace_id || !user.email) {
+    if (!user?.workspace_id || !user.email) {
       setState(null);
       setIsLoading(false);
 
@@ -46,11 +45,11 @@ export function useAttendance() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user?.workspace_id, user?.email, user?.shift_id]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
-      if (!user || !user.workspace_id || !user.email || !user.user_id) {
+      if (!user?.workspace_id || !user.email || !user.user_id) {
         throw new Error("Incomplete user context.");
       }
 
@@ -108,48 +107,25 @@ export function useAttendance() {
     [user, refresh],
   );
 
-  // reset initialization when workspace changes
+  // Initial load and refresh whenever user context changes.
   useEffect(() => {
-    initialized.current = false;
-  }, [user?.workspace_id]);
-
-  // initial load
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    if (!user.workspace_id || !user.email) {
-      return;
-    }
-
-    if (initialized.current) {
-      return;
-    }
-
-    initialized.current = true;
-
-    console.log("Initial attendance refresh.");
-
     void refresh();
-  }, [user, refresh]);
+  }, [refresh]);
 
-  // auto sync every 30 seconds
+  // Auto sync every 30 seconds.
   useEffect(() => {
     if (!user?.workspace_id || !user.email) {
       return;
     }
 
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       void refresh();
     }, 30000);
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, [user, refresh]);
+    return () => window.clearInterval(interval);
+  }, [user?.workspace_id, user?.email, refresh]);
 
-  // refresh when returning to tab
+  // Refresh when returning to the tab.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -166,13 +142,9 @@ export function useAttendance() {
 
   return {
     state,
-
     isLoading,
-
     isSubmitting,
-
     refresh,
-
     logTime,
   };
 }

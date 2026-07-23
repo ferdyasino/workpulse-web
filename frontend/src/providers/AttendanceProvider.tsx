@@ -12,7 +12,7 @@ type AttendanceContextType = {
   logTime: (action: TimeLogAction) => Promise<unknown>;
 };
 
-const AttendanceContext = createContext<AttendanceContextType | null>(null);
+const AttendanceContext = createContext<AttendanceContextType | undefined>(undefined);
 
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   const attendance = useAttendance();
@@ -23,8 +23,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 export function useAttendanceContext() {
   const context = useContext(AttendanceContext);
 
-  if (!context) {
-    throw new Error("useAttendanceContext must be used inside AttendanceProvider");
+  if (context === undefined) {
+    throw new Error("useAttendanceContext must be used within an AttendanceProvider");
   }
 
   return context;
