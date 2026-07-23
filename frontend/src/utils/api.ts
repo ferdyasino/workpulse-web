@@ -25,3 +25,9 @@ export async function invokeFunction<TResponse, TBody extends object | undefined
 
   return data as TResponse;
 }
+
+export async function apiRequest<TResponse = any, TBody extends object = object>(
+  body: TBody,
+): Promise<TResponse> {
+  return invokeFunction<TResponse, TBody>("api", body);
+}

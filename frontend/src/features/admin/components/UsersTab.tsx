@@ -1,7 +1,7 @@
 import {
+  Box,
   Button,
   Paper,
-  Stack,
   Table,
   TableBody,
   TableCell,
@@ -19,7 +19,14 @@ export default function UsersTab() {
         borderRadius: 2,
       }}
     >
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography
           variant="h6"
           sx={{
@@ -30,7 +37,7 @@ export default function UsersTab() {
         </Typography>
 
         <Button variant="contained">Add User</Button>
-      </Stack>
+      </Box>
 
       <Table>
         <TableHead>

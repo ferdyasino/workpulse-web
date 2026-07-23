@@ -31,3 +31,21 @@ export type EmployeeListResponse = {
 export type EmployeeListRequest = {
   action: "EMPLOYEE_LIST";
 };
+
+export type AdminUser = {
+  user_id: string;
+
+  email: string;
+
+  full_name: string | null;
+
+  role: string;
+
+  department_id: string | null;
+
+  position_id: string | null;
+
+  shift_id: string | null;
+
+  status: string;
+};
