@@ -1,6 +1,6 @@
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -28,7 +28,7 @@ export default function PositionsTab() {
           Positions
         </Typography>
 
-        <Button variant="contained">Add Department</Button>
+        <Button variant="contained">Add Position</Button>
       </Box>
 
       <Table>
