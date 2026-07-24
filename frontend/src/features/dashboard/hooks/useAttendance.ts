@@ -85,7 +85,7 @@ export function useAttendance() {
         console.log("ACTION RESPONSE:", response);
 
         if (!response.success) {
-          throw new Error(response.message);
+          throw new Error(response.message ?? "Attendance action failed.");
         }
 
         if (response.state) {
@@ -99,6 +99,10 @@ export function useAttendance() {
         console.groupEnd();
 
         return response;
+      } catch (error) {
+        console.error("Attendance action failed:", error);
+
+        throw error;
       } finally {
         submitting.current = false;
         setIsSubmitting(false);

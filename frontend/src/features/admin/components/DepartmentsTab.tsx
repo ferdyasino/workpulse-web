@@ -12,6 +12,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
+import { useSnackbar } from "@/components/ui";
 import TableAction from "@/components/ui/TableAction/TableAction";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
@@ -28,12 +29,12 @@ import { useDepartments } from "../hooks/useDepartments";
 
 export default function DepartmentsTab() {
   const { user } = useAuth();
+  const snackbar = useSnackbar();
 
   const { departments, loading, error, refresh } = useDepartments();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
-
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (values: { name: string; description?: string }) => {
@@ -50,17 +51,23 @@ export default function DepartmentsTab() {
           workspace_id: user.workspace_id,
           ...values,
         });
+
+        snackbar.success("Department updated successfully.");
       } else {
         await createDepartment({
           workspace_id: user.workspace_id,
           ...values,
         });
+
+        snackbar.success("Department created successfully.");
       }
 
       setDialogOpen(false);
       setEditingDepartment(null);
 
       await refresh();
+    } catch (err) {
+      snackbar.error(err instanceof Error ? err.message : "Unable to save department.");
     } finally {
       setSaving(false);
     }
@@ -83,9 +90,11 @@ export default function DepartmentsTab() {
         workspace_id: user.workspace_id,
       });
 
+      snackbar.success("Department deleted successfully.");
+
       await refresh();
-    } catch (error) {
-      console.error("Delete department failed", error);
+    } catch (err) {
+      snackbar.error(err instanceof Error ? err.message : "Unable to delete department.");
     }
   };
 

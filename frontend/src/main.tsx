@@ -9,21 +9,23 @@ import { ThemeProvider } from "@mui/material/styles";
 
 import App from "./App";
 
-import theme from "@/theme";
-
+import { SnackbarProvider } from "@/components/ui";
 import AuthProvider from "@/providers/AuthProvider";
 import GoogleProvider from "@/providers/GoogleProvider";
+import theme from "@/theme";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-      <GoogleProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </GoogleProvider>
+      <SnackbarProvider>
+        <GoogleProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </GoogleProvider>
+      </SnackbarProvider>
     </ThemeProvider>
   </StrictMode>,
 );

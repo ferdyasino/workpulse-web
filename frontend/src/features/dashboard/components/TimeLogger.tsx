@@ -1,18 +1,35 @@
 import { Button, Grid, Paper } from "@mui/material";
 
+import { useSnackbar } from "@/components/ui";
 import { useAttendanceContext } from "@/providers/AttendanceProvider";
 
 import type { TimeLogAction } from "../types/attendance.types";
 
 export default function TimeLogger() {
   const { state, logTime, isSubmitting } = useAttendanceContext();
+  const snackbar = useSnackbar();
 
-  const handleClick = (action: TimeLogAction) => {
+  const handleClick = async (action: TimeLogAction) => {
     if (isSubmitting) {
       return;
     }
 
-    void logTime(action);
+    try {
+      await logTime(action);
+
+      const messages: Record<TimeLogAction, string> = {
+        TIME_IN: "Time In recorded successfully.",
+        TIME_OUT: "Time Out recorded successfully.",
+        BREAK_START: "Break started.",
+        BREAK_END: "Break ended.",
+        LUNCH_START: "Lunch started.",
+        LUNCH_END: "Lunch ended.",
+      };
+
+      snackbar.success(messages[action]);
+    } catch (err) {
+      snackbar.error(err instanceof Error ? err.message : "Unable to record attendance.");
+    }
   };
 
   const session = state?.current_session;
@@ -47,7 +64,7 @@ export default function TimeLogger() {
             color="success"
             size="large"
             disabled={isSubmitting || hasActiveSession}
-            onClick={() => handleClick("TIME_IN")}
+            onClick={() => void handleClick("TIME_IN")}
           >
             Time In
           </Button>
@@ -60,7 +77,7 @@ export default function TimeLogger() {
             color="error"
             size="large"
             disabled={isSubmitting || !hasActiveSession || hasActiveBreak || hasActiveLunch}
-            onClick={() => handleClick("TIME_OUT")}
+            onClick={() => void handleClick("TIME_OUT")}
           >
             Time Out
           </Button>
@@ -73,7 +90,7 @@ export default function TimeLogger() {
             color="warning"
             size="large"
             disabled={isSubmitting || !isWorking}
-            onClick={() => handleClick("BREAK_START")}
+            onClick={() => void handleClick("BREAK_START")}
           >
             Break Start
           </Button>
@@ -86,7 +103,7 @@ export default function TimeLogger() {
             color="warning"
             size="large"
             disabled={isSubmitting || !isBreak}
-            onClick={() => handleClick("BREAK_END")}
+            onClick={() => void handleClick("BREAK_END")}
           >
             Break End
           </Button>
@@ -99,7 +116,7 @@ export default function TimeLogger() {
             color="inherit"
             size="large"
             disabled={isSubmitting || !isWorking}
-            onClick={() => handleClick("LUNCH_START")}
+            onClick={() => void handleClick("LUNCH_START")}
           >
             Lunch Start
           </Button>
@@ -112,7 +129,7 @@ export default function TimeLogger() {
             color="info"
             size="large"
             disabled={isSubmitting || !isLunch}
-            onClick={() => handleClick("LUNCH_END")}
+            onClick={() => void handleClick("LUNCH_END")}
           >
             Lunch End
           </Button>
