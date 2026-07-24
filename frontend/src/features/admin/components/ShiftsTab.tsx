@@ -6,6 +6,7 @@ import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
@@ -27,6 +28,8 @@ export default function ShiftsTab() {
       sx={{
         p: 3,
         borderRadius: 2,
+        width: "100%",
+        overflow: "hidden",
       }}
     >
       <Box
@@ -49,72 +52,79 @@ export default function ShiftsTab() {
         <Button variant="contained">Add Shift</Button>
       </Box>
 
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>Start</TableCell>
-            <TableCell>End</TableCell>
-            <TableCell>Timezone</TableCell>
-            <TableCell>Grace</TableCell>
-            <TableCell>Break</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-
-        <TableBody>
-          {loading ? (
+      <TableContainer
+        sx={{
+          width: "100%",
+          overflowX: "auto",
+        }}
+      >
+        <Table sx={{ minWidth: 1000 }}>
+          <TableHead>
             <TableRow>
-              <TableCell colSpan={8} align="center">
-                <CircularProgress size={24} />
-              </TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Start</TableCell>
+              <TableCell>End</TableCell>
+              <TableCell>Timezone</TableCell>
+              <TableCell>Grace</TableCell>
+              <TableCell>Break</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
-          ) : error ? (
-            <TableRow>
-              <TableCell colSpan={8} align="center">
-                {error}
-              </TableCell>
-            </TableRow>
-          ) : shifts.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={8}>No shifts found.</TableCell>
-            </TableRow>
-          ) : (
-            shifts.map((shift) => (
-              <TableRow key={shift.id} hover>
-                <TableCell>{shift.name}</TableCell>
+          </TableHead>
 
-                <TableCell>{formatTime(shift.start_time, "12h")}</TableCell>
-
-                <TableCell>{formatTime(shift.end_time, "12h")}</TableCell>
-
-                <TableCell>{shift.timezone}</TableCell>
-
-                <TableCell>{shift.grace_minutes} min</TableCell>
-
-                <TableCell>{shift.break_minutes} min</TableCell>
-
-                <TableCell>
-                  <Chip
-                    label={shift.status}
-                    color={shift.status === "ACTIVE" ? "success" : "default"}
-                    size="small"
-                  />
-                </TableCell>
-
-                <TableCell align="right">
-                  <Button size="small">Edit</Button>
-
-                  <Button size="small" color="error">
-                    Delete
-                  </Button>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  {error}
+                </TableCell>
+              </TableRow>
+            ) : shifts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8}>No shifts found.</TableCell>
+              </TableRow>
+            ) : (
+              shifts.map((shift) => (
+                <TableRow key={shift.id} hover>
+                  <TableCell>{shift.name}</TableCell>
+
+                  <TableCell>{formatTime(shift.start_time, "12h")}</TableCell>
+
+                  <TableCell>{formatTime(shift.end_time, "12h")}</TableCell>
+
+                  <TableCell>{shift.timezone}</TableCell>
+
+                  <TableCell>{shift.grace_minutes} min</TableCell>
+
+                  <TableCell>{shift.break_minutes} min</TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={shift.status}
+                      color={shift.status === "ACTIVE" ? "success" : "default"}
+                      size="small"
+                    />
+                  </TableCell>
+
+                  <TableCell align="right">
+                    <Button size="small">Edit</Button>
+
+                    <Button size="small" color="error">
+                      Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Paper>
   );
 }

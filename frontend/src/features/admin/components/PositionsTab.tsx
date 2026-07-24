@@ -6,6 +6,7 @@ import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
@@ -25,6 +26,8 @@ export default function PositionsTab() {
       sx={{
         p: 3,
         borderRadius: 2,
+        width: "100%",
+        overflow: "hidden",
       }}
     >
       <Box
@@ -47,60 +50,67 @@ export default function PositionsTab() {
         <Button variant="contained">Add Position</Button>
       </Box>
 
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Title</TableCell>
-            <TableCell>Description</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-
-        <TableBody>
-          {loading ? (
+      <TableContainer
+        sx={{
+          width: "100%",
+          overflowX: "auto",
+        }}
+      >
+        <Table sx={{ minWidth: 700 }}>
+          <TableHead>
             <TableRow>
-              <TableCell colSpan={4} align="center">
-                <CircularProgress size={24} />
-              </TableCell>
+              <TableCell>Title</TableCell>
+              <TableCell>Description</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
-          ) : error ? (
-            <TableRow>
-              <TableCell colSpan={4} align="center">
-                {error}
-              </TableCell>
-            </TableRow>
-          ) : positions.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={4}>No positions found.</TableCell>
-            </TableRow>
-          ) : (
-            positions.map((position) => (
-              <TableRow key={position.id} hover>
-                <TableCell>{position.title}</TableCell>
+          </TableHead>
 
-                <TableCell>{position.description ?? "-"}</TableCell>
-
-                <TableCell>
-                  <Chip
-                    label={position.status}
-                    color={position.status === "ACTIVE" ? "success" : "default"}
-                    size="small"
-                  />
-                </TableCell>
-
-                <TableCell align="right">
-                  <Button size="small">Edit</Button>
-
-                  <Button size="small" color="error">
-                    Delete
-                  </Button>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  {error}
+                </TableCell>
+              </TableRow>
+            ) : positions.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4}>No positions found.</TableCell>
+              </TableRow>
+            ) : (
+              positions.map((position) => (
+                <TableRow key={position.id} hover>
+                  <TableCell>{position.title}</TableCell>
+
+                  <TableCell>{position.description ?? "-"}</TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={position.status}
+                      color={position.status === "ACTIVE" ? "success" : "default"}
+                      size="small"
+                    />
+                  </TableCell>
+
+                  <TableCell align="right">
+                    <Button size="small">Edit</Button>
+
+                    <Button size="small" color="error">
+                      Delete
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Paper>
   );
 }

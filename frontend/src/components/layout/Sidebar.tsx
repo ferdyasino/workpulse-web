@@ -7,16 +7,12 @@ export default function Sidebar() {
   return (
     <Box
       sx={{
-        width: {
-          xs: "100%",
-          md: 420,
-        },
+        width: "100%",
         p: 2,
       }}
     >
       <Clock timezone="America/New_York" />
 
-      {/* Desktop only */}
       <Box
         sx={{
           display: {

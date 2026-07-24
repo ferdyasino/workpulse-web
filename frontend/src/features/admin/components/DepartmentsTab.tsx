@@ -8,6 +8,7 @@ import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
@@ -119,7 +120,15 @@ export default function DepartmentsTab() {
 
   return (
     <>
-      <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 3,
+          borderRadius: 2,
+          width: "100%",
+          overflow: "hidden",
+        }}
+      >
         <Box
           sx={{
             display: "flex",
@@ -137,59 +146,66 @@ export default function DepartmentsTab() {
           </Button>
         </Box>
 
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-
-          <TableBody>
-            {loading ? (
+        <TableContainer
+          sx={{
+            width: "100%",
+            overflowX: "auto",
+          }}
+        >
+          <Table sx={{ minWidth: 700 }}>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={4} align="center">
-                  <CircularProgress size={24} />
-                </TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ) : error ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center">
-                  {error}
-                </TableCell>
-              </TableRow>
-            ) : departments.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4}>No departments found.</TableCell>
-              </TableRow>
-            ) : (
-              departments.map((department) => (
-                <TableRow key={department.id} hover>
-                  <TableCell>{department.name}</TableCell>
+            </TableHead>
 
-                  <TableCell>{department.description ?? "-"}</TableCell>
-
-                  <TableCell>
-                    <Chip
-                      label={department.status}
-                      color={department.status === "ACTIVE" ? "success" : "default"}
-                      size="small"
-                    />
-                  </TableCell>
-
-                  <TableCell align="right">
-                    <TableAction
-                      onEdit={() => handleEdit(department)}
-                      onDelete={() => handleDelete(department)}
-                    />
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center">
+                    <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center">
+                    {error}
+                  </TableCell>
+                </TableRow>
+              ) : departments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4}>No departments found.</TableCell>
+                </TableRow>
+              ) : (
+                departments.map((department) => (
+                  <TableRow key={department.id} hover>
+                    <TableCell>{department.name}</TableCell>
+
+                    <TableCell>{department.description ?? "-"}</TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={department.status}
+                        color={department.status === "ACTIVE" ? "success" : "default"}
+                        size="small"
+                      />
+                    </TableCell>
+
+                    <TableCell align="right">
+                      <TableAction
+                        onEdit={() => handleEdit(department)}
+                        onDelete={() => handleDelete(department)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Paper>
 
       <DepartmentDialog

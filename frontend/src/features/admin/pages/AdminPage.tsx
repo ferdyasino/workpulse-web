@@ -15,6 +15,9 @@ export default function AdminPage() {
       sx={{
         p: 4,
         borderRadius: 2,
+        width: "100%",
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <Typography
@@ -30,6 +33,8 @@ export default function AdminPage() {
       <Tabs
         value={tab}
         onChange={(_, value) => setTab(value)}
+        variant="scrollable"
+        scrollButtons="auto"
         sx={{
           mb: 3,
         }}
@@ -40,7 +45,13 @@ export default function AdminPage() {
         <Tab label="Shifts" />
       </Tabs>
 
-      <Box>
+      <Box
+        sx={{
+          width: "100%",
+          minWidth: 0,
+          overflow: "hidden",
+        }}
+      >
         {tab === 0 && <UsersTab />}
         {tab === 1 && <DepartmentsTab />}
         {tab === 2 && <PositionsTab />}
