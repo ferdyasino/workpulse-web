@@ -8,7 +8,6 @@ import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
@@ -126,7 +125,6 @@ export default function DepartmentsTab() {
           p: 3,
           borderRadius: 2,
           width: "100%",
-          overflow: "hidden",
         }}
       >
         <Box
@@ -146,13 +144,18 @@ export default function DepartmentsTab() {
           </Button>
         </Box>
 
-        <TableContainer
+        <Box
           sx={{
             width: "100%",
             overflowX: "auto",
           }}
         >
-          <Table sx={{ minWidth: 700 }}>
+          <Table
+            size="small"
+            sx={{
+              minWidth: 650,
+            }}
+          >
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
@@ -205,7 +208,7 @@ export default function DepartmentsTab() {
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </Box>
       </Paper>
 
       <DepartmentDialog
