@@ -18,3 +18,28 @@ export async function getDepartments(payload: DepartmentListRequest): Promise<De
     ...payload,
   });
 }
+
+export type CreateDepartmentRequest = {
+  workspace_id: string;
+  name: string;
+  description?: string;
+};
+
+type CreateDepartmentResponse = {
+  success: boolean;
+  message?: string;
+  department?: Department;
+};
+
+export async function createDepartment(payload: CreateDepartmentRequest): Promise<Department> {
+  const response = await apiRequest<CreateDepartmentResponse>({
+    action: "DEPARTMENT_CREATE",
+    ...payload,
+  });
+
+  if (!response.success || !response.department) {
+    throw new Error(response.message ?? "Failed to create department");
+  }
+
+  return response.department;
+}

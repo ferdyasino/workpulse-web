@@ -35,3 +35,28 @@ export async function listDepartments(
 
   return data;
 }
+
+export async function createDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    workspace_id: string;
+    name: string;
+    description?: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .insert({
+      workspace_id: payload.workspace_id,
+      name: payload.name.trim(),
+      description: payload.description?.trim() || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

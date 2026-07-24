@@ -22,6 +22,12 @@ export type ApiRequest =
       workspace_id: string;
     }
   | {
+      action: "DEPARTMENT_CREATE";
+      workspace_id: string;
+      name: string;
+      description?: string;
+    }
+  | {
       action: "POSITION_LIST";
       workspace_id: string;
     }
