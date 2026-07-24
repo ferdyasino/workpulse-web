@@ -19,20 +19,20 @@ export async function getDepartments(payload: DepartmentListRequest): Promise<De
   });
 }
 
-export type CreateDepartmentRequest = {
+export type SaveDepartmentRequest = {
   workspace_id: string;
   name: string;
   description?: string;
 };
 
-type CreateDepartmentResponse = {
+type DepartmentResponse = {
   success: boolean;
   message?: string;
   department?: Department;
 };
 
-export async function createDepartment(payload: CreateDepartmentRequest): Promise<Department> {
-  const response = await apiRequest<CreateDepartmentResponse>({
+export async function createDepartment(payload: SaveDepartmentRequest): Promise<Department> {
+  const response = await apiRequest<DepartmentResponse>({
     action: "DEPARTMENT_CREATE",
     ...payload,
   });
@@ -42,4 +42,42 @@ export async function createDepartment(payload: CreateDepartmentRequest): Promis
   }
 
   return response.department;
+}
+
+export type UpdateDepartmentRequest = SaveDepartmentRequest & {
+  id: string;
+};
+
+export async function updateDepartment(payload: UpdateDepartmentRequest): Promise<Department> {
+  const response = await apiRequest<DepartmentResponse>({
+    action: "DEPARTMENT_UPDATE",
+    ...payload,
+  });
+
+  if (!response.success || !response.department) {
+    throw new Error(response.message ?? "Failed to update department");
+  }
+
+  return response.department;
+}
+
+export type DeleteDepartmentRequest = {
+  workspace_id: string;
+  id: string;
+};
+
+type DeleteDepartmentResponse = {
+  success: boolean;
+  message?: string;
+};
+
+export async function deleteDepartment(payload: DeleteDepartmentRequest): Promise<void> {
+  const response = await apiRequest<DeleteDepartmentResponse>({
+    action: "DEPARTMENT_DELETE",
+    ...payload,
+  });
+
+  if (!response.success) {
+    throw new Error(response.message ?? "Failed to delete department");
+  }
 }

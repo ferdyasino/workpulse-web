@@ -12,12 +12,19 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
+import TableAction from "@/components/ui/TableAction/TableAction";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
-import AddDepartmentDialog from "./AddDepartmentDialog";
+import DepartmentDialog from "./DepartmentDialog";
+
+import {
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  type Department,
+} from "../services/departments.service";
 
 import { useDepartments } from "../hooks/useDepartments";
-import { createDepartment } from "../services/departments.service";
 
 export default function DepartmentsTab() {
   const { user } = useAuth();
@@ -25,9 +32,11 @@ export default function DepartmentsTab() {
   const { departments, loading, error, refresh } = useDepartments();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+
   const [saving, setSaving] = useState(false);
 
-  const handleCreate = async (values: { name: string; description?: string }) => {
+  const handleSave = async (values: { name: string; description?: string }) => {
     if (!user?.workspace_id) {
       return;
     }
@@ -35,20 +44,68 @@ export default function DepartmentsTab() {
     try {
       setSaving(true);
 
-      await createDepartment({
-        workspace_id: user.workspace_id,
-        ...values,
-      });
+      if (editingDepartment) {
+        await updateDepartment({
+          id: editingDepartment.id,
+          workspace_id: user.workspace_id,
+          ...values,
+        });
+      } else {
+        await createDepartment({
+          workspace_id: user.workspace_id,
+          ...values,
+        });
+      }
 
       setDialogOpen(false);
+      setEditingDepartment(null);
 
       await refresh();
-    } catch (error) {
-      console.error(error);
-      // TODO: show Snackbar or Alert
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async (department: Department) => {
+    if (!user?.workspace_id) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete department "${department.name}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteDepartment({
+        id: department.id,
+        workspace_id: user.workspace_id,
+      });
+
+      await refresh();
+    } catch (error) {
+      console.error("Delete department failed", error);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingDepartment(null);
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (department: Department) => {
+    setEditingDepartment(department);
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    if (saving) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setEditingDepartment(null);
   };
 
   return (
@@ -62,16 +119,11 @@ export default function DepartmentsTab() {
             mb: 3,
           }}
         >
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-            }}
-          >
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
             Departments
           </Typography>
 
-          <Button variant="contained" onClick={() => setDialogOpen(true)}>
+          <Button variant="contained" onClick={handleOpenCreate}>
             Add Department
           </Button>
         </Box>
@@ -119,11 +171,10 @@ export default function DepartmentsTab() {
                   </TableCell>
 
                   <TableCell align="right">
-                    <Button size="small">Edit</Button>
-
-                    <Button size="small" color="error">
-                      Delete
-                    </Button>
+                    <TableAction
+                      onEdit={() => handleEdit(department)}
+                      onDelete={() => handleDelete(department)}
+                    />
                   </TableCell>
                 </TableRow>
               ))
@@ -132,11 +183,12 @@ export default function DepartmentsTab() {
         </Table>
       </Paper>
 
-      <AddDepartmentDialog
+      <DepartmentDialog
         open={dialogOpen}
         loading={saving}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleCreate}
+        department={editingDepartment}
+        onClose={handleCloseDialog}
+        onSubmit={handleSave}
       />
     </>
   );

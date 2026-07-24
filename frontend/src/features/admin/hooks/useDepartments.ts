@@ -8,7 +8,7 @@ export function useDepartments() {
   const { user } = useAuth();
 
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadDepartments = useCallback(async () => {

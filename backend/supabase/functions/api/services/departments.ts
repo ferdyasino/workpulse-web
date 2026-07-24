@@ -60,3 +60,54 @@ export async function createDepartment(
 
   return data;
 }
+
+export async function updateDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+    name: string;
+    description?: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .update({
+      name: payload.name.trim(),
+      description: payload.description?.trim() || null,
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+  },
+) {
+  const { error } = await supabaseAdmin
+    .from("departments")
+    .update({
+      deleted_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    success: true,
+  };
+}

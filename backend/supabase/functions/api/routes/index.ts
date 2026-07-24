@@ -8,7 +8,12 @@ import { getAuthenticatedUser } from "../lib/auth.ts";
 
 import { getApplicationContext } from "../services/context.ts";
 import { getUserContext, listUsers } from "../services/users.ts";
-import { listDepartments, createDepartment } from "../services/departments.ts";
+import {
+  listDepartments,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+} from "../services/departments.ts";
 import { listPositions } from "../services/positions.ts";
 import { listShifts } from "../services/shifts.ts";
 
@@ -74,22 +79,87 @@ export async function handleRequest(
       }
 
       case "DEPARTMENT_CREATE": {
-        console.log("DEPARTMENT CREATE REQUEST:", JSON.stringify(body));
+        try {
+          const department = await createDepartment(supabaseAdmin, {
+            workspace_id: body.workspace_id,
+            name: body.name,
+            ...(body.description
+              ? {
+                  description: body.description,
+                }
+              : {}),
+          });
 
-        const department = await createDepartment(supabaseAdmin, {
+          return {
+            success: true,
+            message: "Department created successfully",
+            department,
+          };
+        } catch (error) {
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "23505"
+          ) {
+            return {
+              success: false,
+              message: "Department name already exists",
+            };
+          }
+
+          throw error;
+        }
+      }
+
+      case "DEPARTMENT_UPDATE": {
+        console.log("DEPARTMENT UPDATE REQUEST:", JSON.stringify(body));
+
+        try {
+          const department = await updateDepartment(supabaseAdmin, {
+            id: body.id,
+            workspace_id: body.workspace_id,
+            name: body.name,
+            ...(body.description
+              ? {
+                  description: body.description,
+                }
+              : {}),
+          });
+
+          return {
+            success: true,
+            message: "Department updated successfully",
+            department,
+          };
+        } catch (error) {
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "23505"
+          ) {
+            return {
+              success: false,
+              message: "Department already exists",
+            };
+          }
+
+          throw error;
+        }
+      }
+
+      case "DEPARTMENT_DELETE": {
+        console.log("DEPARTMENT DELETE REQUEST:", JSON.stringify(body));
+
+        await deleteDepartment(supabaseAdmin, {
+          id: body.id,
           workspace_id: body.workspace_id,
-          name: body.name,
-          ...(body.description
-            ? {
-                description: body.description,
-              }
-            : {}),
         });
 
         return {
           success: true,
-          message: "Department created successfully",
-          department,
+          message: "Department deleted successfully",
         };
       }
 

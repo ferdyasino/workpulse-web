@@ -28,6 +28,18 @@ export type ApiRequest =
       description?: string;
     }
   | {
+      action: "DEPARTMENT_UPDATE";
+      id: string;
+      workspace_id: string;
+      name: string;
+      description?: string;
+    }
+  | {
+      action: "DEPARTMENT_DELETE";
+      id: string;
+      workspace_id: string;
+    }
+  | {
       action: "POSITION_LIST";
       workspace_id: string;
     }
