@@ -13,6 +13,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 
 import { useSnackbar } from "@/components/ui";
+import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
@@ -35,7 +36,10 @@ export default function DepartmentsTab() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [departmentToDelete, setDepartmentToDelete] = useState<Department | null>(null);
+
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleSave = async (values: { name: string; description?: string }) => {
     if (!user?.workspace_id) {
@@ -73,28 +77,32 @@ export default function DepartmentsTab() {
     }
   };
 
-  const handleDelete = async (department: Department) => {
-    if (!user?.workspace_id) {
-      return;
-    }
+  const handleDelete = (department: Department) => {
+    setDepartmentToDelete(department);
+  };
 
-    const confirmed = window.confirm(`Delete department "${department.name}"?`);
-
-    if (!confirmed) {
+  const handleConfirmDelete = async () => {
+    if (!user?.workspace_id || !departmentToDelete) {
       return;
     }
 
     try {
+      setDeleting(true);
+
       await deleteDepartment({
-        id: department.id,
+        id: departmentToDelete.id,
         workspace_id: user.workspace_id,
       });
 
       snackbar.success("Department deleted successfully.");
 
+      setDepartmentToDelete(null);
+
       await refresh();
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete department.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -217,6 +225,19 @@ export default function DepartmentsTab() {
         department={editingDepartment}
         onClose={handleCloseDialog}
         onSubmit={handleSave}
+      />
+
+      <ConfirmDialog
+        open={Boolean(departmentToDelete)}
+        title="Delete Department"
+        message={`Are you sure you want to delete "${departmentToDelete?.name}"?`}
+        loading={deleting}
+        onClose={() => {
+          if (!deleting) {
+            setDepartmentToDelete(null);
+          }
+        }}
+        onConfirm={handleConfirmDelete}
       />
     </>
   );
