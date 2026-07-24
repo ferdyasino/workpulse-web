@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getUsers, type User } from "../services/users.service";
+import { getPositions, type Position } from "../services/positions.service";
 
-export function useUsers(workspaceId?: string) {
-  const [users, setUsers] = useState<User[]>([]);
+export function usePositions(workspaceId?: string) {
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!workspaceId) {
-      setUsers([]);
+      setPositions([]);
       setLoading(false);
       return;
     }
@@ -18,13 +18,13 @@ export function useUsers(workspaceId?: string) {
       setLoading(true);
       setError(null);
 
-      const users = await getUsers({
+      const positions = await getPositions({
         workspace_id: workspaceId,
       });
 
-      setUsers(users);
+      setPositions(positions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(err instanceof Error ? err.message : "Failed to load positions");
     } finally {
       setLoading(false);
     }
@@ -35,7 +35,7 @@ export function useUsers(workspaceId?: string) {
   }, [refresh]);
 
   return {
-    users,
+    positions,
     loading,
     error,
     refresh,

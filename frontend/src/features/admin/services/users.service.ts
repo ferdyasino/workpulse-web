@@ -1,35 +1,26 @@
 import { apiRequest } from "@/utils/api";
 
-export type AdminUser = {
-  user_id: string;
+export type User = {
+  id: string;
+  employee_no: string;
+  display_name: string;
   email: string;
-  full_name: string | null;
+  avatar_url: string | null;
   role: string;
-  department_id: string | null;
-  position_id: string | null;
-  shift_id: string | null;
-  status: string;
+  employment_status: string;
+  employment_type: string;
+  department: string | null;
+  position: string | null;
+  shift: string | null;
 };
 
-export type GetUsersRequest = {
+export type EmployeeListRequest = {
   workspace_id: string;
 };
 
-type GetUsersResponse = {
-  success: boolean;
-  message?: string;
-  users?: AdminUser[];
-};
-
-export async function getUsers(payload: GetUsersRequest): Promise<AdminUser[]> {
-  const response = await apiRequest<GetUsersResponse>({
-    action: "GET_USERS",
+export async function getUsers(payload: EmployeeListRequest): Promise<User[]> {
+  return apiRequest<User[]>({
+    action: "EMPLOYEE_LIST",
     ...payload,
   });
-
-  if (!response.success) {
-    throw new Error(response.message ?? "Failed to load users");
-  }
-
-  return response.users ?? [];
 }

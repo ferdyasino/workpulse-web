@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getUsers, type User } from "../services/users.service";
+import { getShifts, type Shift } from "../services/shifts.service";
 
-export function useUsers(workspaceId?: string) {
-  const [users, setUsers] = useState<User[]>([]);
+export function useShifts(workspaceId?: string) {
+  const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!workspaceId) {
-      setUsers([]);
+      setShifts([]);
       setLoading(false);
       return;
     }
@@ -18,13 +18,13 @@ export function useUsers(workspaceId?: string) {
       setLoading(true);
       setError(null);
 
-      const users = await getUsers({
+      const shifts = await getShifts({
         workspace_id: workspaceId,
       });
 
-      setUsers(users);
+      setShifts(shifts);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(err instanceof Error ? err.message : "Failed to load shifts");
     } finally {
       setLoading(false);
     }
@@ -35,7 +35,7 @@ export function useUsers(workspaceId?: string) {
   }, [refresh]);
 
   return {
-    users,
+    shifts,
     loading,
     error,
     refresh,

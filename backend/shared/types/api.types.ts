@@ -17,6 +17,18 @@ export type ApiRequest =
       action: "EMPLOYEE_LIST";
       workspace_id: string;
     }
+  | {
+      action: "DEPARTMENT_LIST";
+      workspace_id: string;
+    }
+  | {
+      action: "POSITION_LIST";
+      workspace_id: string;
+    }
+  | {
+      action: "SHIFT_LIST";
+      workspace_id: string;
+    }
   | ({
       action: "TIMELOG_CREATE";
     } & SubmitTimeLogRequest)

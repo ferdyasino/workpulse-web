@@ -8,6 +8,9 @@ import { getAuthenticatedUser } from "../lib/auth.ts";
 
 import { getApplicationContext } from "../services/context.ts";
 import { getUserContext, listUsers } from "../services/users.ts";
+import { listDepartments } from "../services/departments.ts";
+import { listPositions } from "../services/positions.ts";
+import { listShifts } from "../services/shifts.ts";
 
 import { createTimeLog } from "../services/timelogs.ts";
 
@@ -62,6 +65,30 @@ export async function handleRequest(
         console.log("EMPLOYEE LIST REQUEST:", JSON.stringify(body));
 
         return await listUsers(supabaseAdmin, body.workspace_id);
+      }
+
+      case "DEPARTMENT_LIST": {
+        console.log("DEPARTMENT LIST REQUEST:", JSON.stringify(body));
+
+        return await listDepartments(supabaseAdmin, body.workspace_id);
+      }
+
+      case "POSITION_LIST": {
+        console.log("POSITION LIST REQUEST:", JSON.stringify(body));
+
+        return {
+          success: true,
+          positions: await listPositions(supabaseAdmin, body.workspace_id),
+        };
+      }
+
+      case "SHIFT_LIST": {
+        console.log("SHIFT LIST REQUEST:", JSON.stringify(body));
+
+        return {
+          success: true,
+          shifts: await listShifts(supabaseAdmin, body.workspace_id),
+        };
       }
 
       case "TIMELOG_CREATE": {
@@ -151,9 +178,9 @@ export async function handleRequest(
       }
 
       default: {
-        const _exhaustiveCheck: never = body;
-
-        throw new Error(`Unknown action: ${_exhaustiveCheck}`);
+        throw new Error(
+          `Unknown action: ${(body as { action: string }).action}`,
+        );
       }
     }
   } catch (error) {
