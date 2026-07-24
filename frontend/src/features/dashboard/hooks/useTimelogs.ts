@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getTimelogs, type Timelog } from "../services/timelogs.service";
 
@@ -13,7 +13,11 @@ export function useTimelogs(params: Params) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    if (!params.workspace_id) {
+      return;
+    }
+
     try {
       setLoading(true);
       setError(undefined);
@@ -26,15 +30,11 @@ export function useTimelogs(params: Params) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [params.workspace_id, params.user_id, params.work_date]);
 
   useEffect(() => {
-    if (!params.workspace_id || !params.user_id) {
-      return;
-    }
-
-    refresh();
-  }, [params.workspace_id, params.user_id, params.work_date]);
+    void refresh();
+  }, [refresh]);
 
   return {
     timelogs,

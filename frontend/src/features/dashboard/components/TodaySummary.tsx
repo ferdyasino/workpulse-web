@@ -26,7 +26,12 @@ export default function TodaySummary() {
 
   const [timelogsOpen, setTimelogsOpen] = useState(false);
 
-  const { timelogs, loading, error } = useTimelogs({
+  const {
+    timelogs,
+    loading,
+    error,
+    refresh: refreshTimelogs,
+  } = useTimelogs({
     workspace_id: user?.workspace_id ?? "",
     user_id: user?.user_id ?? "",
   });
@@ -83,9 +88,13 @@ export default function TodaySummary() {
               mt: 2,
               alignSelf: "flex-start",
             }}
-            onClick={() => setTimelogsOpen(true)}
+            disabled={loading}
+            onClick={async () => {
+              await refreshTimelogs();
+              setTimelogsOpen(true);
+            }}
           >
-            View Timelogs
+            {loading ? "Loading..." : "View Timelogs"}
           </Button>
         </Stack>
       </Paper>
