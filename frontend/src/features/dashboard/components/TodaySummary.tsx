@@ -29,7 +29,6 @@ export default function TodaySummary() {
   const {
     timelogs,
     loading,
-    error,
     refresh: refreshTimelogs,
   } = useTimelogs({
     workspace_id: user?.workspace_id ?? "",
