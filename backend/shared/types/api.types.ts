@@ -44,6 +44,24 @@ export type ApiRequest =
       workspace_id: string;
     }
   | {
+      action: "POSITION_CREATE";
+      workspace_id: string;
+      title: string;
+      description?: string;
+    }
+  | {
+      action: "POSITION_UPDATE";
+      id: string;
+      workspace_id: string;
+      title: string;
+      description?: string;
+    }
+  | {
+      action: "POSITION_DELETE";
+      id: string;
+      workspace_id: string;
+    }
+  | {
       action: "SHIFT_LIST";
       workspace_id: string;
     }
