@@ -1,6 +1,13 @@
-import { Paper, Stack, Typography } from "@mui/material";
+import { useState } from "react";
 
+import { Button, Paper, Stack, Typography } from "@mui/material";
+
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useAttendanceContext } from "@/providers/AttendanceProvider";
+
+import { useTimelogs } from "../hooks/useTimelogs";
+
+import TimelogsDialog from "./TimelogsDialog";
 
 function formatTime(value: string | null | undefined) {
   if (!value) {
@@ -15,6 +22,14 @@ function formatTime(value: string | null | undefined) {
 
 export default function TodaySummary() {
   const { state } = useAttendanceContext();
+  const { user } = useAuth();
+
+  const [timelogsOpen, setTimelogsOpen] = useState(false);
+
+  const { timelogs, loading, error } = useTimelogs({
+    workspace_id: user?.workspace_id ?? "",
+    user_id: user?.user_id ?? "",
+  });
 
   const session = state?.current_session;
 
@@ -37,9 +52,6 @@ export default function TodaySummary() {
         sx={{
           p: 3,
           borderRadius: 2,
-          background: "rgba(255,255,255,0.08)",
-          backdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.12)",
         }}
       >
         <Stack spacing={1}>
@@ -64,8 +76,25 @@ export default function TodaySummary() {
           </Typography>
 
           <Typography>Sessions Today: {state?.sessions.length ?? 0}</Typography>
+
+          <Button
+            variant="outlined"
+            sx={{
+              mt: 2,
+              alignSelf: "flex-start",
+            }}
+            onClick={() => setTimelogsOpen(true)}
+          >
+            View Timelogs
+          </Button>
         </Stack>
       </Paper>
+
+      <TimelogsDialog
+        open={timelogsOpen}
+        onClose={() => setTimelogsOpen(false)}
+        timelogs={timelogs}
+      />
     </>
   );
 }

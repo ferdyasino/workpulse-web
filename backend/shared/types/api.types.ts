@@ -50,6 +50,12 @@ export type ApiRequest =
   | ({
       action: "TIMELOG_CREATE";
     } & SubmitTimeLogRequest)
+  | {
+      action: "TIMELOG_LIST";
+      workspace_id: string;
+      user_id?: string;
+      work_date?: string;
+    }
   | ({
       action: "ATTENDANCE_STATE_GET";
     } & AttendanceStateRequest);

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 import type { Database } from "../types/database.ts";
 
@@ -58,30 +58,19 @@ export async function createTimeLog(
     .from("time_logs")
     .insert({
       workspace_id: payload.workspace_id,
-
       user_id: payload.user_id,
-
       user_shift_id: userShift.id,
-
       event_type: payload.action_type,
-
       event_time_utc: payload.timestamp,
-
       client_timestamp: payload.timestamp,
-
       timezone: DEFAULT_TIMEZONE,
-
       work_date: workDate,
-
       log_no: crypto.randomUUID(),
 
       metadata: {
         device_info: payload.device_info,
-
         location: JSON.stringify(payload.location),
-
         location_status: payload.location_status,
-
         location_message: payload.location_message,
       } as Json,
     })
@@ -93,4 +82,55 @@ export async function createTimeLog(
   }
 
   return data;
+}
+
+export async function getTimelogs(
+  supabaseAdmin: SupabaseClient<Database>,
+  params: {
+    workspace_id: string;
+    user_id?: string;
+    work_date?: string;
+  },
+) {
+  console.log("TIMELOG LIST", JSON.stringify(params));
+
+  let query = supabaseAdmin
+    .from("time_logs")
+    .select(
+      `
+      id,
+      event_type,
+      event_time_utc,
+      client_timestamp,
+      timezone,
+      work_date,
+      metadata,
+      user_shift_id,
+      user_id,
+      users (
+        display_name,
+        email
+      )
+      `,
+    )
+    .eq("workspace_id", params.workspace_id)
+    .order("event_time_utc", {
+      ascending: false,
+    });
+
+  if (params.user_id) {
+    query = query.eq("user_id", params.user_id);
+  }
+
+  if (params.work_date) {
+    query = query.eq("work_date", params.work_date);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
 }

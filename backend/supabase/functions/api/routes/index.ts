@@ -17,7 +17,7 @@ import {
 import { listPositions } from "../services/positions.ts";
 import { listShifts } from "../services/shifts.ts";
 
-import { createTimeLog } from "../services/timelogs.ts";
+import { createTimeLog, getTimelogs } from "../services/timelogs.ts";
 
 import { getCurrentAttendanceState } from "../services/attendance/state.ts";
 import { validateAttendanceAction } from "../services/attendance/validation.ts";
@@ -243,6 +243,34 @@ export async function handleRequest(
           message: "Timelog created successfully",
           log_id: log.id,
         };
+      }
+
+      case "TIMELOG_LIST": {
+        console.log("TIMELOG LIST REQUEST:", JSON.stringify(body));
+
+        const user = await getUserContext(supabaseAdmin, authUser.email);
+
+        if (!user.workspace_id) {
+          throw new Error("User workspace_id is missing");
+        }
+
+        return await getTimelogs(supabaseAdmin, {
+          workspace_id: user.workspace_id,
+
+          ...(body.user_id
+            ? {
+                user_id: body.user_id,
+              }
+            : {
+                user_id: user.user_id,
+              }),
+
+          ...(body.work_date
+            ? {
+                work_date: body.work_date,
+              }
+            : {}),
+        });
       }
 
       case "ATTENDANCE_STATE_GET": {
