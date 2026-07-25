@@ -4,6 +4,8 @@ import type { Database } from "../types/database.ts";
 
 import type { SubmitTimeLogRequest } from "@shared/types/attendance.types.ts";
 
+import { resolveWorkDate } from "./attendance/workdate.ts";
+
 type Json =
   | string
   | number
@@ -33,10 +35,16 @@ export async function createTimeLog(
     .from("user_shifts")
     .select(
       `
-        id,
-        shift_id,
-        attendance_policy_id
-      `,
+      id,
+      shift_id,
+      attendance_policy_id,
+      shifts (
+        start_time,
+        end_time,
+        timezone,
+        is_overnight
+      )
+    `,
     )
     .eq("user_id", payload.user_id)
     .eq("workspace_id", payload.workspace_id)
@@ -52,7 +60,19 @@ export async function createTimeLog(
     throw new Error("No active user shift found.");
   }
 
-  const workDate = payload.timestamp.slice(0, 10);
+  const shift = Array.isArray(userShift.shifts)
+    ? userShift.shifts[0]
+    : userShift.shifts;
+
+  const timestamp = new Date(payload.timestamp);
+
+  const workDate = resolveWorkDate({
+    timestamp,
+    shiftStart: shift.start_time,
+    shiftEnd: shift.end_time,
+    timezone: shift.timezone,
+    isOvernight: shift.is_overnight,
+  });
 
   const { data, error } = await supabaseAdmin
     .from("time_logs")
@@ -111,7 +131,7 @@ export async function getTimelogs(
         display_name,
         email
       )
-      `,
+    `,
     )
     .eq("workspace_id", params.workspace_id)
     .order("event_time_utc", {

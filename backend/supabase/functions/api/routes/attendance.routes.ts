@@ -21,7 +21,11 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
             }
           : {}),
 
-        date: new Date().toISOString().slice(0, 10),
+        ...(ctx.body.timestamp
+          ? {
+              timestamp: ctx.body.timestamp,
+            }
+          : {}),
       });
 
       console.log("CURRENT STATE:", JSON.stringify(currentState));
@@ -88,6 +92,12 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
         ...(ctx.body.date
           ? {
               date: ctx.body.date,
+            }
+          : {}),
+
+        ...(ctx.body.timestamp
+          ? {
+              timestamp: ctx.body.timestamp,
             }
           : {}),
       });

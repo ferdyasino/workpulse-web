@@ -270,6 +270,7 @@ export type Database = {
           end_time: string
           grace_minutes: number
           id: string
+          is_overnight: boolean
           metadata: Json
           name: string
           start_time: string
@@ -286,6 +287,7 @@ export type Database = {
           end_time: string
           grace_minutes?: number
           id?: string
+          is_overnight?: boolean
           metadata?: Json
           name: string
           start_time: string
@@ -302,6 +304,7 @@ export type Database = {
           end_time?: string
           grace_minutes?: number
           id?: string
+          is_overnight?: boolean
           metadata?: Json
           name?: string
           start_time?: string

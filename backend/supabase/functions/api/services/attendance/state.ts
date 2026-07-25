@@ -13,6 +13,8 @@ import {
   getCurrentAttendanceSession,
 } from "./sessions.ts";
 
+import { resolveWorkDate } from "./workdate.ts";
+
 function createEmptyState(workDate: string): AttendanceState {
   return {
     status: "OFF",
@@ -85,7 +87,18 @@ export async function getCurrentAttendanceState(
 
   let shiftQuery = supabaseAdmin
     .from("user_shifts")
-    .select("id")
+    .select(
+      `
+      id,
+      shifts (
+        id,
+        start_time,
+        end_time,
+        timezone,
+        is_overnight
+      )
+    `,
+    )
     .eq("workspace_id", workspace_id)
     .eq("user_id", user.id)
     .eq("is_primary", true)
@@ -101,11 +114,25 @@ export async function getCurrentAttendanceState(
     throw shiftError;
   }
 
-  const workDate = payload.date ?? new Date().toISOString().slice(0, 10);
-
   if (!userShift) {
+    const workDate = payload.date ?? new Date().toISOString().slice(0, 10);
+
     return createEmptyState(workDate);
   }
+
+  const shift = Array.isArray(userShift.shifts)
+    ? userShift.shifts[0]
+    : userShift.shifts;
+
+  const workDate =
+    payload.date ??
+    resolveWorkDate({
+      timestamp: new Date(),
+      shiftStart: shift.start_time,
+      shiftEnd: shift.end_time,
+      isOvernight: shift.is_overnight,
+      timezone: shift.timezone,
+    });
 
   const { data: logs, error: logsError } = await supabaseAdmin
     .from("time_logs")
@@ -131,6 +158,7 @@ export async function getCurrentAttendanceState(
     JSON.stringify({
       email,
       workDate,
+      shift,
       logs: logs.length,
       state,
     }),

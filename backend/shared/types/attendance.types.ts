@@ -43,9 +43,19 @@ export type AttendanceStateRequest = {
 
   email: string;
 
-  shift_id?: string | undefined;
+  shift_id?: string;
 
+  /**
+   * Optional resolved work date override.
+   * Normally omitted and calculated from timestamp + shift timezone.
+   */
   date?: string;
+
+  /**
+   * UTC timestamp used to determine the work_date
+   * in the employee's shift timezone.
+   */
+  timestamp?: string;
 };
 
 export type SubmitTimeLogRequest = {
@@ -63,6 +73,9 @@ export type SubmitTimeLogRequest = {
 
   location_message: string;
 
+  /**
+   * Always UTC ISO-8601.
+   */
   timestamp: string;
 
   shift_id?: string;

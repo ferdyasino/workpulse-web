@@ -8,6 +8,8 @@ export type ResolveWorkWindowOptions = {
   shiftEnd: string;
 
   isOvernight: boolean;
+
+  timezone: string;
 };
 
 export type WorkWindow = {
