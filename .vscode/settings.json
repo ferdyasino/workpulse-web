@@ -23,5 +23,6 @@
 
   "postman.settings.dotenv-detection-notification-visibility": false,
 
-  "deno.enable": false
+  "deno.enable": true,
+  "deno.enablePaths": ["backend/supabase/functions"]
 }
