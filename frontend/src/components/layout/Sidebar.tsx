@@ -1,9 +1,12 @@
 import { Box } from "@mui/material";
 
 import { Clock } from "@/components/ui";
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 import TodaySummary from "@/features/dashboard/components/TodaySummary";
 
 export default function Sidebar() {
+  const { settings, loading } = useSettingsContext();
+
   return (
     <Box
       sx={{
@@ -11,7 +14,7 @@ export default function Sidebar() {
         p: 2,
       }}
     >
-      <Clock timezone="America/New_York" />
+      {!loading && settings && <Clock timezone={settings.timezone} locale={settings.locale} />}
 
       <Box
         sx={{

@@ -1,6 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
-
-import { useSettings } from "@/features/settings/hooks/useSettings";
+import { createContext, useContext } from "react";
 
 import type { Settings, UpdateSettingsRequest } from "@/features/settings/types/settings.types";
 
@@ -9,17 +7,11 @@ type SettingsContextValue = {
   loading: boolean;
   saving: boolean;
   error: string | null;
-  refresh: () => Promise<Settings | null>;
+  refresh: () => Promise<Settings>;
   save: (values: UpdateSettingsRequest) => Promise<Settings>;
 };
 
-const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
-
-export function SettingsProvider({ children }: { children: ReactNode }) {
-  const settings = useSettings();
-
-  return <SettingsContext.Provider value={settings}>{children}</SettingsContext.Provider>;
-}
+export const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
 
 export function useSettingsContext() {
   const context = useContext(SettingsContext);

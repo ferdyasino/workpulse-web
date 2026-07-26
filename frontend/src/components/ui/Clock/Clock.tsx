@@ -4,11 +4,12 @@ import { Paper, Stack, Typography } from "@mui/material";
 
 type ClockProps = {
   timezone?: string;
+  locale?: string;
   variant?: "card" | "inline";
 };
 
-function formatTime(date: Date, timezone?: string) {
-  return new Intl.DateTimeFormat("en-US", {
+function formatTime(date: Date, timezone: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -17,8 +18,8 @@ function formatTime(date: Date, timezone?: string) {
   }).format(date);
 }
 
-function formatDate(date: Date, timezone?: string) {
-  return new Intl.DateTimeFormat("en-US", {
+function formatDate(date: Date, timezone: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -27,7 +28,11 @@ function formatDate(date: Date, timezone?: string) {
   }).format(date);
 }
 
-export default function Clock({ timezone, variant = "card" }: ClockProps) {
+export default function Clock({
+  timezone = "UTC",
+  locale = "en-US",
+  variant = "card",
+}: ClockProps) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -39,12 +44,7 @@ export default function Clock({ timezone, variant = "card" }: ClockProps) {
   }, []);
 
   const content = (
-    <Stack
-      spacing={1}
-      sx={{
-        alignItems: "center",
-      }}
-    >
+    <Stack spacing={1} sx={{ alignItems: "center" }}>
       <Typography
         variant={variant === "inline" ? "h5" : "h3"}
         sx={{
@@ -52,11 +52,11 @@ export default function Clock({ timezone, variant = "card" }: ClockProps) {
           letterSpacing: 1,
         }}
       >
-        {formatTime(now, timezone)}
+        {formatTime(now, timezone, locale)}
       </Typography>
 
       <Typography variant="body2" color="text.secondary">
-        {formatDate(now, timezone)}
+        {formatDate(now, timezone, locale)}
       </Typography>
     </Stack>
   );

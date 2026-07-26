@@ -12,10 +12,10 @@ import {
   TIMEZONE_OPTIONS,
 } from "@/features/settings/constants/settings.options";
 
-import { useSettings } from "@/features/settings/hooks/useSettings";
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
 export default function SettingsPage() {
-  const { settings, loading, saving, save } = useSettings();
+  const { settings, loading, saving, save } = useSettingsContext();
 
   const [timezone, setTimezone] = useState("");
   const [locale, setLocale] = useState("");

@@ -11,6 +11,7 @@ import LogoutIcon from "@mui/icons-material/Logout";
 
 import { Clock } from "@/components/ui";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
 type HeaderProps = {
   title?: string;
@@ -19,7 +20,10 @@ type HeaderProps = {
 
 export default function Header({ title = "Dashboard", showClock = false }: HeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
   const { signOut } = useAuth();
+  const { settings, loading } = useSettingsContext();
+
   const navigate = useNavigate();
 
   const open = Boolean(anchorEl);
@@ -30,7 +34,6 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
 
   async function handleLogout() {
     closeMenu();
-
     await signOut();
   }
 
@@ -44,25 +47,20 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
       sx={{
         height: 72,
         px: 3,
-
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-
         background: "rgba(255,255,255,0.08)",
-
         backdropFilter: "blur(12px)",
-
         borderBottom: "1px solid rgba(255,255,255,0.12)",
       }}
     >
-      {/* LEFT */}
       <Typography variant="h6">{title}</Typography>
 
-      {/* CENTER ADMIN CLOCK */}
-      {showClock && <Clock variant="inline" timezone="America/New_York" />}
+      {showClock && !loading && settings && (
+        <Clock variant="inline" timezone={settings.timezone} locale={settings.locale} />
+      )}
 
-      {/* RIGHT */}
       <Box
         sx={{
           display: "flex",

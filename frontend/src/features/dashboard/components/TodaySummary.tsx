@@ -3,28 +3,34 @@ import { useState } from "react";
 import { Button, Paper, Stack, Typography } from "@mui/material";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 import { useAttendanceContext } from "@/features/dashboard/context/AttendanceContext";
 
 import { useTimelogs } from "../hooks/useTimelogs";
 
 import TimelogsDialog from "./TimelogsDialog";
 
-function formatTime(value: string | null | undefined) {
+function formatTime(value: string | null | undefined, timezone: string, locale: string) {
   if (!value) {
     return "--";
   }
 
-  return new Date(value).toLocaleTimeString([], {
+  return new Date(value).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: timezone,
   });
 }
 
 export default function TodaySummary() {
   const { state } = useAttendanceContext();
   const { user } = useAuth();
+  const { settings } = useSettingsContext();
 
   const [timelogsOpen, setTimelogsOpen] = useState(false);
+
+  const timezone = settings?.timezone ?? "UTC";
+  const locale = settings?.locale ?? "en-US";
 
   const {
     timelogs,
@@ -65,14 +71,17 @@ export default function TodaySummary() {
 
           <Typography>Work Date: {state?.work_date ?? "--"}</Typography>
 
-          <Typography>Time In: {formatTime(session?.time_in)}</Typography>
+          <Typography>Time In: {formatTime(session?.time_in, timezone, locale)}</Typography>
 
-          <Typography>Time Out: {formatTime(session?.time_out)}</Typography>
+          <Typography>Time Out: {formatTime(session?.time_out, timezone, locale)}</Typography>
 
           <Typography>Breaks: {session?.breaks.length ?? 0}</Typography>
 
           <Typography>
-            Current Break: {activeBreak && !activeBreak.out ? formatTime(activeBreak.in) : "None"}
+            Current Break:{" "}
+            {activeBreak && !activeBreak.out
+              ? formatTime(activeBreak.in, timezone, locale)
+              : "None"}
           </Typography>
 
           <Typography>

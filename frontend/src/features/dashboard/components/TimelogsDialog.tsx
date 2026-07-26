@@ -16,6 +16,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
+
 type Timelog = {
   id: string;
   event_time_utc: string;
@@ -29,16 +31,23 @@ type Props = {
   timelogs: Timelog[];
 };
 
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10);
+function getTodayDate(timezone: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+  }).format(new Date());
 }
 
 export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
+  const { settings } = useSettingsContext();
+
+  const timezone = settings?.timezone ?? "UTC";
+  const locale = settings?.locale ?? "en-US";
+
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const [eventFilter, setEventFilter] = useState("ALL");
 
-  const [dateFilter, setDateFilter] = useState(getTodayDate());
+  const [dateFilter, setDateFilter] = useState(getTodayDate(timezone, locale));
 
   const filteredTimelogs = useMemo(() => {
     return [...timelogs]
@@ -76,7 +85,6 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
           overflow: "hidden",
         }}
       >
-        {/* Fixed Filters */}
         <Stack
           direction="row"
           spacing={2}
@@ -98,7 +106,6 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
             onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
           >
             <MenuItem value="newest">Newest First</MenuItem>
-
             <MenuItem value="oldest">Oldest First</MenuItem>
           </Select>
 
@@ -111,7 +118,6 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
           </Select>
         </Stack>
 
-        {/* Scrollable Table */}
         <TableContainer
           sx={{
             flex: 1,
@@ -122,9 +128,7 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Date</TableCell>
-
                 <TableCell>Time</TableCell>
-
                 <TableCell>Action</TableCell>
               </TableRow>
             </TableHead>
@@ -140,12 +144,17 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
 
                   return (
                     <TableRow key={log.id} hover>
-                      <TableCell>{date.toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {date.toLocaleDateString(locale, {
+                          timeZone: timezone,
+                        })}
+                      </TableCell>
 
                       <TableCell>
-                        {date.toLocaleTimeString([], {
+                        {date.toLocaleTimeString(locale, {
                           hour: "2-digit",
                           minute: "2-digit",
+                          timeZone: timezone,
                         })}
                       </TableCell>
 
@@ -158,7 +167,6 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
           </Table>
         </TableContainer>
 
-        {/* Fixed Footer */}
         <Box
           sx={{
             mt: 2,
