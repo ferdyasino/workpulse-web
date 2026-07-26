@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
@@ -15,8 +15,6 @@ type Json =
       [key: string]: Json | undefined;
     }
   | Json[];
-
-const DEFAULT_TIMEZONE = "UTC";
 
 export async function createTimeLog(
   supabaseAdmin: SupabaseClient<Database>,
@@ -64,7 +62,15 @@ export async function createTimeLog(
     ? userShift.shifts[0]
     : userShift.shifts;
 
+  if (!shift) {
+    throw new Error("Shift configuration missing.");
+  }
+
   const timestamp = new Date(payload.timestamp);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Invalid timestamp.");
+  }
 
   const workDate = resolveWorkDate({
     timestamp,
@@ -81,9 +87,16 @@ export async function createTimeLog(
       user_id: payload.user_id,
       user_shift_id: userShift.id,
       event_type: payload.action_type,
-      event_time_utc: payload.timestamp,
+
+      // Always store normalized UTC timestamp
+      event_time_utc: timestamp.toISOString(),
+
+      // Keep original client timestamp for audit/display
       client_timestamp: payload.timestamp,
-      timezone: DEFAULT_TIMEZONE,
+
+      // Controlled by assigned shift timezone
+      timezone: shift.timezone,
+
       work_date: workDate,
       log_no: crypto.randomUUID(),
 

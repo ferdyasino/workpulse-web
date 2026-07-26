@@ -28,11 +28,7 @@ function formatDate(date: Date, timezone: string, locale: string) {
   }).format(date);
 }
 
-export default function Clock({
-  timezone = "UTC",
-  locale = "en-US",
-  variant = "card",
-}: ClockProps) {
+export default function Clock({ timezone, locale = "en-US", variant = "card" }: ClockProps) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -42,6 +38,10 @@ export default function Clock({
 
     return () => clearInterval(timer);
   }, []);
+
+  if (!timezone) {
+    return null;
+  }
 
   const content = (
     <Stack spacing={1} sx={{ alignItems: "center" }}>

@@ -17,14 +17,12 @@ function toMinutes(time: string): number {
 }
 
 function formatDate(date: Date, timezone: string): string {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  });
-
-  return formatter.format(date);
+  }).format(date);
 }
 
 function getMinutes(date: Date, timezone: string): number {
@@ -46,21 +44,36 @@ function getMinutes(date: Date, timezone: string): number {
   return hour * 60 + minute;
 }
 
+function subtractOneDay(date: Date, timezone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+
+  return new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0));
+}
+
 export function resolveWorkDate(options: ResolveWorkDateOptions): string {
   const { timestamp, shiftEnd, isOvernight, timezone } = options;
 
-  if (!isOvernight) {
-    return formatDate(timestamp, timezone);
-  }
+  let workDate = timestamp;
 
-  const currentMinutes = getMinutes(timestamp, timezone);
+  if (isOvernight) {
+    const currentMinutes = getMinutes(timestamp, timezone);
 
-  const endMinutes = toMinutes(shiftEnd);
+    const endMinutes = toMinutes(shiftEnd);
 
-  const workDate = new Date(timestamp);
-
-  if (currentMinutes < endMinutes) {
-    workDate.setUTCDate(workDate.getUTCDate() - 1);
+    if (currentMinutes < endMinutes) {
+      workDate = subtractOneDay(timestamp, timezone);
+    }
   }
 
   return formatDate(workDate, timezone);

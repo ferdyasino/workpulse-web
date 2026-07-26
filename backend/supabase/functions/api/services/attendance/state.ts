@@ -120,6 +120,12 @@ export async function getCurrentAttendanceState(
     ? userShift.shifts[0]
     : userShift.shifts;
 
+  if (!shift.timezone) {
+    throw new Error("Shift timezone is required.");
+  }
+
+  const timezone = shift.timezone;
+
   const workDate =
     payload.date ??
     resolveWorkDate({
@@ -127,7 +133,7 @@ export async function getCurrentAttendanceState(
       shiftStart: shift.start_time,
       shiftEnd: shift.end_time,
       isOvernight: shift.is_overnight,
-      timezone: shift.timezone,
+      timezone,
     });
 
   const { data: logs, error: logsError } = await supabaseAdmin
@@ -156,6 +162,7 @@ export async function getCurrentAttendanceState(
       timestamp: now.toISOString(),
       workDate,
       shift,
+      timezone,
       logs: logs.length,
       state,
     }),

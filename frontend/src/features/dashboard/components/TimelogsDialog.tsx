@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -17,6 +17,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
+import { formatDateInput } from "@/utils/time";
 
 type Timelog = {
   id: string;
@@ -31,23 +32,22 @@ type Props = {
   timelogs: Timelog[];
 };
 
-function getTodayDate(timezone: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: timezone,
-  }).format(new Date());
-}
-
 export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
   const { settings } = useSettingsContext();
 
-  const timezone = settings?.timezone ?? "UTC";
+  const timezone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const locale = settings?.locale ?? "en-US";
 
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const [eventFilter, setEventFilter] = useState("ALL");
 
-  const [dateFilter, setDateFilter] = useState(getTodayDate(timezone, locale));
+  const [dateFilter, setDateFilter] = useState("");
+
+  useEffect(() => {
+    setDateFilter(formatDateInput(new Date(), timezone));
+  }, [timezone]);
 
   const filteredTimelogs = useMemo(() => {
     return [...timelogs]
@@ -64,7 +64,6 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
       })
       .sort((a, b) => {
         const first = new Date(a.event_time_utc).getTime();
-
         const second = new Date(b.event_time_utc).getTime();
 
         return sortOrder === "newest" ? second - first : first - second;

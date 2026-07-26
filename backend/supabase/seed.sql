@@ -140,11 +140,13 @@ insert into public.shifts (
     start_time,
     end_time,
     timezone,
+    is_overnight,
     break_minutes,
     grace_minutes,
     status,
     metadata
 )
+
 values
 
 (
@@ -256,7 +258,7 @@ values
     '8f8b9730-3078-48b2-a371-ec4987cea051',
     '40000000-0000-0000-0000-000000000001',
     '30000000-0000-0000-0000-000000000001',
-    CURRENT_DATE,
+    '2026-07-26',
     true,
     '{}'::jsonb
 ),
@@ -267,7 +269,7 @@ values
     '8f8b9730-3078-48b2-a371-ec4987cea052',
     '40000000-0000-0000-0000-000000000002',
     '30000000-0000-0000-0000-000000000001',
-    CURRENT_DATE,
+    '2026-07-26',
     true,
     '{}'::jsonb
 )
