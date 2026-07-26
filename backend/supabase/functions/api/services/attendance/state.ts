@@ -18,11 +18,8 @@ import { resolveWorkDate } from "./workdate.ts";
 function createEmptyState(workDate: string): AttendanceState {
   return {
     status: "OFF",
-
     work_date: workDate,
-
     sessions: [],
-
     current_session: null,
   };
 }
@@ -54,11 +51,8 @@ export function buildAttendanceState(
 
   return {
     status,
-
     work_date: workDate,
-
     sessions,
-
     current_session: currentSession,
   };
 }
@@ -114,8 +108,10 @@ export async function getCurrentAttendanceState(
     throw shiftError;
   }
 
+  const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
+
   if (!userShift) {
-    const workDate = payload.date ?? new Date().toISOString().slice(0, 10);
+    const workDate = payload.date ?? now.toISOString().slice(0, 10);
 
     return createEmptyState(workDate);
   }
@@ -127,7 +123,7 @@ export async function getCurrentAttendanceState(
   const workDate =
     payload.date ??
     resolveWorkDate({
-      timestamp: new Date(),
+      timestamp: now,
       shiftStart: shift.start_time,
       shiftEnd: shift.end_time,
       isOvernight: shift.is_overnight,
@@ -157,6 +153,7 @@ export async function getCurrentAttendanceState(
     "ATTENDANCE STATE",
     JSON.stringify({
       email,
+      timestamp: now.toISOString(),
       workDate,
       shift,
       logs: logs.length,
