@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button, Paper, Stack, Typography } from "@mui/material";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useAttendanceContext } from "@/providers/AttendanceContext";
+import { useAttendanceContext } from "@/features/dashboard/context/AttendanceContext";
 
 import { useTimelogs } from "../hooks/useTimelogs";
 

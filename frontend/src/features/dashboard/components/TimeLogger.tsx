@@ -1,7 +1,7 @@
 import { Button, Grid, Paper } from "@mui/material";
 
 import { useSnackbar } from "@/components/ui";
-import { useAttendanceContext } from "@/providers/AttendanceContext";
+import { useAttendanceContext } from "@/features/dashboard/context/AttendanceContext";
 
 import type { TimeLogAction } from "../types/attendance.types";
 
