@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/features/auth/hooks/useAuth";
+
 import { getSettings, updateSettings } from "@/features/settings/services/settings.service";
 
 import type { Settings, UpdateSettingsRequest } from "@/features/settings/types/settings.types";
 
 export function useSettings() {
+  const { user } = useAuth();
+
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,8 +57,12 @@ export function useSettings() {
   }, []);
 
   useEffect(() => {
+    if (!user?.workspace_id) {
+      return;
+    }
+
     void refresh();
-  }, [refresh]);
+  }, [user?.workspace_id, refresh]);
 
   return {
     settings,
