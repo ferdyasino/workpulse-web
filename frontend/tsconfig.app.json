@@ -17,7 +17,6 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
-    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
 

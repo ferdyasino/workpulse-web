@@ -3,12 +3,32 @@ import type {
   AttendanceStateRequest,
 } from "./attendance.types.ts";
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | {
+      [key: string]: Json | undefined;
+    }
+  | Json[];
+
 export type ApiRequest =
   | {
       action: "AUTH_ME";
     }
   | {
       action: "WORKSPACE_GET";
+    }
+  | {
+      action: "SETTINGS_GET";
+    }
+  | {
+      action: "SETTINGS_UPDATE";
+      timezone?: string;
+      locale?: string;
+      currency?: string;
+      metadata?: Json;
     }
   | {
       action: "USER_CONTEXT_GET";

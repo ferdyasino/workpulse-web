@@ -22,13 +22,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: corsHeaders,
-    });
+    return new Response(
+      JSON.stringify({
+        ok: true,
+      }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      },
+    );
   }
 
   if (req.method !== "POST") {
@@ -50,6 +57,7 @@ Deno.serve(async (req) => {
     const result = await handleRequest(req, body, supabaseAdmin);
 
     return Response.json(result, {
+      status: 200,
       headers: corsHeaders,
     });
   } catch (error) {

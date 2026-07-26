@@ -1,19 +1,11 @@
-import { createContext, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 
+import { SnackbarContext } from "./SnackbarContext";
+
 type Severity = "success" | "error" | "warning" | "info";
-
-type SnackbarContextValue = {
-  show: (message: string, severity?: Severity) => void;
-  success: (message: string) => void;
-  error: (message: string) => void;
-  warning: (message: string) => void;
-  info: (message: string) => void;
-};
-
-export const SnackbarContext = createContext<SnackbarContextValue | null>(null);
 
 type Props = {
   children: React.ReactNode;

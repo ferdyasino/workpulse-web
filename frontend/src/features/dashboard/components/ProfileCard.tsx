@@ -1,7 +1,7 @@
 import { Avatar, Box, Paper, Typography } from "@mui/material";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useAttendanceContext } from "@/providers/AttendanceProvider";
+import { useAttendanceContext } from "@/providers/AttendanceContext";
 
 export default function ProfileCard() {
   const { user } = useAuth();

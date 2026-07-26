@@ -9,12 +9,14 @@ type Params = {
 };
 
 export function useTimelogs(params: Params) {
+  const { workspace_id, user_id, work_date } = params;
+
   const [timelogs, setTimelogs] = useState<Timelog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
   const refresh = useCallback(async () => {
-    if (!params.workspace_id) {
+    if (!workspace_id) {
       return;
     }
 
@@ -22,7 +24,11 @@ export function useTimelogs(params: Params) {
       setLoading(true);
       setError(undefined);
 
-      const data = await getTimelogs(params);
+      const data = await getTimelogs({
+        workspace_id,
+        user_id,
+        work_date,
+      });
 
       setTimelogs(data);
     } catch (err) {
@@ -30,7 +36,7 @@ export function useTimelogs(params: Params) {
     } finally {
       setLoading(false);
     }
-  }, [params.workspace_id, params.user_id, params.work_date]);
+  }, [workspace_id, user_id, work_date]);
 
   useEffect(() => {
     void refresh();
