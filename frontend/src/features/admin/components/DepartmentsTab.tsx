@@ -205,8 +205,16 @@ export default function DepartmentsTab() {
                     <TableCell align="right">
                       <TableAction
                         onEdit={() => handleEdit(department)}
-                        onActivate={() => activateDepartment(department.id)}
-                        onDeactivate={() => deactivateDepartment(department.id)}
+                        onActivate={
+                          department.status === "INACTIVE"
+                            ? () => activateDepartment(department.id)
+                            : undefined
+                        }
+                        onDeactivate={
+                          department.status === "ACTIVE"
+                            ? () => deactivateDepartment(department.id)
+                            : undefined
+                        }
                         onDelete={() => handleDelete(department)}
                         onRestore={() => restoreDepartment(department.id)}
                         onHardDelete={() => hardDeleteDepartment(department.id)}
