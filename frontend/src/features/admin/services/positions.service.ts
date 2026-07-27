@@ -6,10 +6,13 @@ export type Position = {
   description: string | null;
   status: string;
   created_at: string;
+  deleted_at: string | null;
 };
 
 export type GetPositionsRequest = {
   workspace_id: string;
+  include_inactive?: boolean;
+  include_deleted?: boolean;
 };
 
 export type CreatePositionRequest = {
@@ -40,6 +43,11 @@ type GetPositionsResponse = {
   success: boolean;
   message?: string;
   positions?: Position[];
+};
+
+type ActionResponse = {
+  success: boolean;
+  message?: string;
 };
 
 export async function getPositions(payload: GetPositionsRequest): Promise<Position[]> {
@@ -134,7 +142,7 @@ export async function deactivatePosition(payload: PositionActionRequest): Promis
 
 export async function deletePosition(payload: PositionActionRequest): Promise<void> {
   const response = await apiRequest<
-    { success: boolean; message?: string },
+    ActionResponse,
     PositionActionRequest & {
       action: "POSITION_DELETE";
     }
@@ -168,7 +176,7 @@ export async function restorePosition(payload: PositionActionRequest): Promise<P
 
 export async function hardDeletePosition(payload: PositionActionRequest): Promise<void> {
   const response = await apiRequest<
-    { success: boolean; message?: string },
+    ActionResponse,
     PositionActionRequest & {
       action: "POSITION_HARD_DELETE";
     }

@@ -21,6 +21,8 @@ export async function handlePositionRoutes(ctx: RouteContext) {
         positions: await listPositions(
           ctx.supabaseAdmin,
           ctx.body.workspace_id,
+          ctx.body.include_inactive,
+          ctx.body.include_deleted,
         ),
       };
     }

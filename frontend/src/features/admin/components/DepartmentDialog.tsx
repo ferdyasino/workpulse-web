@@ -44,6 +44,10 @@ export default function DepartmentDialog({
   }, [department, open]);
 
   const handleSubmit = async () => {
+    if (!name.trim()) {
+      return;
+    }
+
     await onSubmit({
       name: name.trim(),
       ...(description.trim()

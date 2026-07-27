@@ -1,86 +1,102 @@
 import { useEffect, useState } from "react";
 
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 
+import { FormDialog } from "@/components/ui";
+
 import type { Position } from "../services/positions.service";
 
-type PositionDialogProps = {
+type Props = {
   open: boolean;
-  position?: Position | null;
   loading?: boolean;
+  position?: Position | null;
+
   onClose: () => void;
-  onSubmit: (values: { title: string; description: string }) => Promise<void> | void;
+
+  onSubmit: (values: { title: string; description?: string }) => Promise<void>;
 };
 
 export default function PositionDialog({
   open,
-  position,
   loading = false,
+  position = null,
   onClose,
   onSubmit,
-}: PositionDialogProps) {
+}: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
-  useEffect(() => {
-    if (open) {
-      setTitle(position?.title ?? "");
-      setDescription(position?.description ?? "");
-    }
-  }, [open, position]);
+  const isEdit = Boolean(position);
 
-  async function handleSubmit() {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (position) {
+      setTitle(position.title);
+      setDescription(position.description ?? "");
+    } else {
+      setTitle("");
+      setDescription("");
+    }
+  }, [position, open]);
+
+  const handleSubmit = async () => {
     if (!title.trim()) {
       return;
     }
 
     await onSubmit({
       title: title.trim(),
-      description: description.trim(),
+      ...(description.trim()
+        ? {
+            description: description.trim(),
+          }
+        : {}),
     });
-  }
+  };
+
+  const handleClose = () => {
+    if (loading) {
+      return;
+    }
+
+    setTitle("");
+    setDescription("");
+
+    onClose();
+  };
 
   return (
-    <Dialog open={open} onClose={loading ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{position ? "Edit Position" : "Add Position"}</DialogTitle>
+    <FormDialog
+      open={open}
+      title={isEdit ? "Edit Position" : "Add Position"}
+      submitLabel={isEdit ? "Save Changes" : "Create"}
+      loading={loading}
+      onClose={handleClose}
+      onSubmit={handleSubmit}
+    >
+      <Stack spacing={2} sx={{ mt: 1 }}>
+        <TextField
+          label="Position Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          autoFocus
+          fullWidth
+        />
 
-      <DialogContent dividers>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            autoFocus
-            fullWidth
-          />
-
-          <TextField
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            multiline
-            minRows={3}
-            fullWidth
-          />
-        </Stack>
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-
-        <Button variant="contained" onClick={handleSubmit} disabled={loading || !title.trim()}>
-          {position ? "Save Changes" : "Create Position"}
-        </Button>
-      </DialogActions>
-    </Dialog>
+        <TextField
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          multiline
+          minRows={3}
+          fullWidth
+        />
+      </Stack>
+    </FormDialog>
   );
 }

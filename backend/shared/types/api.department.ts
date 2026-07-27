@@ -4,6 +4,8 @@ export type DepartmentApiRequest =
   | {
       action: "DEPARTMENT_LIST";
       workspace_id: string;
+      include_inactive?: boolean;
+      include_deleted?: boolean;
     }
   | {
       action: "DEPARTMENT_CREATE";

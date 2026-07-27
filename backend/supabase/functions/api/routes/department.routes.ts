@@ -16,7 +16,15 @@ export async function handleDepartmentRoutes(ctx: RouteContext) {
     case "DEPARTMENT_LIST": {
       console.log("DEPARTMENT LIST REQUEST:", JSON.stringify(ctx.body));
 
-      return await listDepartments(ctx.supabaseAdmin, ctx.body.workspace_id);
+      return {
+        success: true,
+        departments: await listDepartments(
+          ctx.supabaseAdmin,
+          ctx.body.workspace_id,
+          ctx.body.include_inactive,
+          ctx.body.include_deleted,
+        ),
+      };
     }
 
     case "DEPARTMENT_CREATE": {

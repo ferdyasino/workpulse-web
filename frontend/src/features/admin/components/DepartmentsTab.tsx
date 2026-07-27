@@ -4,7 +4,9 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
+import Switch from "@mui/material/Switch";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -29,6 +31,12 @@ export default function DepartmentsTab() {
     loading,
     error,
 
+    includeInactive,
+    includeDeleted,
+
+    setIncludeInactive,
+    setIncludeDeleted,
+
     createDepartment,
     updateDepartment,
 
@@ -40,15 +48,12 @@ export default function DepartmentsTab() {
     hardDeleteDepartment,
   } = useDepartments();
 
-  // Prevent unused-variable warnings until TableAction supports them.
-  void activateDepartment;
-  void deactivateDepartment;
-  void restoreDepartment;
-  void hardDeleteDepartment;
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+
   const [departmentToDelete, setDepartmentToDelete] = useState<Department | null>(null);
+
+  const [departmentToHardDelete, setDepartmentToHardDelete] = useState<Department | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -79,25 +84,39 @@ export default function DepartmentsTab() {
     }
   };
 
-  const handleDelete = (department: Department) => {
-    setDepartmentToDelete(department);
-  };
-
   const handleConfirmDelete = async () => {
-    if (!departmentToDelete) {
-      return;
-    }
+    if (!departmentToDelete) return;
 
     try {
       setDeleting(true);
 
       await deleteDepartment(departmentToDelete.id);
 
-      snackbar.success("Department deleted successfully.");
+      snackbar.success("Department deleted.");
 
       setDepartmentToDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete department.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleConfirmHardDelete = async () => {
+    if (!departmentToHardDelete) return;
+
+    try {
+      setDeleting(true);
+
+      await hardDeleteDepartment(departmentToHardDelete.id);
+
+      snackbar.success("Department permanently deleted.");
+
+      setDepartmentToHardDelete(null);
+    } catch (err) {
+      snackbar.error(
+        err instanceof Error ? err.message : "Unable to permanently delete department.",
+      );
     } finally {
       setDeleting(false);
     }
@@ -111,15 +130,6 @@ export default function DepartmentsTab() {
   const handleEdit = (department: Department) => {
     setEditingDepartment(department);
     setDialogOpen(true);
-  };
-
-  const handleCloseDialog = () => {
-    if (saving) {
-      return;
-    }
-
-    setDialogOpen(false);
-    setEditingDepartment(null);
   };
 
   return (
@@ -151,16 +161,34 @@ export default function DepartmentsTab() {
 
         <Box
           sx={{
-            width: "100%",
-            overflowX: "auto",
+            display: "flex",
+            gap: 2,
+            mb: 2,
           }}
         >
-          <Table
-            size="small"
-            sx={{
-              minWidth: 650,
-            }}
-          >
+          <FormControlLabel
+            control={
+              <Switch
+                checked={includeInactive}
+                onChange={(e) => setIncludeInactive(e.target.checked)}
+              />
+            }
+            label="Show inactive"
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={includeDeleted}
+                onChange={(e) => setIncludeDeleted(e.target.checked)}
+              />
+            }
+            label="Show deleted"
+          />
+        </Box>
+
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Table size="small" sx={{ minWidth: 650 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
@@ -188,40 +216,54 @@ export default function DepartmentsTab() {
                   <TableCell colSpan={4}>No departments found.</TableCell>
                 </TableRow>
               ) : (
-                departments.map((department) => (
-                  <TableRow key={department.id} hover>
-                    <TableCell>{department.name}</TableCell>
+                departments.map((department) => {
+                  const deleted = Boolean(department.deleted_at);
 
-                    <TableCell>{department.description ?? "-"}</TableCell>
+                  return (
+                    <TableRow key={department.id} hover>
+                      <TableCell>{department.name}</TableCell>
 
-                    <TableCell>
-                      <Chip
-                        label={department.status}
-                        color={department.status === "ACTIVE" ? "success" : "default"}
-                        size="small"
-                      />
-                    </TableCell>
+                      <TableCell>{department.description ?? "-"}</TableCell>
 
-                    <TableCell align="right">
-                      <TableAction
-                        onEdit={() => handleEdit(department)}
-                        onActivate={
-                          department.status === "INACTIVE"
-                            ? () => activateDepartment(department.id)
-                            : undefined
-                        }
-                        onDeactivate={
-                          department.status === "ACTIVE"
-                            ? () => deactivateDepartment(department.id)
-                            : undefined
-                        }
-                        onDelete={() => handleDelete(department)}
-                        onRestore={() => restoreDepartment(department.id)}
-                        onHardDelete={() => hardDeleteDepartment(department.id)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={deleted ? "DELETED" : department.status}
+                          color={
+                            deleted
+                              ? "error"
+                              : department.status === "ACTIVE"
+                                ? "success"
+                                : "default"
+                          }
+                        />
+                      </TableCell>
+
+                      <TableCell align="right">
+                        <TableAction
+                          onEdit={deleted ? undefined : () => handleEdit(department)}
+                          onActivate={
+                            !deleted && department.status === "INACTIVE"
+                              ? () => void activateDepartment(department.id)
+                              : undefined
+                          }
+                          onDeactivate={
+                            !deleted && department.status === "ACTIVE"
+                              ? () => void deactivateDepartment(department.id)
+                              : undefined
+                          }
+                          onDelete={!deleted ? () => setDepartmentToDelete(department) : undefined}
+                          onRestore={
+                            deleted ? () => void restoreDepartment(department.id) : undefined
+                          }
+                          onHardDelete={
+                            deleted ? () => setDepartmentToHardDelete(department) : undefined
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -232,14 +274,19 @@ export default function DepartmentsTab() {
         open={dialogOpen}
         loading={saving}
         department={editingDepartment}
-        onClose={handleCloseDialog}
+        onClose={() => {
+          if (!saving) {
+            setDialogOpen(false);
+            setEditingDepartment(null);
+          }
+        }}
         onSubmit={handleSave}
       />
 
       <ConfirmDialog
         open={Boolean(departmentToDelete)}
         title="Delete Department"
-        message={`Are you sure you want to delete "${departmentToDelete?.name}"?`}
+        message={`Delete "${departmentToDelete?.name}"?`}
         loading={deleting}
         onClose={() => {
           if (!deleting) {
@@ -247,6 +294,19 @@ export default function DepartmentsTab() {
           }
         }}
         onConfirm={handleConfirmDelete}
+      />
+
+      <ConfirmDialog
+        open={Boolean(departmentToHardDelete)}
+        title="Permanently Delete Department"
+        message={`Permanently delete "${departmentToHardDelete?.name}"? This cannot be undone.`}
+        loading={deleting}
+        onClose={() => {
+          if (!deleting) {
+            setDepartmentToHardDelete(null);
+          }
+        }}
+        onConfirm={handleConfirmHardDelete}
       />
     </>
   );

@@ -1,23 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/features/auth/hooks/useAuth";
+
 import {
-  activatePosition,
-  createPosition,
-  deactivatePosition,
-  deletePosition,
+  activatePosition as activatePositionService,
+  createPosition as createPositionService,
+  deactivatePosition as deactivatePositionService,
+  deletePosition as deletePositionService,
   getPositions,
-  hardDeletePosition,
-  restorePosition,
-  updatePosition,
+  hardDeletePosition as hardDeletePositionService,
+  restorePosition as restorePositionService,
+  updatePosition as updatePositionService,
+  type CreatePositionRequest,
   type Position,
+  type UpdatePositionRequest,
 } from "../services/positions.service";
 
-export function usePositions(workspaceId?: string) {
+export function usePositions() {
+  const { user } = useAuth();
+
+  const workspaceId = user?.workspace_id;
+
   const [positions, setPositions] = useState<Position[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+
+  const loadPositions = useCallback(async () => {
     if (!workspaceId) {
       setPositions([]);
       setLoading(false);
@@ -28,148 +39,157 @@ export function usePositions(workspaceId?: string) {
       setLoading(true);
       setError(null);
 
-      const positions = await getPositions({
+      const data = await getPositions({
         workspace_id: workspaceId,
+        include_inactive: includeInactive,
+        include_deleted: includeDeleted,
       });
 
-      setPositions(positions);
+      setPositions(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load positions");
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, includeInactive, includeDeleted]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void loadPositions();
+  }, [loadPositions]);
 
-  const addPosition = useCallback(
-    async (title: string, description?: string) => {
+  const createPosition = useCallback(
+    async (payload: Omit<CreatePositionRequest, "workspace_id">) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await createPosition({
+      await createPositionService({
         workspace_id: workspaceId,
-        title,
-        description,
+        ...payload,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const editPosition = useCallback(
-    async (id: string, title: string, description?: string) => {
+  const updatePosition = useCallback(
+    async (payload: Omit<UpdatePositionRequest, "workspace_id">) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await updatePosition({
-        id,
+      await updatePositionService({
         workspace_id: workspaceId,
-        title,
-        description,
+        ...payload,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const activate = useCallback(
+  const activatePosition = useCallback(
     async (id: string) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await activatePosition({
-        id,
+      await activatePositionService({
         workspace_id: workspaceId,
+        id,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const deactivate = useCallback(
+  const deactivatePosition = useCallback(
     async (id: string) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await deactivatePosition({
-        id,
+      await deactivatePositionService({
         workspace_id: workspaceId,
+        id,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const remove = useCallback(
+  const deletePosition = useCallback(
     async (id: string) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await deletePosition({
-        id,
+      await deletePositionService({
         workspace_id: workspaceId,
+        id,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const restore = useCallback(
+  const restorePosition = useCallback(
     async (id: string) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await restorePosition({
-        id,
+      await restorePositionService({
         workspace_id: workspaceId,
+        id,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
-  const hardDelete = useCallback(
+  const hardDeletePosition = useCallback(
     async (id: string) => {
       if (!workspaceId) {
-        throw new Error("Workspace ID is required.");
+        throw new Error("Workspace not found");
       }
 
-      await hardDeletePosition({
-        id,
+      await hardDeletePositionService({
         workspace_id: workspaceId,
+        id,
       });
 
-      await refresh();
+      await loadPositions();
     },
-    [workspaceId, refresh],
+    [workspaceId, loadPositions],
   );
 
   return {
     positions,
     loading,
     error,
-    refresh,
-    addPosition,
-    editPosition,
-    activate,
-    deactivate,
-    remove,
-    restore,
-    hardDelete,
+
+    includeInactive,
+    includeDeleted,
+
+    setIncludeInactive,
+    setIncludeDeleted,
+
+    refresh: loadPositions,
+
+    createPosition,
+    updatePosition,
+
+    activatePosition,
+    deactivatePosition,
+
+    deletePosition,
+    restorePosition,
+    hardDeletePosition,
   };
 }

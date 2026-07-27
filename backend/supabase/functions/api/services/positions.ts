@@ -7,19 +7,30 @@ const POSITION_SELECT = `
   title,
   description,
   status,
-  created_at
+  created_at,
+  deleted_at
 `;
 
 export async function listPositions(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
+  include_inactive = false,
+  include_deleted = false,
 ) {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("positions")
     .select(POSITION_SELECT)
-    .eq("workspace_id", workspace_id)
-    .is("deleted_at", null)
-    .order("title");
+    .eq("workspace_id", workspace_id);
+
+  if (!include_deleted) {
+    query = query.is("deleted_at", null);
+  }
+
+  if (!include_inactive) {
+    query = query.eq("status", "ACTIVE");
+  }
+
+  const { data, error } = await query.order("title");
 
   if (error) {
     throw error;
@@ -104,6 +115,10 @@ export async function deletePosition(
   if (error) {
     throw error;
   }
+
+  return {
+    success: true,
+  };
 }
 
 export async function restorePosition(
@@ -116,6 +131,7 @@ export async function restorePosition(
       deleted_at: null,
     })
     .eq("id", id)
+    .not("deleted_at", "is", null)
     .select(POSITION_SELECT)
     .single();
 
@@ -135,4 +151,8 @@ export async function hardDeletePosition(
   if (error) {
     throw error;
   }
+
+  return {
+    success: true,
+  };
 }

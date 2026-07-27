@@ -8,13 +8,16 @@ export type DepartmentListItem = {
   description: string | null;
   status: string;
   created_at: string;
+  deleted_at: string | null;
 };
 
 export async function listDepartments(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
+  include_inactive = false,
+  include_deleted = false,
 ): Promise<DepartmentListItem[]> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("departments")
     .select(
       `
@@ -22,12 +25,21 @@ export async function listDepartments(
       name,
       description,
       status,
-      created_at
+      created_at,
+      deleted_at
     `,
     )
-    .eq("workspace_id", workspace_id)
-    .is("deleted_at", null)
-    .order("name");
+    .eq("workspace_id", workspace_id);
+
+  if (!include_deleted) {
+    query = query.is("deleted_at", null);
+  }
+
+  if (!include_inactive) {
+    query = query.eq("status", "ACTIVE");
+  }
+
+  const { data, error } = await query.order("name");
 
   if (error) {
     throw error;

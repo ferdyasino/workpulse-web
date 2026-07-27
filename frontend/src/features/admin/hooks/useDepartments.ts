@@ -25,6 +25,9 @@ export function useDepartments() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+
   const loadDepartments = useCallback(async () => {
     if (!workspaceId) {
       setDepartments([]);
@@ -38,6 +41,8 @@ export function useDepartments() {
 
       const data = await getDepartments({
         workspace_id: workspaceId,
+        include_inactive: includeInactive,
+        include_deleted: includeDeleted,
       });
 
       setDepartments(data);
@@ -46,7 +51,7 @@ export function useDepartments() {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, includeInactive, includeDeleted]);
 
   useEffect(() => {
     void loadDepartments();
@@ -168,6 +173,12 @@ export function useDepartments() {
     departments,
     loading,
     error,
+
+    includeInactive,
+    includeDeleted,
+
+    setIncludeInactive,
+    setIncludeDeleted,
 
     refresh: loadDepartments,
 
