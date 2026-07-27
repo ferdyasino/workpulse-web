@@ -111,3 +111,100 @@ export async function deleteDepartment(
     success: true,
   };
 }
+
+export async function activateDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .update({
+      status: "ACTIVE",
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deactivateDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .update({
+      status: "INACTIVE",
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function restoreDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .update({
+      deleted_at: null,
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .not("deleted_at", "is", null)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function hardDeleteDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: {
+    id: string;
+    workspace_id: string;
+  },
+) {
+  const { error } = await supabaseAdmin
+    .from("departments")
+    .delete()
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id);
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    success: true,
+  };
+}

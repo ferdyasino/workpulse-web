@@ -1,17 +1,11 @@
+import type { DepartmentApiRequest } from "./api.department.ts";
+import type { PositionApiRequest } from "./api.position.ts";
+import type { SettingsApiRequest } from "./api.settings.ts";
+import type { ShiftApiRequest } from "./api.shift.ts";
 import type {
-  SubmitTimeLogRequest,
   AttendanceStateRequest,
+  SubmitTimeLogRequest,
 } from "./attendance.types.ts";
-
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | {
-      [key: string]: Json | undefined;
-    }
-  | Json[];
 
 export type ApiRequest =
   | {
@@ -21,70 +15,16 @@ export type ApiRequest =
       action: "WORKSPACE_GET";
     }
   | {
-      action: "SETTINGS_GET";
-    }
-  | {
-      action: "SETTINGS_UPDATE";
-      timezone?: string;
-      locale?: string;
-      currency?: string;
-      metadata?: Json;
-    }
-  | {
       action: "USER_CONTEXT_GET";
     }
   | {
       action: "EMPLOYEE_LIST";
       workspace_id: string;
     }
-  | {
-      action: "DEPARTMENT_LIST";
-      workspace_id: string;
-    }
-  | {
-      action: "DEPARTMENT_CREATE";
-      workspace_id: string;
-      name: string;
-      description?: string;
-    }
-  | {
-      action: "DEPARTMENT_UPDATE";
-      id: string;
-      workspace_id: string;
-      name: string;
-      description?: string;
-    }
-  | {
-      action: "DEPARTMENT_DELETE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "POSITION_LIST";
-      workspace_id: string;
-    }
-  | {
-      action: "POSITION_CREATE";
-      workspace_id: string;
-      title: string;
-      description?: string;
-    }
-  | {
-      action: "POSITION_UPDATE";
-      id: string;
-      workspace_id: string;
-      title: string;
-      description?: string;
-    }
-  | {
-      action: "POSITION_DELETE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "SHIFT_LIST";
-      workspace_id: string;
-    }
+  | DepartmentApiRequest
+  | PositionApiRequest
+  | ShiftApiRequest
+  | SettingsApiRequest
   | ({
       action: "TIMELOG_CREATE";
     } & SubmitTimeLogRequest)

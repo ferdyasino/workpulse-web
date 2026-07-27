@@ -15,24 +15,36 @@ import Typography from "@mui/material/Typography";
 import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
-import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import DepartmentDialog from "./DepartmentDialog";
 
-import {
-  createDepartment,
-  updateDepartment,
-  deleteDepartment,
-  type Department,
-} from "../services/departments.service";
-
+import type { Department } from "../services/departments.service";
 import { useDepartments } from "../hooks/useDepartments";
 
 export default function DepartmentsTab() {
-  const { user } = useAuth();
   const snackbar = useSnackbar();
 
-  const { departments, loading, error, refresh } = useDepartments();
+  const {
+    departments,
+    loading,
+    error,
+
+    createDepartment,
+    updateDepartment,
+
+    activateDepartment,
+    deactivateDepartment,
+
+    deleteDepartment,
+    restoreDepartment,
+    hardDeleteDepartment,
+  } = useDepartments();
+
+  // Prevent unused-variable warnings until TableAction supports them.
+  void activateDepartment;
+  void deactivateDepartment;
+  void restoreDepartment;
+  void hardDeleteDepartment;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
@@ -42,34 +54,24 @@ export default function DepartmentsTab() {
   const [deleting, setDeleting] = useState(false);
 
   const handleSave = async (values: { name: string; description?: string }) => {
-    if (!user?.workspace_id) {
-      return;
-    }
-
     try {
       setSaving(true);
 
       if (editingDepartment) {
         await updateDepartment({
           id: editingDepartment.id,
-          workspace_id: user.workspace_id,
           ...values,
         });
 
         snackbar.success("Department updated successfully.");
       } else {
-        await createDepartment({
-          workspace_id: user.workspace_id,
-          ...values,
-        });
+        await createDepartment(values);
 
         snackbar.success("Department created successfully.");
       }
 
       setDialogOpen(false);
       setEditingDepartment(null);
-
-      await refresh();
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to save department.");
     } finally {
@@ -82,23 +84,18 @@ export default function DepartmentsTab() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!user?.workspace_id || !departmentToDelete) {
+    if (!departmentToDelete) {
       return;
     }
 
     try {
       setDeleting(true);
 
-      await deleteDepartment({
-        id: departmentToDelete.id,
-        workspace_id: user.workspace_id,
-      });
+      await deleteDepartment(departmentToDelete.id);
 
       snackbar.success("Department deleted successfully.");
 
       setDepartmentToDelete(null);
-
-      await refresh();
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete department.");
     } finally {
@@ -208,7 +205,11 @@ export default function DepartmentsTab() {
                     <TableCell align="right">
                       <TableAction
                         onEdit={() => handleEdit(department)}
+                        onActivate={() => activateDepartment(department.id)}
+                        onDeactivate={() => deactivateDepartment(department.id)}
                         onDelete={() => handleDelete(department)}
+                        onRestore={() => restoreDepartment(department.id)}
+                        onHardDelete={() => hardDeleteDepartment(department.id)}
                       />
                     </TableCell>
                   </TableRow>

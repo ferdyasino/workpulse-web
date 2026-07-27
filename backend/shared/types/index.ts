@@ -1,4 +1,9 @@
-export * from "./api.types.js";
-export * from "./auth.types.js";
-export * from "./user.types.js";
-export * from "./attendance.types.js";
+export type * from "./api.department.ts";
+export type * from "./api.position.ts";
+export type * from "./api.settings.ts";
+export type * from "./api.shift.ts";
+export type * from "./api.types.ts";
+export type * from "./attendance.types.ts";
+export type * from "./auth.types.ts";
+export type * from "./json.types.ts";
+export type * from "./user.types.ts";

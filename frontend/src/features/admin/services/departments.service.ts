@@ -25,10 +25,24 @@ export type SaveDepartmentRequest = {
   description?: string;
 };
 
+export type UpdateDepartmentRequest = SaveDepartmentRequest & {
+  id: string;
+};
+
+export type DepartmentActionRequest = {
+  workspace_id: string;
+  id: string;
+};
+
 type DepartmentResponse = {
   success: boolean;
   message?: string;
   department?: Department;
+};
+
+type ActionResponse = {
+  success: boolean;
+  message?: string;
 };
 
 export async function createDepartment(payload: SaveDepartmentRequest): Promise<Department> {
@@ -44,10 +58,6 @@ export async function createDepartment(payload: SaveDepartmentRequest): Promise<
   return response.department;
 }
 
-export type UpdateDepartmentRequest = SaveDepartmentRequest & {
-  id: string;
-};
-
 export async function updateDepartment(payload: UpdateDepartmentRequest): Promise<Department> {
   const response = await apiRequest<DepartmentResponse>({
     action: "DEPARTMENT_UPDATE",
@@ -61,23 +71,63 @@ export async function updateDepartment(payload: UpdateDepartmentRequest): Promis
   return response.department;
 }
 
-export type DeleteDepartmentRequest = {
-  workspace_id: string;
-  id: string;
-};
+export async function activateDepartment(payload: DepartmentActionRequest): Promise<Department> {
+  const response = await apiRequest<DepartmentResponse>({
+    action: "DEPARTMENT_ACTIVATE",
+    ...payload,
+  });
 
-type DeleteDepartmentResponse = {
-  success: boolean;
-  message?: string;
-};
+  if (!response.success || !response.department) {
+    throw new Error(response.message ?? "Failed to activate department");
+  }
 
-export async function deleteDepartment(payload: DeleteDepartmentRequest): Promise<void> {
-  const response = await apiRequest<DeleteDepartmentResponse>({
+  return response.department;
+}
+
+export async function deactivateDepartment(payload: DepartmentActionRequest): Promise<Department> {
+  const response = await apiRequest<DepartmentResponse>({
+    action: "DEPARTMENT_DEACTIVATE",
+    ...payload,
+  });
+
+  if (!response.success || !response.department) {
+    throw new Error(response.message ?? "Failed to deactivate department");
+  }
+
+  return response.department;
+}
+
+export async function deleteDepartment(payload: DepartmentActionRequest): Promise<void> {
+  const response = await apiRequest<ActionResponse>({
     action: "DEPARTMENT_DELETE",
     ...payload,
   });
 
   if (!response.success) {
     throw new Error(response.message ?? "Failed to delete department");
+  }
+}
+
+export async function restoreDepartment(payload: DepartmentActionRequest): Promise<Department> {
+  const response = await apiRequest<DepartmentResponse>({
+    action: "DEPARTMENT_RESTORE",
+    ...payload,
+  });
+
+  if (!response.success || !response.department) {
+    throw new Error(response.message ?? "Failed to restore department");
+  }
+
+  return response.department;
+}
+
+export async function hardDeleteDepartment(payload: DepartmentActionRequest): Promise<void> {
+  const response = await apiRequest<ActionResponse>({
+    action: "DEPARTMENT_HARD_DELETE",
+    ...payload,
+  });
+
+  if (!response.success) {
+    throw new Error(response.message ?? "Failed to permanently delete department");
   }
 }
