@@ -15,7 +15,7 @@ type Props = {
   confirmLabel?: string;
 
   onClose: () => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: () => void | Promise<void>;
 };
 
 export default function ConfirmDialog({
@@ -38,7 +38,12 @@ export default function ConfirmDialog({
           Cancel
         </Button>
 
-        <Button color="error" variant="contained" disabled={loading} onClick={onConfirm}>
+        <Button
+          color="error"
+          variant="contained"
+          disabled={loading}
+          onClick={() => void onConfirm()}
+        >
           {confirmLabel}
         </Button>
       </DialogActions>

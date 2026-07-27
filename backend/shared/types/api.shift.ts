@@ -4,6 +4,8 @@ export type ShiftApiRequest =
   | {
       action: "SHIFT_LIST";
       workspace_id: string;
+      include_inactive?: boolean;
+      include_deleted?: boolean;
     }
   | {
       action: "SHIFT_CREATE";

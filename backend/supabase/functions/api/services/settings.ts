@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database.ts";
-import type { Json } from "../../../../shared/types/api.types.ts";
+import type { Json } from "@shared/types/json.types.ts";
 
 type SettingsUpdate = {
   timezone?: string;
