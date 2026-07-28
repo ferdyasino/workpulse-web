@@ -7,8 +7,6 @@ export type SubmitTimeLogPayload = {
 
   email: string;
 
-  shift_id?: string;
-
   action: TimeLogAction;
 
   device_info: string;
@@ -32,6 +30,38 @@ export type SubmitTimeLogResponse = {
   state?: AttendanceState;
 };
 
+type SubmitTimeLogRequest = {
+  action: "TIMELOG_CREATE";
+
+  workspace_id: string;
+
+  action_type: TimeLogAction;
+
+  user_id: string;
+
+  email: string;
+
+  device_info: string;
+
+  location: unknown;
+
+  location_status: string;
+
+  location_message: string;
+
+  timestamp: string;
+};
+
+type AttendanceStateRequest = {
+  action: "ATTENDANCE_STATE_GET";
+
+  workspace_id: string;
+
+  email: string;
+
+  date?: string;
+};
+
 export async function submitTimeLogAction(
   workspaceId: string,
   payload: SubmitTimeLogPayload,
@@ -49,16 +79,7 @@ export async function submitTimeLogAction(
     ...rest,
   });
 
-  const response = await invokeFunction<
-    SubmitTimeLogResponse,
-    {
-      action: "TIMELOG_CREATE";
-
-      workspace_id: string;
-
-      action_type: TimeLogAction;
-    } & Omit<SubmitTimeLogPayload, "action">
-  >("api", {
+  const response = await invokeFunction<SubmitTimeLogResponse, SubmitTimeLogRequest>("api", {
     action: "TIMELOG_CREATE",
 
     workspace_id: workspaceId,
@@ -77,7 +98,6 @@ export async function submitTimeLogAction(
 export async function getCurrentAttendanceState(
   workspaceId: string,
   email: string,
-  shiftId?: string,
   date?: string,
 ): Promise<AttendanceState> {
   if (!workspaceId) {
@@ -92,41 +112,17 @@ export async function getCurrentAttendanceState(
   console.log("REQUEST:", {
     workspace_id: workspaceId,
     email,
-    shift_id: shiftId,
     date,
   });
 
-  const state = await invokeFunction<
-    AttendanceState,
-    {
-      action: "ATTENDANCE_STATE_GET";
-
-      workspace_id: string;
-
-      email: string;
-
-      shift_id?: string;
-
-      date?: string;
-    }
-  >("api", {
+  const state = await invokeFunction<AttendanceState, AttendanceStateRequest>("api", {
     action: "ATTENDANCE_STATE_GET",
 
     workspace_id: workspaceId,
 
     email,
 
-    ...(shiftId
-      ? {
-          shift_id: shiftId,
-        }
-      : {}),
-
-    ...(date
-      ? {
-          date,
-        }
-      : {}),
+    ...(date ? { date } : {}),
   });
 
   console.log("STATE:", state);

@@ -1,5 +1,7 @@
 import type { Json } from "./json.types.ts";
 
+export type ShiftStatus = "ACTIVE" | "INACTIVE";
+
 export type ShiftApiRequest =
   | {
       action: "SHIFT_LIST";

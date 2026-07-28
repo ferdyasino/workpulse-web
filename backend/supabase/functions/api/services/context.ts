@@ -14,14 +14,29 @@ export async function getApplicationContext(
 
   return {
     user: {
+      auth_user_id: userContext.auth_user_id,
+
       user_id: userContext.user_id,
+
       email: userContext.email,
 
-      workspace_id: userContext.workspace_id,
+      display_name: userContext.display_name,
+
+      avatar_url: userContext.avatar_url,
 
       role: userContext.role,
 
-      shift_id: userContext.shift_id ?? undefined,
+      employment_status: userContext.employment_status,
+
+      workspace_id: userContext.workspace_id,
+
+      department: userContext.department,
+
+      position: userContext.position,
+
+      shift: userContext.shift,
+
+      shift_id: userContext.shift?.id ?? undefined,
     },
 
     workspace: workspaceResult.workspace,

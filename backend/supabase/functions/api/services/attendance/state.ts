@@ -8,6 +8,8 @@ import type {
   AttendanceStateRequest,
 } from "@shared/types/attendance.types.ts";
 
+import { getUserContext } from "../users.ts";
+
 import {
   buildAttendanceSessions,
   getCurrentAttendanceSession,
@@ -15,10 +17,14 @@ import {
 
 import { resolveWorkDate } from "./workdate.ts";
 
-function createEmptyState(workDate: string): AttendanceState {
+function createEmptyState(
+  workDate: string,
+  shift: AttendanceState["shift"] = null,
+): AttendanceState {
   return {
     status: "OFF",
     work_date: workDate,
+    shift,
     sessions: [],
     current_session: null,
   };
@@ -26,11 +32,12 @@ function createEmptyState(workDate: string): AttendanceState {
 
 export function buildAttendanceState(
   workDate: string,
+  shift: AttendanceState["shift"],
   sessions: AttendanceSession[],
   currentSession: AttendanceSession | null,
 ): AttendanceState {
   if (!currentSession || !currentSession.time_in) {
-    return createEmptyState(workDate);
+    return createEmptyState(workDate, shift);
   }
 
   let status: AttendanceState["status"];
@@ -52,6 +59,7 @@ export function buildAttendanceState(
   return {
     status,
     work_date: workDate,
+    shift,
     sessions,
     current_session: currentSession,
   };
@@ -61,67 +69,44 @@ export async function getCurrentAttendanceState(
   supabaseAdmin: SupabaseClient<Database>,
   payload: AttendanceStateRequest,
 ): Promise<AttendanceState> {
-  const { workspace_id, email, shift_id } = payload;
+  const { workspace_id, email } = payload;
 
-  const { data: user, error: userError } = await supabaseAdmin
-    .from("users")
-    .select("id")
-    .eq("workspace_id", workspace_id)
-    .eq("email", email)
-    .is("deleted_at", null)
-    .maybeSingle();
+  const context = await getUserContext(supabaseAdmin, email);
 
-  if (userError) {
-    throw userError;
-  }
-
-  if (!user) {
-    throw new Error("User not found.");
-  }
-
-  let shiftQuery = supabaseAdmin
-    .from("user_shifts")
-    .select(
-      `
-      id,
-      shifts (
-        id,
-        start_time,
-        end_time,
-        timezone,
-        is_overnight
-      )
-    `,
-    )
-    .eq("workspace_id", workspace_id)
-    .eq("user_id", user.id)
-    .eq("is_primary", true)
-    .is("deleted_at", null);
-
-  if (shift_id) {
-    shiftQuery = shiftQuery.eq("shift_id", shift_id);
-  }
-
-  const { data: userShift, error: shiftError } = await shiftQuery.maybeSingle();
-
-  if (shiftError) {
-    throw shiftError;
+  if (context.workspace_id !== workspace_id) {
+    throw new Error("User does not belong to this workspace.");
   }
 
   const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
 
-  if (!userShift) {
+  if (!context.shift) {
     const workDate = payload.date ?? now.toISOString().slice(0, 10);
 
     return createEmptyState(workDate);
   }
 
-  const shift = Array.isArray(userShift.shifts)
-    ? userShift.shifts[0]
-    : userShift.shifts;
+  const shift = context.shift;
 
-  if (!shift.timezone) {
-    throw new Error("Shift timezone is required.");
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from("user_shifts")
+    .select("id")
+    .eq("workspace_id", workspace_id)
+    .eq("user_id", context.user_id)
+    .eq("shift_id", shift.id)
+    .eq("is_primary", true)
+    .is("deleted_at", null)
+    .lte("effective_from", now.toISOString().slice(0, 10))
+    .or(
+      `effective_to.is.null,effective_to.gte.${now.toISOString().slice(0, 10)}`,
+    )
+    .maybeSingle();
+
+  if (assignmentError) {
+    throw assignmentError;
+  }
+
+  if (!assignment) {
+    throw new Error("Active shift assignment not found.");
   }
 
   const timezone = shift.timezone;
@@ -140,8 +125,8 @@ export async function getCurrentAttendanceState(
     .from("time_logs")
     .select("*")
     .eq("workspace_id", workspace_id)
-    .eq("user_id", user.id)
-    .eq("user_shift_id", userShift.id)
+    .eq("user_id", context.user_id)
+    .eq("user_shift_id", assignment.id)
     .eq("work_date", workDate)
     .order("event_time_utc");
 
@@ -153,7 +138,7 @@ export async function getCurrentAttendanceState(
 
   const currentSession = getCurrentAttendanceSession(sessions);
 
-  const state = buildAttendanceState(workDate, sessions, currentSession);
+  const state = buildAttendanceState(workDate, shift, sessions, currentSession);
 
   console.log(
     "ATTENDANCE STATE",
@@ -162,6 +147,7 @@ export async function getCurrentAttendanceState(
       timestamp: now.toISOString(),
       workDate,
       shift,
+      assignment: assignment.id,
       timezone,
       logs: logs.length,
       state,

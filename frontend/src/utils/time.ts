@@ -1,14 +1,68 @@
-export function formatTime(value: string, format: "12h" | "24h" = "24h"): string {
+export type TimeFormat = "12h" | "24h";
+
+export function formatTime(value: string | null | undefined, format: TimeFormat = "24h"): string {
+  if (!value) {
+    return "--";
+  }
+
   const [hour, minute] = value.split(":").map(Number);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return "--";
+  }
 
   if (format === "24h") {
     return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
   }
 
   const period = hour >= 12 ? "PM" : "AM";
+
   const h = hour % 12 || 12;
 
   return `${h}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+export function formatShiftTime(
+  value: string | null | undefined,
+  format: TimeFormat = "24h",
+): string {
+  if (!value) {
+    return "--";
+  }
+
+  const [hour, minute] = value.split(":").map(Number);
+
+  if (Number.isNaN(hour) || Number.isNaN(minute)) {
+    return "--";
+  }
+
+  if (format === "24h") {
+    return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+  }
+
+  const period = hour >= 12 ? "PM" : "AM";
+
+  const h = hour % 12 || 12;
+
+  return `${h}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+export function formatTimestamp(
+  value: string | null | undefined,
+  timezone: string,
+  locale = "en-US",
+  format: TimeFormat = "24h",
+): string {
+  if (!value) {
+    return "--";
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: format === "12h",
+  }).format(new Date(value));
 }
 
 export function formatDateInput(date: Date, timezone: string): string {
@@ -24,4 +78,13 @@ export function formatDateInput(date: Date, timezone: string): string {
   const day = parts.find((part) => part.type === "day")?.value;
 
   return `${year}-${month}-${day}`;
+}
+
+export function formatDate(value: string | Date, timezone: string, locale = "en-US"): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
 }

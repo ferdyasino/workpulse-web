@@ -28,10 +28,42 @@ export type AttendanceSession = {
   lunch: AttendanceLunch;
 };
 
+export type AttendanceShift = {
+  id: string;
+
+  name: string;
+
+  description: string | null;
+
+  status: "ACTIVE" | "INACTIVE";
+
+  start_time: string;
+
+  end_time: string;
+
+  timezone: string;
+
+  grace_minutes: number;
+
+  break_minutes: number;
+
+  is_overnight: boolean;
+
+  /**
+   * Date this shift assignment became effective.
+   */
+  effective_from?: string;
+};
+
 export type AttendanceState = {
   status: AttendanceStatus;
 
   work_date: string;
+
+  /**
+   * Resolved shift used to determine the attendance state.
+   */
+  shift: AttendanceShift | null;
 
   sessions: AttendanceSession[];
 

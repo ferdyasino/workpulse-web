@@ -3,24 +3,43 @@ export type TimeLogAction =
 
 export type BreakSession = {
   in: string | null;
-
   out: string | null;
 };
 
 export type LunchSession = {
   in: string | null;
-
   out: string | null;
 };
 
 export type AttendanceSession = {
   time_in: string | null;
-
   time_out: string | null;
 
   breaks: BreakSession[];
 
   lunch: LunchSession;
+};
+
+export type AttendanceShift = {
+  id: string;
+
+  name: string;
+
+  description: string | null;
+
+  status: "ACTIVE" | "INACTIVE";
+
+  start_time: string;
+
+  end_time: string;
+
+  timezone: string;
+
+  grace_minutes: number;
+
+  break_minutes: number;
+
+  is_overnight: boolean;
 };
 
 export type TimeLog = {
@@ -40,6 +59,8 @@ export type AttendanceState = {
 
   work_date: string;
 
+  shift: AttendanceShift | null;
+
   sessions: AttendanceSession[];
 
   current_session: AttendanceSession | null;
@@ -50,9 +71,16 @@ export type AttendanceStateRequest = {
 
   email: string;
 
-  shift_id?: string;
-
+  /**
+   * Optional resolved work date.
+   */
   date?: string;
+
+  /**
+   * Optional UTC timestamp used by the backend
+   * to resolve the work date using the shift timezone.
+   */
+  timestamp?: string;
 };
 
 export type SubmitTimeLogRequest = {
@@ -71,6 +99,4 @@ export type SubmitTimeLogRequest = {
   location_message: string;
 
   timestamp: string;
-
-  shift_id?: string;
 };

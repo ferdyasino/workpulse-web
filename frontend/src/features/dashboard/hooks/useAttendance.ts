@@ -14,6 +14,7 @@ export function useAttendance() {
   const [state, setState] = useState<AttendanceState | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -29,13 +30,11 @@ export function useAttendance() {
 
       console.group("ATTENDANCE REFRESH");
 
-      const attendance = await getCurrentAttendanceState(
-        user.workspace_id,
-        user.email,
-        user.shift_id ?? undefined,
-      );
+      const attendance = await getCurrentAttendanceState(user.workspace_id, user.email);
 
       console.log("REFRESH RESULT:", attendance);
+
+      console.log("SHIFT FROM STATE:", attendance.shift);
 
       setState(attendance);
 
@@ -45,7 +44,7 @@ export function useAttendance() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.workspace_id, user?.email, user?.shift_id]);
+  }, [user?.workspace_id, user?.email]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
@@ -55,10 +54,12 @@ export function useAttendance() {
 
       if (submitting.current) {
         console.warn("Duplicate submit ignored.");
+
         return;
       }
 
       submitting.current = true;
+
       setIsSubmitting(true);
 
       try {
@@ -66,8 +67,8 @@ export function useAttendance() {
 
         const response = await submitTimeLogAction(user.workspace_id, {
           user_id: user.user_id,
+
           email: user.email,
-          shift_id: user.shift_id ?? undefined,
 
           action,
 
@@ -91,6 +92,8 @@ export function useAttendance() {
         if (response.state) {
           console.log("STATE FROM RESPONSE:", response.state);
 
+          console.log("SHIFT FROM RESPONSE:", response.state.shift);
+
           setState(response.state);
         } else {
           await refresh();
@@ -99,24 +102,19 @@ export function useAttendance() {
         console.groupEnd();
 
         return response;
-      } catch (error) {
-        console.error("Attendance action failed:", error);
-
-        throw error;
       } finally {
         submitting.current = false;
+
         setIsSubmitting(false);
       }
     },
     [user, refresh],
   );
 
-  // Initial load and refresh whenever user context changes.
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Auto sync every 30 seconds.
   useEffect(() => {
     if (!user?.workspace_id || !user.email) {
       return;
@@ -129,7 +127,6 @@ export function useAttendance() {
     return () => window.clearInterval(interval);
   }, [user?.workspace_id, user?.email, refresh]);
 
-  // Refresh when returning to the tab.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -146,9 +143,13 @@ export function useAttendance() {
 
   return {
     state,
+
     isLoading,
+
     isSubmitting,
+
     refresh,
+
     logTime,
   };
 }

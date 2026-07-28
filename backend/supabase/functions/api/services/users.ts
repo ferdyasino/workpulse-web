@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
+import type { ShiftStatus } from "@shared/types/api.shift.ts";
+
 import type {
   EmployeeListItem,
   UserContext,
@@ -9,6 +11,22 @@ import type {
   EmploymentStatus,
   EmploymentType,
 } from "@shared/types/user.types.ts";
+
+const today = new Date().toISOString().slice(0, 10);
+
+function isActivePrimaryShift(item: {
+  is_primary: boolean;
+  effective_from: string;
+  effective_to: string | null;
+  deleted_at: string | null;
+}) {
+  return (
+    item.is_primary &&
+    !item.deleted_at &&
+    item.effective_from <= today &&
+    (!item.effective_to || item.effective_to >= today)
+  );
+}
 
 export async function getUserContext(
   supabaseAdmin: SupabaseClient<Database>,
@@ -21,18 +39,39 @@ export async function getUserContext(
         id,
         email,
         display_name,
+        avatar_url,
         role,
         employment_status,
         workspace_id,
+
+        department:departments (
+          id,
+          name
+        ),
+
+        position:positions (
+          id,
+          title
+        ),
+
         user_shifts (
           shift_id,
           is_primary,
+          effective_from,
+          effective_to,
           deleted_at,
+
           shifts (
+            id,
             name,
+            description,
+            status,
             start_time,
             end_time,
-            grace_minutes
+            timezone,
+            grace_minutes,
+            break_minutes,
+            is_overnight
           )
         )
       `,
@@ -49,15 +88,18 @@ export async function getUserContext(
     throw new Error("User not found.");
   }
 
-  const primaryShift = user.user_shifts?.find(
-    (item) => item.is_primary && !item.deleted_at,
-  );
+  const activeShift = user.user_shifts?.find(isActivePrimaryShift);
 
   return {
     auth_user_id: user.id,
+
     user_id: user.id,
+
     email: user.email,
+
     display_name: user.display_name,
+
+    avatar_url: user.avatar_url,
 
     role: user.role as UserRole,
 
@@ -65,14 +107,43 @@ export async function getUserContext(
 
     workspace_id: user.workspace_id,
 
-    shift_id: primaryShift?.shift_id ?? null,
-
-    schedule: primaryShift?.shifts
+    department: user.department
       ? {
-          shift_name: primaryShift.shifts.name,
-          start_time: primaryShift.shifts.start_time,
-          end_time: primaryShift.shifts.end_time,
-          grace_minutes: primaryShift.shifts.grace_minutes,
+          id: user.department.id,
+          name: user.department.name,
+        }
+      : null,
+
+    position: user.position
+      ? {
+          id: user.position.id,
+          name: user.position.title,
+        }
+      : null,
+
+    shift: activeShift?.shifts
+      ? {
+          id: activeShift.shifts.id,
+
+          name: activeShift.shifts.name,
+
+          description: activeShift.shifts.description,
+
+          status: activeShift.shifts.status as ShiftStatus,
+
+          start_time: activeShift.shifts.start_time,
+
+          end_time: activeShift.shifts.end_time,
+
+          timezone: activeShift.shifts.timezone,
+
+          grace_minutes: activeShift.shifts.grace_minutes,
+
+          break_minutes: activeShift.shifts.break_minutes,
+
+          is_overnight: activeShift.shifts.is_overnight,
+
+          effective_from: activeShift.effective_from,
         }
       : null,
   };
@@ -95,15 +166,21 @@ export async function listUsers(
         employment_status,
         employment_type,
         created_at,
+
         department:departments (
           name
         ),
+
         position:positions (
           title
         ),
+
         user_shifts (
           is_primary,
+          effective_from,
+          effective_to,
           deleted_at,
+
           shifts (
             name
           )
@@ -121,9 +198,7 @@ export async function listUsers(
   }
 
   return data.map((user) => {
-    const primaryShift = user.user_shifts?.find(
-      (item) => item.is_primary && !item.deleted_at,
-    );
+    const activeShift = user.user_shifts?.find(isActivePrimaryShift);
 
     return {
       id: user.id,
@@ -146,7 +221,7 @@ export async function listUsers(
 
       position: user.position?.title ?? null,
 
-      shift: primaryShift?.shifts?.name ?? null,
+      shift: activeShift?.shifts?.name ?? null,
     };
   });
 }

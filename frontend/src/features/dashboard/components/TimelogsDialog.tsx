@@ -15,27 +15,39 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
+import { useAttendanceContext } from "@/features/dashboard/context/AttendanceContext";
 import { formatDateInput } from "@/utils/time";
 
 type Timelog = {
   id: string;
+
   event_time_utc: string;
+
   event_type: string;
+
   work_date: string;
 };
 
 type Props = {
   open: boolean;
+
   onClose: () => void;
+
   timelogs: Timelog[];
 };
 
 export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
   const { settings } = useSettingsContext();
 
-  const timezone = settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const { state } = useAttendanceContext();
+
+  const timezone =
+    state?.shift?.timezone ??
+    settings?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const locale = settings?.locale ?? "en-US";
 
@@ -64,6 +76,7 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
       })
       .sort((a, b) => {
         const first = new Date(a.event_time_utc).getTime();
+
         const second = new Date(b.event_time_utc).getTime();
 
         return sortOrder === "newest" ? second - first : first - second;
@@ -105,6 +118,7 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
             onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
           >
             <MenuItem value="newest">Newest First</MenuItem>
+
             <MenuItem value="oldest">Oldest First</MenuItem>
           </Select>
 
@@ -117,6 +131,16 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
           </Select>
         </Stack>
 
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{
+            mb: 2,
+          }}
+        >
+          Display timezone: <strong>{timezone}</strong>
+        </Typography>
+
         <TableContainer
           sx={{
             flex: 1,
@@ -127,7 +151,9 @@ export default function TimelogsDialog({ open, onClose, timelogs }: Props) {
             <TableHead>
               <TableRow>
                 <TableCell>Date</TableCell>
+
                 <TableCell>Time</TableCell>
+
                 <TableCell>Action</TableCell>
               </TableRow>
             </TableHead>
