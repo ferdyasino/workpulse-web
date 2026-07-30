@@ -9,6 +9,7 @@ import type {
 } from "@shared/types/attendance.types.ts";
 
 import { getUserContext } from "../users.ts";
+import { resolveUserShift } from "../user_shift_resolver.ts";
 
 import {
   buildAttendanceSessions,
@@ -79,36 +80,20 @@ export async function getCurrentAttendanceState(
 
   const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
 
-  if (!context.shift) {
-    const workDate = payload.date ?? now.toISOString().slice(0, 10);
+  const targetDate = payload.date ?? now.toISOString().slice(0, 10);
 
-    return createEmptyState(workDate);
+  const resolved = await resolveUserShift(supabaseAdmin, {
+    workspace_id,
+    user_id: context.user_id,
+    date: targetDate,
+  });
+
+  if (!resolved) {
+    return createEmptyState(targetDate);
   }
 
-  const shift = context.shift;
-
-  const today = now.toISOString().slice(0, 10);
-
-  const { data: assignment, error: assignmentError } = await supabaseAdmin
-    .from("user_shifts")
-    .select("id")
-    .eq("workspace_id", workspace_id)
-    .eq("user_id", context.user_id)
-    .eq("shift_id", shift.id)
-    .is("deleted_at", null)
-    .lte("effective_from", today)
-    .or(`effective_to.is.null,effective_to.gte.${today}`)
-    .order("effective_from", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (assignmentError) {
-    throw assignmentError;
-  }
-
-  if (!assignment) {
-    throw new Error("Active shift assignment not found.");
-  }
+  const shift = resolved.shift;
+  const assignmentId = resolved.assignment_id;
 
   const timezone = shift.timezone;
 
@@ -127,7 +112,7 @@ export async function getCurrentAttendanceState(
     .select("*")
     .eq("workspace_id", workspace_id)
     .eq("user_id", context.user_id)
-    .eq("user_shift_id", assignment.id)
+    .eq("user_shift_id", assignmentId)
     .eq("work_date", workDate)
     .order("event_time_utc");
 
@@ -146,9 +131,11 @@ export async function getCurrentAttendanceState(
     JSON.stringify({
       email,
       timestamp: now.toISOString(),
+      targetDate,
       workDate,
       shift,
-      assignment: assignment.id,
+      source: resolved.source,
+      assignment: assignmentId,
       timezone,
       logs: logs.length,
       state,

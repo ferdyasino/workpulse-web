@@ -2,19 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
-import type { SubmitTimeLogRequest } from "@shared/types/attendance.types.ts";
+import type { Json, SubmitTimeLogRequest } from "@shared/types";
 
 import { resolveWorkDate } from "./attendance/workdate.ts";
-
-type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | {
-      [key: string]: Json | undefined;
-    }
-  | Json[];
+import { resolveUserShift } from "./user_shift_resolver.ts";
 
 export async function createTimeLog(
   supabaseAdmin: SupabaseClient<Database>,
@@ -29,57 +20,25 @@ export async function createTimeLog(
     }),
   );
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  const { data: userShifts, error: shiftError } = await supabaseAdmin
-    .from("user_shifts")
-    .select(
-      `
-      id,
-      shift_id,
-      attendance_policy_id,
-      effective_from,
-      effective_to,
-      shifts (
-        start_time,
-        end_time,
-        timezone,
-        is_overnight
-      )
-    `,
-    )
-    .eq("user_id", payload.user_id)
-    .eq("workspace_id", payload.workspace_id)
-    .is("deleted_at", null)
-    .lte("effective_from", today)
-    .or(`effective_to.is.null,effective_to.gte.${today}`);
-
-  if (shiftError) {
-    throw shiftError;
-  }
-
-  const userShift =
-    userShifts
-      ?.sort((a, b) => b.effective_from.localeCompare(a.effective_from))
-      .at(0) ?? null;
-
-  if (!userShift) {
-    throw new Error("No active user shift found.");
-  }
-
-  const shift = Array.isArray(userShift.shifts)
-    ? userShift.shifts[0]
-    : userShift.shifts;
-
-  if (!shift) {
-    throw new Error("Shift configuration missing.");
-  }
-
   const timestamp = new Date(payload.timestamp);
 
   if (Number.isNaN(timestamp.getTime())) {
     throw new Error("Invalid timestamp.");
   }
+
+  const today = timestamp.toISOString().slice(0, 10);
+
+  const assignment = await resolveUserShift(supabaseAdmin, {
+    workspace_id: payload.workspace_id,
+    user_id: payload.user_id,
+    date: today,
+  });
+
+  if (!assignment) {
+    throw new Error("No active user shift found.");
+  }
+
+  const shift = assignment.shift;
 
   const workDate = resolveWorkDate({
     timestamp,
@@ -94,7 +53,7 @@ export async function createTimeLog(
     .insert({
       workspace_id: payload.workspace_id,
       user_id: payload.user_id,
-      user_shift_id: userShift.id,
+      user_shift_id: assignment.assignment_id,
       event_type: payload.action_type,
 
       // Always store normalized UTC timestamp
@@ -103,7 +62,7 @@ export async function createTimeLog(
       // Keep original client timestamp for audit/display
       client_timestamp: payload.timestamp,
 
-      // Controlled by assigned shift timezone
+      // Controlled by resolved shift timezone
       timezone: shift.timezone,
 
       work_date: workDate,
@@ -114,7 +73,7 @@ export async function createTimeLog(
         location: JSON.stringify(payload.location),
         location_status: payload.location_status,
         location_message: payload.location_message,
-      } as Json,
+      } satisfies Json,
     })
     .select()
     .single();

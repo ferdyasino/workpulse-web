@@ -25,7 +25,11 @@
     }
   },
 
-  "include": ["src/**/*.ts", "shared/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "shared/**/*.ts",
+    "supabase/functions/api/routes/user-shift-override.routes.ts"
+  ],
 
   "exclude": ["node_modules", "dist"]
 }

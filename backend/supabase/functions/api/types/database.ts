@@ -453,6 +453,67 @@ export type Database = {
           },
         ]
       }
+      user_shift_overrides: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          effective_from: string
+          effective_to: string | null
+          id: string
+          metadata: Json | null
+          reason: string | null
+          shift_id: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          shift_id: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          shift_id?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_shift_overrides_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_shift_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_shift_overrides_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_shifts: {
         Row: {
           attendance_policy_id: string | null

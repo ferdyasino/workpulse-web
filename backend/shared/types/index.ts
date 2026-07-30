@@ -2,6 +2,7 @@ export type * from "./api.department.ts";
 export type * from "./api.position.ts";
 export type * from "./api.settings.ts";
 export type * from "./api.shift.ts";
+export type * from "./api.user-shift-override.ts";
 export type * from "./api.types.ts";
 export type * from "./attendance.types.ts";
 export type * from "./auth.types.ts";

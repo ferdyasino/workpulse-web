@@ -14,6 +14,7 @@ import { handlePositionRoutes } from "./position.routes.ts";
 import { handleShiftRoutes } from "./shift.routes.ts";
 import { handleAttendanceRoutes } from "./attendance.routes.ts";
 import { handleTimelogRoutes } from "./timelog.routes.ts";
+import { handleUserShiftOverrideRoutes } from "./user-shift-override.routes.ts";
 
 export async function handleRequest(
   req: Request,
@@ -69,6 +70,12 @@ export async function handleRequest(
 
   if (shiftResult !== null) {
     return shiftResult;
+  }
+
+  const userShiftOverrideResult = await handleUserShiftOverrideRoutes(ctx);
+
+  if (userShiftOverrideResult !== null) {
+    return userShiftOverrideResult;
   }
 
   const attendanceResult = await handleAttendanceRoutes(ctx);
