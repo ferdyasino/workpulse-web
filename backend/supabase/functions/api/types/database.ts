@@ -461,7 +461,6 @@ export type Database = {
           effective_from: string
           effective_to: string | null
           id: string
-          is_primary: boolean
           metadata: Json
           shift_id: string
           updated_at: string
@@ -475,7 +474,6 @@ export type Database = {
           effective_from: string
           effective_to?: string | null
           id?: string
-          is_primary?: boolean
           metadata?: Json
           shift_id: string
           updated_at?: string
@@ -489,7 +487,6 @@ export type Database = {
           effective_from?: string
           effective_to?: string | null
           id?: string
-          is_primary?: boolean
           metadata?: Json
           shift_id?: string
           updated_at?: string

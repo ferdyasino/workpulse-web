@@ -87,18 +87,19 @@ export async function getCurrentAttendanceState(
 
   const shift = context.shift;
 
+  const today = now.toISOString().slice(0, 10);
+
   const { data: assignment, error: assignmentError } = await supabaseAdmin
     .from("user_shifts")
     .select("id")
     .eq("workspace_id", workspace_id)
     .eq("user_id", context.user_id)
     .eq("shift_id", shift.id)
-    .eq("is_primary", true)
     .is("deleted_at", null)
-    .lte("effective_from", now.toISOString().slice(0, 10))
-    .or(
-      `effective_to.is.null,effective_to.gte.${now.toISOString().slice(0, 10)}`,
-    )
+    .lte("effective_from", today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`)
+    .order("effective_from", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (assignmentError) {

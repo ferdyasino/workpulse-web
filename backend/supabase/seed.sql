@@ -128,7 +128,6 @@ values
 on conflict(id) do nothing;
 
 
-
 -- =====================================================
 -- Shifts
 -- =====================================================
@@ -137,6 +136,7 @@ insert into public.shifts (
     id,
     workspace_id,
     name,
+    description,
     start_time,
     end_time,
     timezone,
@@ -146,16 +146,17 @@ insert into public.shifts (
     status,
     metadata
 )
-
 values
 
 (
     '40000000-0000-0000-0000-000000000001',
     'b5edffc0-e071-4889-b79e-fa7b506f1b19',
     'Day Shift',
+    'Regular day shift',
     '09:00',
     '18:00',
     'Asia/Manila',
+    false,
     60,
     10,
     'ACTIVE',
@@ -166,9 +167,11 @@ values
     '40000000-0000-0000-0000-000000000002',
     'b5edffc0-e071-4889-b79e-fa7b506f1b19',
     'US Night Shift',
+    'Regular overnight shift',
     '21:00',
     '06:00',
     'America/New_York',
+    true,
     60,
     10,
     'ACTIVE',
@@ -176,7 +179,6 @@ values
 )
 
 on conflict(id) do nothing;
-
 
 
 -- =====================================================
@@ -247,7 +249,6 @@ insert into public.user_shifts (
     shift_id,
     attendance_policy_id,
     effective_from,
-    is_primary,
     metadata
 )
 values
@@ -259,7 +260,6 @@ values
     '40000000-0000-0000-0000-000000000001',
     '30000000-0000-0000-0000-000000000001',
     '2026-07-26',
-    true,
     '{}'::jsonb
 ),
 
@@ -270,13 +270,10 @@ values
     '40000000-0000-0000-0000-000000000002',
     '30000000-0000-0000-0000-000000000001',
     '2026-07-26',
-    true,
     '{}'::jsonb
 )
 
 on conflict(id) do nothing;
-
-
 
 -- =====================================================
 -- Device

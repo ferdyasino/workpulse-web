@@ -12,16 +12,16 @@ import type {
   EmploymentType,
 } from "@shared/types/user.types.ts";
 
+import { getCurrentUserShift } from "./user_shifts.ts";
+
 const today = new Date().toISOString().slice(0, 10);
 
-function isActivePrimaryShift(item: {
-  is_primary: boolean;
+function isActiveShift(item: {
   effective_from: string;
   effective_to: string | null;
   deleted_at: string | null;
 }) {
   return (
-    item.is_primary &&
     !item.deleted_at &&
     item.effective_from <= today &&
     (!item.effective_to || item.effective_to >= today)
@@ -52,27 +52,6 @@ export async function getUserContext(
         position:positions (
           id,
           title
-        ),
-
-        user_shifts (
-          shift_id,
-          is_primary,
-          effective_from,
-          effective_to,
-          deleted_at,
-
-          shifts (
-            id,
-            name,
-            description,
-            status,
-            start_time,
-            end_time,
-            timezone,
-            grace_minutes,
-            break_minutes,
-            is_overnight
-          )
         )
       `,
     )
@@ -88,7 +67,11 @@ export async function getUserContext(
     throw new Error("User not found.");
   }
 
-  const activeShift = user.user_shifts?.find(isActivePrimaryShift);
+  const assignment = await getCurrentUserShift(
+    supabaseAdmin,
+    user.workspace_id,
+    user.id,
+  );
 
   return {
     auth_user_id: user.id,
@@ -121,29 +104,29 @@ export async function getUserContext(
         }
       : null,
 
-    shift: activeShift?.shifts
+    shift: assignment
       ? {
-          id: activeShift.shifts.id,
+          id: assignment.shift.id,
 
-          name: activeShift.shifts.name,
+          name: assignment.shift.name,
 
-          description: activeShift.shifts.description,
+          description: assignment.shift.description,
 
-          status: activeShift.shifts.status as ShiftStatus,
+          status: assignment.shift.status as ShiftStatus,
 
-          start_time: activeShift.shifts.start_time,
+          start_time: assignment.shift.start_time,
 
-          end_time: activeShift.shifts.end_time,
+          end_time: assignment.shift.end_time,
 
-          timezone: activeShift.shifts.timezone,
+          timezone: assignment.shift.timezone,
 
-          grace_minutes: activeShift.shifts.grace_minutes,
+          grace_minutes: assignment.shift.grace_minutes,
 
-          break_minutes: activeShift.shifts.break_minutes,
+          break_minutes: assignment.shift.break_minutes,
 
-          is_overnight: activeShift.shifts.is_overnight,
+          is_overnight: assignment.shift.is_overnight,
 
-          effective_from: activeShift.effective_from,
+          effective_from: assignment.effective_from,
         }
       : null,
   };
@@ -176,7 +159,6 @@ export async function listUsers(
         ),
 
         user_shifts (
-          is_primary,
           effective_from,
           effective_to,
           deleted_at,
@@ -198,7 +180,7 @@ export async function listUsers(
   }
 
   return data.map((user) => {
-    const activeShift = user.user_shifts?.find(isActivePrimaryShift);
+    const activeShift = user.user_shifts?.find(isActiveShift);
 
     return {
       id: user.id,

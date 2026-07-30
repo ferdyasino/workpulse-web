@@ -29,13 +29,17 @@ export async function createTimeLog(
     }),
   );
 
-  const { data: userShift, error: shiftError } = await supabaseAdmin
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: userShifts, error: shiftError } = await supabaseAdmin
     .from("user_shifts")
     .select(
       `
       id,
       shift_id,
       attendance_policy_id,
+      effective_from,
+      effective_to,
       shifts (
         start_time,
         end_time,
@@ -46,13 +50,18 @@ export async function createTimeLog(
     )
     .eq("user_id", payload.user_id)
     .eq("workspace_id", payload.workspace_id)
-    .eq("is_primary", true)
     .is("deleted_at", null)
-    .maybeSingle();
+    .lte("effective_from", today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`);
 
   if (shiftError) {
     throw shiftError;
   }
+
+  const userShift =
+    userShifts
+      ?.sort((a, b) => b.effective_from.localeCompare(a.effective_from))
+      .at(0) ?? null;
 
   if (!userShift) {
     throw new Error("No active user shift found.");
