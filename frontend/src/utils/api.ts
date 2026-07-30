@@ -14,16 +14,17 @@ export async function invokeFunction<TResponse, TBody extends object = object>(
     if (error.context) {
       try {
         const response = await error.context.json();
+
         console.error("EDGE FUNCTION RESPONSE:", response);
 
         if (response?.message) {
           throw new Error(response.message);
         }
-      } catch {
-        try {
-          console.error("EDGE FUNCTION RAW:", await error.context.text());
-        } catch {
-          // Ignore
+
+        throw new Error("Edge function request failed.");
+      } catch (err) {
+        if (err instanceof Error) {
+          throw err;
         }
       }
     }

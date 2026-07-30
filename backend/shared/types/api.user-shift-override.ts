@@ -5,6 +5,7 @@ export type UserShiftOverrideActionPayload =
       workspace_id: string;
       user_id?: string;
       id?: string;
+      include_deleted?: boolean;
     }
   | {
       workspace_id: string;
@@ -30,6 +31,7 @@ export type UserShiftOverrideApiRequest =
       action: "USER_SHIFT_OVERRIDE_LIST";
       workspace_id: string;
       user_id?: string;
+      include_deleted?: boolean;
     }
   | {
       action: "USER_SHIFT_OVERRIDE_GET";

@@ -5,6 +5,7 @@ import DepartmentsTab from "../components/DepartmentsTab";
 import PositionsTab from "../components/PositionsTab";
 import ShiftsTab from "../components/ShiftsTab";
 import UsersTab from "../components/UsersTab";
+import UserShiftOverridesTab from "../components/UserShiftOverridesTab";
 
 export default function AdminPage() {
   const [tab, setTab] = useState(0);
@@ -43,6 +44,7 @@ export default function AdminPage() {
         <Tab label="Departments" />
         <Tab label="Positions" />
         <Tab label="Shifts" />
+        <Tab label="User Shift Overrides" />
       </Tabs>
 
       <Box
@@ -56,6 +58,7 @@ export default function AdminPage() {
         {tab === 1 && <DepartmentsTab />}
         {tab === 2 && <PositionsTab />}
         {tab === 3 && <ShiftsTab />}
+        {tab === 4 && <UserShiftOverridesTab />}
       </Box>
     </Paper>
   );
