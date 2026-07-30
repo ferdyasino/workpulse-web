@@ -74,15 +74,11 @@ export function useUserShiftOverrides(userId?: string) {
 
       console.log("SHIFTS RESPONSE:", shiftsResponse);
 
-      setUserShiftOverrides(
-        Array.isArray(overridesResponse)
-          ? overridesResponse
-          : (overridesResponse?.user_shift_overrides ?? []),
-      );
+      setUserShiftOverrides(overridesResponse);
 
-      setUsers(Array.isArray(usersResponse) ? usersResponse : (usersResponse?.users ?? []));
+      setUsers(usersResponse);
 
-      setShifts(Array.isArray(shiftsResponse) ? shiftsResponse : (shiftsResponse?.shifts ?? []));
+      setShifts(shiftsResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load user shift overrides");
     } finally {
