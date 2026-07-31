@@ -1,11 +1,13 @@
-export type * from "./api.department.ts";
-export type * from "./api.position.ts";
-export type * from "./api.settings.ts";
-export type * from "./api.shift.ts";
-export type * from "./api.user-shift-override.ts";
-export type * from "./api.user-shift.ts";
-export type * from "./api.types.ts";
-export type * from "./attendance.types.ts";
-export type * from "./auth.types.ts";
-export type * from "./json.types.ts";
-export type * from "./user.types.ts";
+export type * from "./api/api.request.ts";
+
+export type * from "./api/api.department.ts";
+export type * from "./api/api.position.ts";
+export type * from "./api/api.settings.ts";
+export type * from "./api/api.shift.ts";
+export type * from "./api/api.user-shift.ts";
+export type * from "./api/api.user-shift-override.ts";
+
+export type * from "./models/attendance.types.ts";
+export type * from "./models/auth.types.ts";
+export type * from "./models/json.types.ts";
+export type * from "./models/user.types.ts";

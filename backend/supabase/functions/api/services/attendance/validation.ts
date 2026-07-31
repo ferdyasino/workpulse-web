@@ -1,7 +1,7 @@
 import type {
   AttendanceState,
   TimeLogEvent,
-} from "@shared/types/attendance.types.ts";
+} from "@shared/types/models/attendance.types.ts";
 
 export type AttendanceValidationResult =
   | {

@@ -1,4 +1,4 @@
-import type { Json } from "./json.types.ts";
+import type { Json } from "../models/json.types.ts";
 
 export type ShiftStatus = "ACTIVE" | "INACTIVE";
 

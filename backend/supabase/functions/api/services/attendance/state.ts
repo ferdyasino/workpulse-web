@@ -6,7 +6,7 @@ import type {
   AttendanceSession,
   AttendanceState,
   AttendanceStateRequest,
-} from "@shared/types/attendance.types.ts";
+} from "@shared/types/models/attendance.types.ts";
 
 import { getUserContext } from "../users.ts";
 import { resolveUserShift } from "../user_shift_resolver.ts";

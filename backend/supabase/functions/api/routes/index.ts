@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { ApiRequest } from "@shared/types/api.types.ts";
+import type { ApiRequest } from "@shared/types/api/api.request.ts";
 
 import type { Database } from "../types/database.ts";
 

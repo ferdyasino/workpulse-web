@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
-import type { Json } from "@shared/types/json.types.ts";
+import type { Json } from "@shared/types/models/json.types.ts";
 
 const USER_SHIFT_OVERRIDE_SELECT = `
   id,

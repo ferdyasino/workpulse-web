@@ -7,7 +7,7 @@ import type { UserShiftApiRequest } from "./api.user-shift.ts";
 import type {
   AttendanceStateRequest,
   SubmitTimeLogRequest,
-} from "./attendance.types.ts";
+} from "../models/attendance.types.ts";
 
 export type ApiRequest =
   | {

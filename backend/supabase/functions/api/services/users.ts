@@ -2,15 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "../types/database.ts";
 
-import type { ShiftStatus } from "@shared/types/api.shift.ts";
-
 import type {
   EmployeeListItem,
   UserContext,
   UserRole,
   EmploymentStatus,
   EmploymentType,
-} from "@shared/types/user.types.ts";
+} from "@shared/types/models/user.types.ts";
 
 import { getCurrentUserShift } from "./user_shifts.ts";
 
@@ -111,8 +109,6 @@ export async function getUserContext(
           name: assignment.shift.name,
 
           description: assignment.shift.description,
-
-          status: assignment.shift.status as ShiftStatus,
 
           start_time: assignment.shift.start_time,
 

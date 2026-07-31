@@ -3,7 +3,7 @@ import type { Tables } from "../../types/database.ts";
 import type {
   AttendanceSession,
   TimeLogEvent,
-} from "@shared/types/attendance.types.ts";
+} from "@shared/types/models/attendance.types.ts";
 
 export function createEmptyAttendanceSession(): AttendanceSession {
   return {

@@ -65,15 +65,19 @@ export type CurrentUserShift = {
 
   shift: {
     id: string;
+
     name: string;
+
     description: string | null;
 
     start_time: string;
+
     end_time: string;
 
     timezone: string;
 
     grace_minutes: number;
+
     break_minutes: number;
 
     is_overnight: boolean;
@@ -139,15 +143,19 @@ export async function getCurrentUserShift(
 
     shift: {
       id: shift.id,
+
       name: shift.name,
+
       description: shift.description,
 
       start_time: shift.start_time,
+
       end_time: shift.end_time,
 
       timezone: shift.timezone,
 
       grace_minutes: shift.grace_minutes,
+
       break_minutes: shift.break_minutes,
 
       is_overnight: shift.is_overnight,

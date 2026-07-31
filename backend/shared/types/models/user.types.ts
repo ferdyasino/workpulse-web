@@ -1,4 +1,4 @@
-import type { ShiftStatus } from "./api.shift.ts";
+import type { ShiftStatus } from "../api/api.shift.ts";
 
 export type UserRole = "OWNER" | "ADMIN" | "HR" | "SUPERVISOR" | "EMPLOYEE";
 
@@ -25,8 +25,6 @@ export type UserShift = {
   name: string;
 
   description: string | null;
-
-  status: ShiftStatus;
 
   start_time: string;
 
