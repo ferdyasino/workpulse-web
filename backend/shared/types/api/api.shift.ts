@@ -1,4 +1,4 @@
-import type { Json } from "../models/json.types.ts";
+import type { Json } from "../database.ts";
 
 export type ShiftStatus = "ACTIVE" | "INACTIVE";
 
@@ -13,51 +13,36 @@ export type ShiftApiRequest =
       action: "SHIFT_CREATE";
       workspace_id: string;
       name: string;
-      description?: string;
+      description?: string | null;
       start_time: string;
       end_time: string;
       timezone: string;
       break_minutes?: number;
       grace_minutes?: number;
       is_overnight?: boolean;
-      metadata?: Json;
+      metadata?: Json | null;
     }
   | {
       action: "SHIFT_UPDATE";
       id: string;
       workspace_id: string;
       name: string;
-      description?: string;
+      description?: string | null;
       start_time: string;
       end_time: string;
       timezone: string;
       break_minutes?: number;
       grace_minutes?: number;
       is_overnight?: boolean;
-      metadata?: Json;
+      metadata?: Json | null;
     }
   | {
-      action: "SHIFT_ACTIVATE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "SHIFT_DEACTIVATE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "SHIFT_DELETE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "SHIFT_RESTORE";
-      id: string;
-      workspace_id: string;
-    }
-  | {
-      action: "SHIFT_HARD_DELETE";
+      action:
+        | "SHIFT_ACTIVATE"
+        | "SHIFT_DEACTIVATE"
+        | "SHIFT_DELETE"
+        | "SHIFT_RESTORE"
+        | "SHIFT_HARD_DELETE";
       id: string;
       workspace_id: string;
     };

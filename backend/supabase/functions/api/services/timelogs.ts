@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
+import type { Json, Database } from "@shared/types/database.ts";
 
-import type { Json, SubmitTimeLogRequest } from "@shared/types";
+import type { SubmitTimeLogRequest } from "@shared/types/models/attendance.types.ts";
 
 import { resolveWorkDate } from "./attendance/workdate.ts";
 import { resolveUserShift } from "./user_shift_resolver.ts";

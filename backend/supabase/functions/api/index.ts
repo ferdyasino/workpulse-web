@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { handleRequest } from "./routes/index.ts";
 import type { ApiRequest } from "@shared/types/api/api.request.ts";
 
-import type { Database } from "./types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

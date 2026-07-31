@@ -1,28 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
-type ShiftPayload = {
-  workspace_id: string;
-  name: string;
-  description?: string;
-  start_time: string;
-  end_time: string;
-  timezone: string;
-  break_minutes?: number;
-  grace_minutes?: number;
-  is_overnight?: boolean;
-  metadata?: Database["public"]["Tables"]["shifts"]["Insert"]["metadata"];
-};
-
-type UpdateShiftPayload = ShiftPayload & {
-  id: string;
-};
-
-type ShiftActionPayload = {
-  id: string;
-  workspace_id: string;
-};
+import type {
+  ShiftPayload,
+  UpdateShiftPayload,
+  ShiftActionPayload,
+} from "@shared/types/models/shifts.type.ts";
 
 const SHIFT_SELECT = `
   id,
@@ -257,14 +241,14 @@ async function updateShiftStatus(
   return data;
 }
 
-export async function activateShift(
+export function activateShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftActionPayload,
 ) {
   return updateShiftStatus(supabaseAdmin, payload, "ACTIVE");
 }
 
-export async function deactivateShift(
+export function deactivateShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftActionPayload,
 ) {

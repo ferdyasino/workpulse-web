@@ -1,4 +1,4 @@
-import type { Tables } from "../../types/database.ts";
+import type { Tables } from "@shared/types/database.ts";
 
 import type {
   AttendanceSession,

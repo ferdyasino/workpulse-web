@@ -1,4 +1,4 @@
-import type { Json } from "../models/json.types.ts";
+import type { Json } from "../database.ts";
 
 export type UserShiftOverrideActionPayload =
   | {

@@ -1,5 +1,3 @@
-import type { Json } from "../models/json.types.ts";
-
 export type DepartmentApiRequest =
   | {
       action: "DEPARTMENT_LIST";

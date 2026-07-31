@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
-import type { Json } from "@shared/types/models/json.types.ts";
+import type { Json, Database } from "@shared/types/database.ts";
 
 const USER_SHIFT_OVERRIDE_SELECT = `
   id,
@@ -81,14 +80,60 @@ function normalizeRelation<T>(value: T | T[] | null | undefined) {
   return value ?? null;
 }
 
-function normalizeUserShiftOverride(data: any) {
+type UserShiftOverrideRelation = {
+  users:
+    | {
+        id: string;
+        display_name: string;
+        email: string;
+      }
+    | {
+        id: string;
+        display_name: string;
+        email: string;
+      }[]
+    | null;
+
+  shifts:
+    | {
+        id: string;
+        name: string;
+        description: string | null;
+        start_time: string;
+        end_time: string;
+        timezone: string;
+        grace_minutes: number;
+        break_minutes: number;
+        is_overnight: boolean;
+        status: string;
+        deleted_at: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        description: string | null;
+        start_time: string;
+        end_time: string;
+        timezone: string;
+        grace_minutes: number;
+        break_minutes: number;
+        is_overnight: boolean;
+        status: string;
+        deleted_at: string | null;
+      }[]
+    | null;
+};
+
+function normalizeUserShiftOverride(data: UserShiftOverrideRelation | null) {
   if (!data) {
     return null;
   }
 
   return {
     ...data,
+
     users: normalizeRelation(data.users),
+
     shifts: normalizeRelation(data.shifts),
   };
 }

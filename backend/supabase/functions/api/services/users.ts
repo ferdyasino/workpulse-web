@@ -1,16 +1,63 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 import type {
-  EmployeeListItem,
+  UserListItem,
   UserContext,
   UserRole,
   EmploymentStatus,
   EmploymentType,
+  CreateUserPayload,
+  UpdateUserPayload,
+  UserActionPayload,
 } from "@shared/types/models/user.types.ts";
 
 import { getCurrentUserShift } from "./user_shifts.ts";
+
+const USER_SELECT = `
+  id,
+  workspace_id,
+  employee_no,
+
+  first_name,
+  middle_name,
+  last_name,
+  display_name,
+
+  email,
+  avatar_url,
+
+  department_id,
+  position_id,
+
+  role,
+  employment_status,
+  employment_type,
+
+  auth_enabled,
+  login_provider,
+
+  hire_date,
+  invited_at,
+  last_login_at,
+
+  metadata,
+
+  created_at,
+  updated_at,
+  deleted_at,
+
+  department:departments (
+    id,
+    name
+  ),
+
+  position:positions (
+    id,
+    title
+  )
+`;
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -26,33 +73,41 @@ function isActiveShift(item: {
   );
 }
 
+async function ensureUniqueEmail(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspace_id: string,
+  email: string,
+  excludeId?: string,
+) {
+  let query = supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("workspace_id", workspace_id)
+    .eq("email", email)
+    .is("deleted_at", null);
+
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    throw new Error("A user with this email already exists.");
+  }
+}
+
 export async function getUserContext(
   supabaseAdmin: SupabaseClient<Database>,
   email: string,
 ): Promise<UserContext> {
   const { data: user, error } = await supabaseAdmin
     .from("users")
-    .select(
-      `
-        id,
-        email,
-        display_name,
-        avatar_url,
-        role,
-        employment_status,
-        workspace_id,
-
-        department:departments (
-          id,
-          name
-        ),
-
-        position:positions (
-          id,
-          title
-        )
-      `,
-    )
+    .select(USER_SELECT)
     .eq("email", email)
     .is("deleted_at", null)
     .maybeSingle();
@@ -105,23 +160,14 @@ export async function getUserContext(
     shift: assignment
       ? {
           id: assignment.shift.id,
-
           name: assignment.shift.name,
-
           description: assignment.shift.description,
-
           start_time: assignment.shift.start_time,
-
           end_time: assignment.shift.end_time,
-
           timezone: assignment.shift.timezone,
-
           grace_minutes: assignment.shift.grace_minutes,
-
           break_minutes: assignment.shift.break_minutes,
-
           is_overnight: assignment.shift.is_overnight,
-
           effective_from: assignment.effective_from,
         }
       : null,
@@ -131,51 +177,57 @@ export async function getUserContext(
 export async function listUsers(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
-): Promise<EmployeeListItem[]> {
-  const { data, error } = await supabaseAdmin
+  includeDeleted = false,
+): Promise<UserListItem[]> {
+  let query = supabaseAdmin
     .from("users")
     .select(
       `
-        id,
-        employee_no,
-        email,
-        display_name,
-        avatar_url,
-        role,
-        employment_status,
-        employment_type,
-        created_at,
+      id,
+      employee_no,
+      email,
+      display_name,
+      avatar_url,
+      role,
+      employment_status,
+      employment_type,
+      deleted_at,
 
-        department:departments (
+      department:departments (
+        name
+      ),
+
+      position:positions (
+        title
+      ),
+
+      user_shifts (
+        effective_from,
+        effective_to,
+        deleted_at,
+
+        shifts (
           name
-        ),
-
-        position:positions (
-          title
-        ),
-
-        user_shifts (
-          effective_from,
-          effective_to,
-          deleted_at,
-
-          shifts (
-            name
-          )
         )
-      `,
+      )
+    `,
     )
     .eq("workspace_id", workspace_id)
-    .is("deleted_at", null)
     .order("created_at", {
       ascending: false,
     });
+
+  if (!includeDeleted) {
+    query = query.is("deleted_at", null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw error;
   }
 
-  return data.map((user) => {
+  return (data ?? []).map((user) => {
     const activeShift = user.user_shifts?.find(isActiveShift);
 
     return {
@@ -195,6 +247,8 @@ export async function listUsers(
 
       employment_type: user.employment_type as EmploymentType,
 
+      deleted_at: user.deleted_at,
+
       department: user.department?.name ?? null,
 
       position: user.position?.title ?? null,
@@ -202,4 +256,230 @@ export async function listUsers(
       shift: activeShift?.shifts?.name ?? null,
     };
   });
+}
+
+export async function getUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspace_id: string,
+  id: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select(USER_SELECT)
+    .eq("workspace_id", workspace_id)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: CreateUserPayload,
+) {
+  await ensureUniqueEmail(supabaseAdmin, payload.workspace_id, payload.email);
+
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .insert({
+      id: crypto.randomUUID(),
+
+      workspace_id: payload.workspace_id,
+
+      employee_no: payload.employee_no,
+
+      first_name: payload.first_name,
+
+      middle_name: payload.middle_name ?? null,
+
+      last_name: payload.last_name,
+
+      display_name: payload.display_name,
+
+      email: payload.email,
+
+      avatar_url: payload.avatar_url ?? null,
+
+      department_id: payload.department_id ?? null,
+
+      position_id: payload.position_id ?? null,
+
+      role: payload.role ?? "EMPLOYEE",
+
+      employment_status: payload.employment_status ?? "ACTIVE",
+
+      employment_type: payload.employment_type ?? "FULL_TIME",
+
+      auth_enabled: payload.auth_enabled ?? false,
+
+      login_provider: payload.login_provider ?? "EMAIL",
+
+      metadata: payload.metadata ?? {},
+
+      created_at: now,
+
+      updated_at: now,
+    })
+    .select(USER_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UpdateUserPayload & {
+    workspace_id: string;
+  },
+) {
+  if (payload.email) {
+    await ensureUniqueEmail(
+      supabaseAdmin,
+      payload.workspace_id,
+      payload.email,
+      payload.id,
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select(USER_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function updateUserStatus(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+  status: EmploymentStatus,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      employment_status: status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select(USER_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export function activateUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  return updateUserStatus(supabaseAdmin, payload, "ACTIVE");
+}
+
+export function deactivateUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  return updateUserStatus(supabaseAdmin, payload, "INACTIVE");
+}
+
+export async function deleteUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    success: true,
+    id: data.id,
+  };
+}
+
+export async function restoreUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .not("deleted_at", "is", null)
+    .select(USER_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function hardDeleteUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .delete()
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error("User not found.");
+  }
+
+  return {
+    success: true,
+    id: data.id,
+  };
 }

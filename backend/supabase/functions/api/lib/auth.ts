@@ -4,7 +4,7 @@ import {
   type User,
 } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;

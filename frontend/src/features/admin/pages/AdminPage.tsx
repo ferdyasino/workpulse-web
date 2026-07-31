@@ -17,7 +17,7 @@ export default function AdminPage() {
 
   const { user } = useAuth();
 
-  const { users } = useUsers(user?.workspace_id);
+  const { users } = useUsers();
 
   console.log("ADMIN AUTH USER:", user);
   console.log("ADMIN USERS:", users);

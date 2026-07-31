@@ -1,21 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ApiRequest } from "@shared/types/api/api.request.ts";
-
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 import { getAuthenticatedUser } from "../lib/auth.ts";
 
 import { handleAuthRoutes } from "./auth.routes.ts";
 import { handleContextRoutes } from "./context.routes.ts";
-import { handleUserRoutes } from "./user.routes.ts";
+
 import { handleDepartmentRoutes } from "./department.routes.ts";
 import { handlePositionRoutes } from "./position.routes.ts";
 import { handleShiftRoutes } from "./shift.routes.ts";
+
+import { handleUserRoutes } from "./user.routes.ts";
 import { handleUserShiftRoutes } from "./user-shift.routes.ts";
+import { handleUserShiftOverrideRoutes } from "./user-shift-override.routes.ts";
+
 import { handleAttendanceRoutes } from "./attendance.routes.ts";
 import { handleTimelogRoutes } from "./timelog.routes.ts";
-import { handleUserShiftOverrideRoutes } from "./user-shift-override.routes.ts";
 
 export async function handleRequest(
   req: Request,
@@ -49,12 +51,6 @@ export async function handleRequest(
     return contextResult;
   }
 
-  const userResult = await handleUserRoutes(ctx);
-
-  if (userResult !== null) {
-    return userResult;
-  }
-
   const departmentResult = await handleDepartmentRoutes(ctx);
 
   if (departmentResult !== null) {
@@ -73,7 +69,12 @@ export async function handleRequest(
     return shiftResult;
   }
 
-  // NEW
+  const userResult = await handleUserRoutes(ctx);
+
+  if (userResult !== null) {
+    return userResult;
+  }
+
   const userShiftResult = await handleUserShiftRoutes(ctx);
 
   if (userShiftResult !== null) {

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getUserContext } from "./users.ts";
 import { getWorkspace } from "./workspace.ts";
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 export async function getApplicationContext(
   supabaseAdmin: SupabaseClient<Database>,

@@ -29,7 +29,7 @@ export type EmployeeListResponse = {
 };
 
 export type EmployeeListRequest = {
-  action: "EMPLOYEE_LIST";
+  action: "USER_LIST";
 };
 
 export type AdminUser = {

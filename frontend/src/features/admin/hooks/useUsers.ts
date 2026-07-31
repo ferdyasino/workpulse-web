@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getUsers, type User } from "../services/users.service";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
-export function useUsers(workspaceId?: string) {
+import {
+  activateUser as activateUserService,
+  createUser as createUserService,
+  deactivateUser as deactivateUserService,
+  deleteUser as deleteUserService,
+  getUsers,
+  hardDeleteUser as hardDeleteUserService,
+  restoreUser as restoreUserService,
+  updateUser as updateUserService,
+  type SaveUserRequest,
+  type UpdateUserRequest,
+  type User,
+} from "../services/users.service";
+
+export function useUsers() {
+  const { user } = useAuth();
+
+  const workspaceId = user?.workspace_id;
+
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+
+  const loadUsers = useCallback(async () => {
     if (!workspaceId) {
       setUsers([]);
       setLoading(false);
@@ -18,26 +39,157 @@ export function useUsers(workspaceId?: string) {
       setLoading(true);
       setError(null);
 
-      const users = await getUsers({
+      const data = await getUsers({
         workspace_id: workspaceId,
+        include_inactive: includeInactive,
+        include_deleted: includeDeleted,
       });
 
-      setUsers(users);
+      setUsers(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, includeInactive, includeDeleted]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void loadUsers();
+  }, [loadUsers]);
+
+  const createUser = useCallback(
+    async (payload: Omit<SaveUserRequest, "workspace_id">) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await createUserService({
+        workspace_id: workspaceId,
+        ...payload,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const updateUser = useCallback(
+    async (payload: Omit<UpdateUserRequest, "workspace_id">) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await updateUserService({
+        workspace_id: workspaceId,
+        ...payload,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const activateUser = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await activateUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const deactivateUser = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await deactivateUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const deleteUser = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await deleteUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const restoreUser = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await restoreUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
+
+  const hardDeleteUser = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      await hardDeleteUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+
+      await loadUsers();
+    },
+    [workspaceId, loadUsers],
+  );
 
   return {
     users,
     loading,
     error,
-    refresh,
+
+    includeInactive,
+    includeDeleted,
+
+    setIncludeInactive,
+    setIncludeDeleted,
+
+    refresh: loadUsers,
+
+    createUser,
+    updateUser,
+
+    activateUser,
+    deactivateUser,
+
+    deleteUser,
+    restoreUser,
+    hardDeleteUser,
   };
 }

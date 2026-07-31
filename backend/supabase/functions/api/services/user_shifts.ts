@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "../types/database.ts";
+import type { Database } from "@shared/types/database.ts";
 
 const USER_SHIFT_SELECT = `
   id,
@@ -84,7 +84,33 @@ export type CurrentUserShift = {
   };
 };
 
-function normalizeShift(shift: any) {
+type ShiftRelation = {
+  id: string;
+
+  name: string;
+
+  description: string | null;
+
+  start_time: string;
+
+  end_time: string;
+
+  timezone: string;
+
+  grace_minutes: number;
+
+  break_minutes: number;
+
+  is_overnight: boolean;
+
+  status: string;
+
+  deleted_at: string | null;
+};
+
+function normalizeShift(
+  shift: ShiftRelation | ShiftRelation[] | null | undefined,
+): ShiftRelation | null {
   if (Array.isArray(shift)) {
     return shift[0] ?? null;
   }
