@@ -12,8 +12,9 @@ const USER_SHIFT_SELECT = `
   deleted_at,
   created_at,
   updated_at,
+  metadata,
 
-  shifts!inner (
+  shifts (
     id,
     name,
     description,
@@ -22,7 +23,9 @@ const USER_SHIFT_SELECT = `
     timezone,
     grace_minutes,
     break_minutes,
-    is_overnight
+    is_overnight,
+    status,
+    deleted_at
   )
 `;
 
@@ -38,6 +41,8 @@ type UserShiftPayload = {
   effective_from: string;
 
   effective_to?: string | null;
+
+  metadata?: Database["public"]["Tables"]["user_shifts"]["Insert"]["metadata"];
 };
 
 type UpdateUserShiftPayload = UserShiftPayload & {
@@ -75,6 +80,23 @@ export type CurrentUserShift = {
   };
 };
 
+function normalizeShift(shift: any) {
+  if (Array.isArray(shift)) {
+    return shift[0] ?? null;
+  }
+
+  return shift ?? null;
+}
+
+function validateEffectiveDates(
+  effective_from: string,
+  effective_to?: string | null,
+) {
+  if (effective_to && effective_from > effective_to) {
+    throw new Error("effective_from cannot be later than effective_to.");
+  }
+}
+
 export async function getCurrentUserShift(
   supabaseAdmin: SupabaseClient<Database>,
   workspaceId: string,
@@ -103,7 +125,7 @@ export async function getCurrentUserShift(
     return null;
   }
 
-  const shift = Array.isArray(data.shifts) ? data.shifts[0] : data.shifts;
+  const shift = normalizeShift(data.shifts);
 
   if (!shift) {
     return null;
@@ -111,14 +133,25 @@ export async function getCurrentUserShift(
 
   return {
     assignment_id: data.id,
-
     attendance_policy_id: data.attendance_policy_id,
-
     effective_from: data.effective_from,
-
     effective_to: data.effective_to,
 
-    shift,
+    shift: {
+      id: shift.id,
+      name: shift.name,
+      description: shift.description,
+
+      start_time: shift.start_time,
+      end_time: shift.end_time,
+
+      timezone: shift.timezone,
+
+      grace_minutes: shift.grace_minutes,
+      break_minutes: shift.break_minutes,
+
+      is_overnight: shift.is_overnight,
+    },
   };
 }
 
@@ -126,16 +159,22 @@ export async function listUserShifts(
   supabaseAdmin: SupabaseClient<Database>,
   workspaceId: string,
   userId: string,
+  includeDeleted = false,
 ) {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("user_shifts")
     .select(USER_SHIFT_SELECT)
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
-    .is("deleted_at", null)
     .order("effective_from", {
       ascending: false,
     });
+
+  if (!includeDeleted) {
+    query = query.is("deleted_at", null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw error;
@@ -143,9 +182,7 @@ export async function listUserShifts(
 
   return (data ?? []).map((assignment) => ({
     ...assignment,
-    shifts: Array.isArray(assignment.shifts)
-      ? assignment.shifts[0]
-      : assignment.shifts,
+    shifts: normalizeShift(assignment.shifts),
   }));
 }
 
@@ -159,7 +196,6 @@ export async function getUserShift(
     .select(USER_SHIFT_SELECT)
     .eq("workspace_id", workspaceId)
     .eq("id", assignmentId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (error) {
@@ -172,35 +208,58 @@ export async function getUserShift(
 
   return {
     ...data,
-    shifts: Array.isArray(data.shifts) ? data.shifts[0] : data.shifts,
+    shifts: normalizeShift(data.shifts),
   };
 }
 
-export async function createUserShift(
+async function ensureNoOverlap(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: UserShiftPayload,
+  payload: {
+    workspace_id: string;
+    user_id: string;
+    effective_from: string;
+    effective_to?: string | null;
+    excludeId?: string;
+  },
 ) {
-  if (payload.effective_to && payload.effective_from > payload.effective_to) {
-    throw new Error("effective_from cannot be later than effective_to.");
-  }
-
-  const { data: overlap, error: overlapError } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("user_shifts")
     .select("id")
     .eq("workspace_id", payload.workspace_id)
     .eq("user_id", payload.user_id)
     .is("deleted_at", null)
     .lte("effective_from", payload.effective_to ?? "9999-12-31")
-    .or(`effective_to.is.null,effective_to.gte.${payload.effective_from}`)
-    .limit(1);
+    .or(`effective_to.is.null,effective_to.gte.${payload.effective_from}`);
 
-  if (overlapError) {
-    throw overlapError;
+  if (payload.excludeId) {
+    query = query.neq("id", payload.excludeId);
   }
 
-  if ((overlap ?? []).length > 0) {
+  const { data, error } = await query.limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if ((data ?? []).length > 0) {
     throw new Error("The assignment overlaps an existing user shift.");
   }
+}
+
+export async function createUserShift(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserShiftPayload,
+) {
+  validateEffectiveDates(payload.effective_from, payload.effective_to);
+
+  await ensureNoOverlap(supabaseAdmin, {
+    workspace_id: payload.workspace_id,
+    user_id: payload.user_id,
+    effective_from: payload.effective_from,
+    effective_to: payload.effective_to,
+  });
+
+  const now = new Date().toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("user_shifts")
@@ -208,11 +267,16 @@ export async function createUserShift(
       workspace_id: payload.workspace_id,
       user_id: payload.user_id,
       shift_id: payload.shift_id,
+
       attendance_policy_id: payload.attendance_policy_id ?? null,
+
       effective_from: payload.effective_from,
       effective_to: payload.effective_to ?? null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+
+      metadata: payload.metadata ?? {},
+
+      created_at: now,
+      updated_at: now,
     })
     .select(USER_SHIFT_SELECT)
     .single();
@@ -223,7 +287,7 @@ export async function createUserShift(
 
   return {
     ...data,
-    shifts: Array.isArray(data.shifts) ? data.shifts[0] : data.shifts,
+    shifts: normalizeShift(data.shifts),
   };
 }
 
@@ -231,36 +295,28 @@ export async function updateUserShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UpdateUserShiftPayload,
 ) {
-  if (payload.effective_to && payload.effective_from > payload.effective_to) {
-    throw new Error("effective_from cannot be later than effective_to.");
-  }
+  validateEffectiveDates(payload.effective_from, payload.effective_to);
 
-  const { data: overlap, error: overlapError } = await supabaseAdmin
-    .from("user_shifts")
-    .select("id")
-    .eq("workspace_id", payload.workspace_id)
-    .eq("user_id", payload.user_id)
-    .neq("id", payload.id)
-    .is("deleted_at", null)
-    .lte("effective_from", payload.effective_to ?? "9999-12-31")
-    .or(`effective_to.is.null,effective_to.gte.${payload.effective_from}`)
-    .limit(1);
-
-  if (overlapError) {
-    throw overlapError;
-  }
-
-  if ((overlap ?? []).length > 0) {
-    throw new Error("The assignment overlaps an existing user shift.");
-  }
+  await ensureNoOverlap(supabaseAdmin, {
+    workspace_id: payload.workspace_id,
+    user_id: payload.user_id,
+    effective_from: payload.effective_from,
+    effective_to: payload.effective_to,
+    excludeId: payload.id,
+  });
 
   const { data, error } = await supabaseAdmin
     .from("user_shifts")
     .update({
       shift_id: payload.shift_id,
+
       attendance_policy_id: payload.attendance_policy_id ?? null,
+
       effective_from: payload.effective_from,
       effective_to: payload.effective_to ?? null,
+
+      metadata: payload.metadata ?? {},
+
       updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
@@ -275,7 +331,7 @@ export async function updateUserShift(
 
   return {
     ...data,
-    shifts: Array.isArray(data.shifts) ? data.shifts[0] : data.shifts,
+    shifts: normalizeShift(data.shifts),
   };
 }
 
@@ -283,15 +339,19 @@ export async function deleteUserShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserShiftActionPayload,
 ) {
-  const { error } = await supabaseAdmin
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
     .from("user_shifts")
     .update({
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      deleted_at: now,
+      updated_at: now,
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select("id")
+    .single();
 
   if (error) {
     throw error;
@@ -299,6 +359,7 @@ export async function deleteUserShift(
 
   return {
     success: true,
+    id: data.id,
   };
 }
 
@@ -306,6 +367,37 @@ export async function restoreUserShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserShiftActionPayload,
 ) {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("user_shifts")
+    .select(
+      `
+          id,
+          user_id,
+          effective_from,
+          effective_to
+        `,
+    )
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .not("deleted_at", "is", null)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  if (!existing) {
+    throw new Error("User shift assignment not found.");
+  }
+
+  await ensureNoOverlap(supabaseAdmin, {
+    workspace_id: payload.workspace_id,
+    user_id: existing.user_id,
+    effective_from: existing.effective_from,
+    effective_to: existing.effective_to,
+    excludeId: payload.id,
+  });
+
   const { data, error } = await supabaseAdmin
     .from("user_shifts")
     .update({
@@ -314,7 +406,6 @@ export async function restoreUserShift(
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
-    .not("deleted_at", "is", null)
     .select(USER_SHIFT_SELECT)
     .single();
 
@@ -324,7 +415,7 @@ export async function restoreUserShift(
 
   return {
     ...data,
-    shifts: Array.isArray(data.shifts) ? data.shifts[0] : data.shifts,
+    shifts: normalizeShift(data.shifts),
   };
 }
 
@@ -332,17 +423,24 @@ export async function hardDeleteUserShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserShiftActionPayload,
 ) {
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("user_shifts")
     .delete()
     .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id);
+    .eq("workspace_id", payload.workspace_id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw error;
   }
 
+  if (!data) {
+    throw new Error("User shift assignment not found.");
+  }
+
   return {
     success: true,
+    id: data.id,
   };
 }

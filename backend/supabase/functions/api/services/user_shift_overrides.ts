@@ -13,6 +13,7 @@ const USER_SHIFT_OVERRIDE_SELECT = `
   reason,
   metadata,
   created_at,
+  updated_at,
   deleted_at,
 
   users (
@@ -30,7 +31,9 @@ const USER_SHIFT_OVERRIDE_SELECT = `
     timezone,
     grace_minutes,
     break_minutes,
-    is_overnight
+    is_overnight,
+    status,
+    deleted_at
   )
 `;
 
@@ -38,19 +41,26 @@ export type CreateUserShiftOverridePayload = {
   workspace_id: string;
   user_id: string;
   shift_id: string;
+
   effective_from: string;
   effective_to?: string | null;
+
   reason?: string | null;
+
   metadata?: Json | null;
 };
 
 export type UpdateUserShiftOverridePayload = {
   workspace_id: string;
   id: string;
+
   shift_id?: string;
+
   effective_from?: string;
   effective_to?: string | null;
+
   reason?: string | null;
+
   metadata?: Json | null;
 };
 
@@ -81,6 +91,15 @@ function normalizeUserShiftOverride(data: any) {
     users: normalizeRelation(data.users),
     shifts: normalizeRelation(data.shifts),
   };
+}
+
+function validateEffectiveDates(
+  effective_from: string,
+  effective_to?: string | null,
+) {
+  if (effective_to && effective_from > effective_to) {
+    throw new Error("effective_from cannot be later than effective_to.");
+  }
 }
 
 async function ensureNoOverlappingOverrides(
@@ -188,37 +207,29 @@ export async function createUserShiftOverride(
   supabaseAdmin: SupabaseClient<Database>,
   payload: CreateUserShiftOverridePayload,
 ) {
-  const {
-    workspace_id,
-    user_id,
-    shift_id,
-    effective_from,
-    effective_to,
-    reason,
-    metadata,
-  } = payload;
-
-  if (effective_to && effective_from > effective_to) {
-    throw new Error("effective_from cannot be later than effective_to.");
-  }
+  validateEffectiveDates(payload.effective_from, payload.effective_to);
 
   await ensureNoOverlappingOverrides(supabaseAdmin, {
-    workspace_id,
-    user_id,
-    effective_from,
-    effective_to: effective_to ?? "9999-12-31",
+    workspace_id: payload.workspace_id,
+    user_id: payload.user_id,
+    effective_from: payload.effective_from,
+    effective_to: payload.effective_to ?? "9999-12-31",
   });
+
+  const now = new Date().toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("user_shift_overrides")
     .insert({
-      workspace_id,
-      user_id,
-      shift_id,
-      effective_from,
-      effective_to: effective_to ?? null,
-      reason: reason ?? null,
-      metadata: metadata ?? null,
+      workspace_id: payload.workspace_id,
+      user_id: payload.user_id,
+      shift_id: payload.shift_id,
+      effective_from: payload.effective_from,
+      effective_to: payload.effective_to ?? null,
+      reason: payload.reason ?? null,
+      metadata: payload.metadata ?? null,
+      created_at: now,
+      updated_at: now,
     })
     .select(USER_SHIFT_OVERRIDE_SELECT)
     .single();
@@ -235,8 +246,8 @@ export async function updateUserShiftOverride(
   payload: UpdateUserShiftOverridePayload,
 ) {
   const {
-    id,
     workspace_id,
+    id,
     shift_id,
     effective_from,
     effective_to,
@@ -248,10 +259,10 @@ export async function updateUserShiftOverride(
     .from("user_shift_overrides")
     .select(
       `
-        user_id,
-        effective_from,
-        effective_to
-        `,
+      user_id,
+      effective_from,
+      effective_to
+      `,
     )
     .eq("workspace_id", workspace_id)
     .eq("id", id)
@@ -267,9 +278,7 @@ export async function updateUserShiftOverride(
   const nextTo =
     effective_to !== undefined ? effective_to : existing.effective_to;
 
-  if (nextTo && nextFrom > nextTo) {
-    throw new Error("effective_from cannot be later than effective_to.");
-  }
+  validateEffectiveDates(nextFrom, nextTo);
 
   await ensureNoOverlappingOverrides(supabaseAdmin, {
     workspace_id,
@@ -280,11 +289,27 @@ export async function updateUserShiftOverride(
   });
 
   const updateData = {
-    ...(shift_id !== undefined && { shift_id }),
-    ...(effective_from !== undefined && { effective_from }),
-    ...(effective_to !== undefined && { effective_to }),
-    ...(reason !== undefined && { reason }),
-    ...(metadata !== undefined && { metadata }),
+    ...(shift_id !== undefined && {
+      shift_id,
+    }),
+
+    ...(effective_from !== undefined && {
+      effective_from,
+    }),
+
+    ...(effective_to !== undefined && {
+      effective_to,
+    }),
+
+    ...(reason !== undefined && {
+      reason,
+    }),
+
+    ...(metadata !== undefined && {
+      metadata,
+    }),
+
+    updated_at: new Date().toISOString(),
   };
 
   const { data, error } = await supabaseAdmin
@@ -307,20 +332,31 @@ export async function deleteUserShiftOverride(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserShiftOverrideActionPayload,
 ) {
-  const { error } = await supabaseAdmin
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
     .from("user_shift_overrides")
     .update({
-      deleted_at: new Date().toISOString(),
+      deleted_at: now,
+      updated_at: now,
     })
     .eq("workspace_id", payload.workspace_id)
-    .eq("id", payload.id);
+    .eq("id", payload.id)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw error;
   }
 
+  if (!data) {
+    throw new Error("User shift override not found.");
+  }
+
   return {
     success: true,
+    id: data.id,
   };
 }
 
@@ -330,22 +366,22 @@ export async function restoreUserShiftOverride(
 ) {
   const { workspace_id, id } = payload;
 
-  const { data: existing, error } = await supabaseAdmin
+  const { data: existing, error: existingError } = await supabaseAdmin
     .from("user_shift_overrides")
     .select(
       `
-        user_id,
-        effective_from,
-        effective_to,
-        deleted_at
-        `,
+      user_id,
+      effective_from,
+      effective_to
+      `,
     )
     .eq("workspace_id", workspace_id)
     .eq("id", id)
+    .not("deleted_at", "is", null)
     .maybeSingle();
 
-  if (error) {
-    throw error;
+  if (existingError) {
+    throw existingError;
   }
 
   if (!existing) {
@@ -360,18 +396,20 @@ export async function restoreUserShiftOverride(
     exclude_id: id,
   });
 
-  const { data, error: updateError } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("user_shift_overrides")
     .update({
       deleted_at: null,
+      updated_at: new Date().toISOString(),
     })
     .eq("workspace_id", workspace_id)
     .eq("id", id)
+    .not("deleted_at", "is", null)
     .select(USER_SHIFT_OVERRIDE_SELECT)
     .single();
 
-  if (updateError) {
-    throw updateError;
+  if (error) {
+    throw error;
   }
 
   return normalizeUserShiftOverride(data);
@@ -381,17 +419,24 @@ export async function hardDeleteUserShiftOverride(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserShiftOverrideActionPayload,
 ) {
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("user_shift_overrides")
     .delete()
     .eq("workspace_id", payload.workspace_id)
-    .eq("id", payload.id);
+    .eq("id", payload.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw error;
   }
 
+  if (!data) {
+    throw new Error("User shift override not found.");
+  }
+
   return {
     success: true,
+    id: data.id,
   };
 }

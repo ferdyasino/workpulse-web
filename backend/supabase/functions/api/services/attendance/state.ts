@@ -80,20 +80,38 @@ export async function getCurrentAttendanceState(
 
   const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
 
-  const targetDate = payload.date ?? now.toISOString().slice(0, 10);
+  /*
+   * Date used only for selecting assignment/override.
+   */
+  const lookupDate = payload.date ?? now.toISOString().slice(0, 10);
 
   const resolved = await resolveUserShift(supabaseAdmin, {
     workspace_id,
     user_id: context.user_id,
-    date: targetDate,
+    date: lookupDate,
   });
 
   if (!resolved) {
-    return createEmptyState(targetDate);
+    return createEmptyState(lookupDate);
   }
 
   const shift = resolved.shift;
-  const assignmentId = resolved.assignment_id;
+
+  /*
+   * IMPORTANT:
+   * assignment_id may be:
+   * - user_shifts.id
+   * - user_shift_overrides.id
+   *
+   * user_shift_id is always the FK target for time_logs.
+   */
+  const userShiftId = resolved.user_shift_id;
+
+  if (!userShiftId) {
+    throw new Error(
+      "Resolved override does not have a matching user shift assignment.",
+    );
+  }
 
   const timezone = shift.timezone;
 
@@ -112,7 +130,7 @@ export async function getCurrentAttendanceState(
     .select("*")
     .eq("workspace_id", workspace_id)
     .eq("user_id", context.user_id)
-    .eq("user_shift_id", assignmentId)
+    .eq("user_shift_id", userShiftId)
     .eq("work_date", workDate)
     .order("event_time_utc");
 
@@ -131,13 +149,26 @@ export async function getCurrentAttendanceState(
     JSON.stringify({
       email,
       timestamp: now.toISOString(),
-      targetDate,
+
+      resolver: {
+        source: resolved.source,
+        assignment_id: resolved.assignment_id,
+        user_shift_id: userShiftId,
+      },
+
+      lookupDate,
       workDate,
-      shift,
-      source: resolved.source,
-      assignment: assignmentId,
-      timezone,
+
+      shift: {
+        id: shift.id,
+        name: shift.name,
+        timezone: shift.timezone,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+      },
+
       logs: logs.length,
+
       state,
     }),
   );

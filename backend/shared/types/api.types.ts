@@ -3,6 +3,7 @@ import type { PositionApiRequest } from "./api.position.ts";
 import type { SettingsApiRequest } from "./api.settings.ts";
 import type { ShiftApiRequest } from "./api.shift.ts";
 import type { UserShiftOverrideApiRequest } from "./api.user-shift-override.ts";
+import type { UserShiftApiRequest } from "./api.user-shift.ts";
 import type {
   AttendanceStateRequest,
   SubmitTimeLogRequest,
@@ -27,6 +28,7 @@ export type ApiRequest =
   | ShiftApiRequest
   | SettingsApiRequest
   | UserShiftOverrideApiRequest
+  | UserShiftApiRequest
   | ({
       action: "TIMELOG_CREATE";
     } & SubmitTimeLogRequest)

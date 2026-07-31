@@ -15,6 +15,10 @@ type ShiftPayload = {
   metadata?: Database["public"]["Tables"]["shifts"]["Insert"]["metadata"];
 };
 
+type UpdateShiftPayload = ShiftPayload & {
+  id: string;
+};
+
 type ShiftActionPayload = {
   id: string;
   workspace_id: string;
@@ -31,9 +35,57 @@ const SHIFT_SELECT = `
   break_minutes,
   is_overnight,
   status,
+  metadata,
   deleted_at,
-  created_at
+  created_at,
+  updated_at
 `;
+
+function resolveOvernight(
+  start_time: string,
+  end_time: string,
+  provided?: boolean,
+) {
+  if (provided !== undefined) {
+    return provided;
+  }
+
+  return end_time <= start_time;
+}
+
+function validateTime(start_time: string, end_time: string) {
+  if (!start_time || !end_time) {
+    throw new Error("Shift start_time and end_time are required.");
+  }
+}
+
+async function ensureUniqueShiftName(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspace_id: string,
+  name: string,
+  excludeId?: string,
+) {
+  let query = supabaseAdmin
+    .from("shifts")
+    .select("id")
+    .eq("workspace_id", workspace_id)
+    .eq("name", name)
+    .is("deleted_at", null);
+
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    throw new Error("A shift with this name already exists.");
+  }
+}
 
 export async function listShifts(
   supabaseAdmin: SupabaseClient<Database>,
@@ -58,22 +110,54 @@ export async function listShifts(
     query = query.eq("status", "ACTIVE");
   }
 
-  const { data, error } = await query.order("name");
+  const { data, error } = await query.order("name", {
+    ascending: true,
+  });
 
   if (error) {
     throw error;
   }
 
-  return data.map((shift) => ({
+  return (data ?? []).map((shift) => ({
     ...shift,
     status: shift.deleted_at ? "DELETED" : shift.status,
   }));
+}
+
+export async function getShift(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspace_id: string,
+  id: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("shifts")
+    .select(SHIFT_SELECT)
+    .eq("workspace_id", workspace_id)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function createShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftPayload,
 ) {
+  validateTime(payload.start_time, payload.end_time);
+
+  await ensureUniqueShiftName(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.name,
+  );
+
+  const now = new Date().toISOString();
+
   const { data, error } = await supabaseAdmin
     .from("shifts")
     .insert({
@@ -85,9 +169,15 @@ export async function createShift(
       timezone: payload.timezone,
       break_minutes: payload.break_minutes ?? 60,
       grace_minutes: payload.grace_minutes ?? 10,
-      is_overnight: payload.is_overnight ?? false,
+      is_overnight: resolveOvernight(
+        payload.start_time,
+        payload.end_time,
+        payload.is_overnight,
+      ),
       metadata: payload.metadata ?? {},
       status: "ACTIVE",
+      created_at: now,
+      updated_at: now,
     })
     .select(SHIFT_SELECT)
     .single();
@@ -101,10 +191,17 @@ export async function createShift(
 
 export async function updateShift(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: ShiftPayload & {
-    id: string;
-  },
+  payload: UpdateShiftPayload,
 ) {
+  validateTime(payload.start_time, payload.end_time);
+
+  await ensureUniqueShiftName(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.name,
+    payload.id,
+  );
+
   const { data, error } = await supabaseAdmin
     .from("shifts")
     .update({
@@ -115,8 +212,37 @@ export async function updateShift(
       timezone: payload.timezone,
       break_minutes: payload.break_minutes ?? 60,
       grace_minutes: payload.grace_minutes ?? 10,
-      is_overnight: payload.is_overnight ?? false,
+      is_overnight: resolveOvernight(
+        payload.start_time,
+        payload.end_time,
+        payload.is_overnight,
+      ),
       metadata: payload.metadata ?? {},
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .is("deleted_at", null)
+    .select(SHIFT_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function updateShiftStatus(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: ShiftActionPayload,
+  status: "ACTIVE" | "INACTIVE",
+) {
+  const { data, error } = await supabaseAdmin
+    .from("shifts")
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
@@ -135,32 +261,27 @@ export async function activateShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftActionPayload,
 ) {
-  const { data, error } = await supabaseAdmin
-    .from("shifts")
-    .update({
-      status: "ACTIVE",
-    })
-    .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id)
-    .is("deleted_at", null)
-    .select(SHIFT_SELECT)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
+  return updateShiftStatus(supabaseAdmin, payload, "ACTIVE");
 }
 
 export async function deactivateShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftActionPayload,
 ) {
+  return updateShiftStatus(supabaseAdmin, payload, "INACTIVE");
+}
+
+export async function deleteShift(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: ShiftActionPayload,
+) {
+  const now = new Date().toISOString();
+
   const { data, error } = await supabaseAdmin
     .from("shifts")
     .update({
-      status: "INACTIVE",
+      deleted_at: now,
+      updated_at: now,
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
@@ -173,28 +294,6 @@ export async function deactivateShift(
   }
 
   return data;
-}
-
-export async function deleteShift(
-  supabaseAdmin: SupabaseClient<Database>,
-  payload: ShiftActionPayload,
-) {
-  const { error } = await supabaseAdmin
-    .from("shifts")
-    .update({
-      deleted_at: new Date().toISOString(),
-    })
-    .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id)
-    .is("deleted_at", null);
-
-  if (error) {
-    throw error;
-  }
-
-  return {
-    success: true,
-  };
 }
 
 export async function restoreShift(
@@ -205,6 +304,7 @@ export async function restoreShift(
     .from("shifts")
     .update({
       deleted_at: null,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
@@ -223,17 +323,24 @@ export async function hardDeleteShift(
   supabaseAdmin: SupabaseClient<Database>,
   payload: ShiftActionPayload,
 ) {
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("shifts")
     .delete()
     .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id);
+    .eq("workspace_id", payload.workspace_id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw error;
   }
 
+  if (!data) {
+    throw new Error("Shift not found.");
+  }
+
   return {
     success: true,
+    id: data.id,
   };
 }

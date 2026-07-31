@@ -463,6 +463,7 @@ export type Database = {
           metadata: Json | null
           reason: string | null
           shift_id: string
+          updated_at: string
           user_id: string
           workspace_id: string
         }
@@ -475,6 +476,7 @@ export type Database = {
           metadata?: Json | null
           reason?: string | null
           shift_id: string
+          updated_at?: string
           user_id: string
           workspace_id: string
         }
@@ -487,6 +489,7 @@ export type Database = {
           metadata?: Json | null
           reason?: string | null
           shift_id?: string
+          updated_at?: string
           user_id?: string
           workspace_id?: string
         }
