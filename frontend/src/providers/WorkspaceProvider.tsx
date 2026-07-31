@@ -3,10 +3,15 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { WorkspaceContext } from "@/features/workspace/context/WorkspaceContext";
-import { listWorkspaces } from "@/features/workspace/services/workspace.service";
-import type { Workspace } from "@/features/workspace/types/workspace.types";
 
-const STORAGE_KEY = "workpulse.active_workspace";
+import {
+  listWorkspaces,
+  getActiveWorkspaceId,
+  setActiveWorkspaceId,
+  clearActiveWorkspace,
+} from "@/features/workspace/services/workspace.service";
+
+import type { Workspace } from "@/features/workspace/types/workspace.types";
 
 interface WorkspaceProviderProps {
   children: ReactNode;
@@ -14,7 +19,9 @@ interface WorkspaceProviderProps {
 
 export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+
   const [workspace, setWorkspaceState] = useState<Workspace | null>(null);
+
   const [loading, setLoading] = useState(true);
 
   const refreshWorkspaces = useCallback(async () => {
@@ -25,7 +32,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
 
       setWorkspaces(data);
 
-      const savedId = localStorage.getItem(STORAGE_KEY);
+      const savedId = getActiveWorkspaceId();
 
       const savedWorkspace = data.find((item) => item.id === savedId);
 
@@ -39,13 +46,22 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       if (activeWorkspace) {
         setWorkspaceState(activeWorkspace);
 
-        localStorage.setItem(STORAGE_KEY, activeWorkspace.id);
+        setActiveWorkspaceId(activeWorkspace.id);
+
+        return;
+      }
+
+      if (data.length > 0) {
+        setWorkspaceState(data[0]);
+
+        setActiveWorkspaceId(data[0].id);
 
         return;
       }
 
       setWorkspaceState(null);
-      localStorage.removeItem(STORAGE_KEY);
+
+      clearActiveWorkspace();
     } finally {
       setLoading(false);
     }
@@ -58,7 +74,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   function setWorkspace(selectedWorkspace: Workspace) {
     setWorkspaceState(selectedWorkspace);
 
-    localStorage.setItem(STORAGE_KEY, selectedWorkspace.id);
+    setActiveWorkspaceId(selectedWorkspace.id);
   }
 
   return (
