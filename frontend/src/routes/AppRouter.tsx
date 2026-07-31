@@ -5,12 +5,14 @@ import LoginPage from "@/features/auth/pages/LoginPage";
 import DashboardPage from "@/features/dashboard/pages/DashboardPage";
 import ReportsPage from "@/features/reports/pages/ReportsPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
+import { WorkspacePage } from "@/features/workspace";
 
 import AppLayout from "@/layouts/AppLayout";
 
 import { AttendanceProvider } from "@/providers/AttendanceProvider";
 
 import ProtectedRoute from "./ProtectedRoute";
+import OwnerOnlyRoute from "./OwnerOnlyRoute";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -44,6 +46,17 @@ export default function AppRouter() {
           element={
             <ProtectedLayout>
               <AdminPage />
+            </ProtectedLayout>
+          }
+        />
+
+        <Route
+          path="/workspace"
+          element={
+            <ProtectedLayout>
+              <OwnerOnlyRoute>
+                <WorkspacePage />
+              </OwnerOnlyRoute>
             </ProtectedLayout>
           }
         />

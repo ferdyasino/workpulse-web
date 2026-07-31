@@ -12,4 +12,6 @@ export const env = {
   supabaseUrl: required(import.meta.env.VITE_SUPABASE_URL, "VITE_SUPABASE_URL"),
 
   supabaseAnonKey: required(import.meta.env.VITE_SUPABASE_ANON_KEY, "VITE_SUPABASE_ANON_KEY"),
+
+  workspaceOwnerEmail: import.meta.env.VITE_WORKSPACE_OWNER_EMAIL ?? "",
 };

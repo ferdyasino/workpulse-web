@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export async function getWorkspace(supabaseAdmin: SupabaseClient) {
+export async function getDefaultWorkspace(supabaseAdmin: SupabaseClient) {
   const { data: workspaces, error } = await supabaseAdmin
     .from("workspaces")
     .select("*")

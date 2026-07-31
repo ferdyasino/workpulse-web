@@ -7,6 +7,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import BusinessIcon from "@mui/icons-material/Business";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import { Clock } from "@/components/ui";
@@ -108,6 +109,11 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
           <MenuItem onClick={() => handleNavigate("/admin")}>
             <AdminPanelSettingsIcon sx={{ mr: 1 }} />
             Admin Dashboard
+          </MenuItem>
+
+          <MenuItem onClick={() => handleNavigate("/workspace")}>
+            <BusinessIcon sx={{ mr: 1 }} />
+            Workspace
           </MenuItem>
 
           <MenuItem onClick={() => handleNavigate("/reports")}>

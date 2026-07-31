@@ -5,6 +5,7 @@ import type { ShiftApiRequest } from "./api.shift.ts";
 import type { UserApiRequest } from "./api.user.ts";
 import type { UserShiftOverrideApiRequest } from "./api.user-shift-override.ts";
 import type { UserShiftApiRequest } from "./api.user-shift.ts";
+import type { WorkspaceApiRequest } from "./api.workspace.ts";
 
 import type {
   AttendanceStateRequest,
@@ -15,9 +16,7 @@ export type ApiRequest =
   | {
       action: "AUTH_ME";
     }
-  | {
-      action: "WORKSPACE_GET";
-    }
+  | WorkspaceApiRequest
   | {
       action: "USER_CONTEXT_GET";
     }

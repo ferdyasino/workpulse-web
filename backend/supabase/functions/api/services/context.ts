@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getUserContext } from "./users.ts";
-import { getWorkspace } from "./workspace.ts";
+import { getDefaultWorkspace } from "./workspace.ts";
 import type { Database } from "@shared/types/database.ts";
 
 export async function getApplicationContext(
@@ -10,7 +10,7 @@ export async function getApplicationContext(
 ) {
   const userContext = await getUserContext(supabaseAdmin, email);
 
-  const workspaceResult = await getWorkspace(supabaseAdmin);
+  const workspaceResult = await getDefaultWorkspace(supabaseAdmin);
 
   return {
     user: {

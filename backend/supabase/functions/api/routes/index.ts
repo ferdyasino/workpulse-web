@@ -8,6 +8,8 @@ import { getAuthenticatedUser } from "../lib/auth.ts";
 import { handleAuthRoutes } from "./auth.routes.ts";
 import { handleContextRoutes } from "./context.routes.ts";
 
+import { handleWorkspaceRoutes } from "./workspace.routes.ts";
+
 import { handleDepartmentRoutes } from "./department.routes.ts";
 import { handlePositionRoutes } from "./position.routes.ts";
 import { handleShiftRoutes } from "./shift.routes.ts";
@@ -49,6 +51,12 @@ export async function handleRequest(
 
   if (contextResult !== null) {
     return contextResult;
+  }
+
+  const workspaceResult = await handleWorkspaceRoutes(ctx);
+
+  if (workspaceResult !== null) {
+    return workspaceResult;
   }
 
   const departmentResult = await handleDepartmentRoutes(ctx);
