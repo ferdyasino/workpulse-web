@@ -72,7 +72,6 @@ export default function LoginForm() {
                 );
               }
             }}
-
             onError={() => {
               snackbar.error("Google sign-in failed.");
             }}

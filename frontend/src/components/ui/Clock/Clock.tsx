@@ -5,7 +5,7 @@ import { Paper, Stack, Typography } from "@mui/material";
 type ClockProps = {
   timezone?: string;
   locale?: string;
-  variant?: "card" | "inline";
+  variant?: "card" | "inline" | "header";
 };
 
 function formatTime(date: Date, timezone: string, locale: string) {
@@ -44,24 +44,38 @@ export default function Clock({
   }, []);
 
   const content = (
-    <Stack spacing={1} sx={{ alignItems: "center" }}>
+    <Stack
+      spacing={0.5}
+      sx={{
+        width: "100%",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+      }}
+    >
       <Typography
-        variant={variant === "inline" ? "h5" : "h3"}
         sx={{
+          fontSize: variant === "header" ? "1.25rem" : variant === "inline" ? "3rem" : "2.25rem",
           fontWeight: 700,
-          letterSpacing: 1,
+          lineHeight: 1,
+          letterSpacing: variant === "header" ? 0.5 : 1,
         }}
       >
         {formatTime(now, timezone, locale)}
       </Typography>
 
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        sx={{
+          fontSize: variant === "header" ? "0.75rem" : variant === "inline" ? "1rem" : "0.875rem",
+          color: "text.secondary",
+        }}
+      >
         {formatDate(now, timezone, locale)}
       </Typography>
     </Stack>
   );
 
-  if (variant === "inline") {
+  if (variant === "inline" || variant === "header") {
     return content;
   }
 

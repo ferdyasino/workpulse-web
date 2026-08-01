@@ -1,5 +1,7 @@
 import { Box, Paper, Typography } from "@mui/material";
 
+import { Clock } from "@/components/ui";
+
 import LoginForm from "@/features/auth/components/LoginForm";
 
 export default function LoginPage() {
@@ -21,18 +23,35 @@ export default function LoginPage() {
           p: 5,
         }}
       >
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            mb: 4,
+          }}
+        >
+          <Clock timezone="Asia/Manila" locale="en-US" variant="inline" />
+        </Box>
+
         <Typography
           variant="h4"
           align="center"
-          gutterBottom
           sx={{
             fontWeight: 700,
+            mb: 1,
           }}
         >
           WorkPulse
         </Typography>
 
-        <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 4 }}>
+        <Typography
+          variant="body2"
+          align="center"
+          color="text.secondary"
+          sx={{
+            mb: 4,
+          }}
+        >
           Attendance & Payroll System
         </Typography>
 

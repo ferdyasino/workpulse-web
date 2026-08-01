@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { Box, Divider, IconButton, Menu, MenuItem, Typography } from "@mui/material";
 
@@ -23,39 +23,54 @@ type HeaderProps = {
   showClock?: boolean;
 };
 
-export default function Header({ title = "Dashboard", showClock = false }: HeaderProps) {
+export default function Header({ title, showClock = false }: HeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-  const { signOut, user } = useAuth();
-
-  const { workspace, workspaces, setWorkspace } = useWorkspace();
-
-  const { settings, loading } = useSettingsContext();
-
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const { signOut, user } = useAuth();
+  const { workspace, workspaces, setWorkspace } = useWorkspace();
+  const { settings, loading } = useSettingsContext();
 
   const open = Boolean(anchorEl);
 
-  /**
-   * Permission resolution
-   *
-   * Platform Owner:
-   * - highest authority
-   * - controlled by VITE_PLATFORM_OWNER_EMAIL
-   * - ignores database role
-   * - manages all workspaces
-   *
-   * Workspace Owner:
-   * - manages owned workspace
-   *
-   * Admin:
-   * - workspace administration
-   */
   const platformOwner = isPlatformOwner(user);
-
   const workspaceManager = canManageWorkspace(user, workspace);
 
   const activeWorkspaces = workspaces.filter((item) => item.status === "ACTIVE");
+
+  const pageTitle = useMemo(() => {
+    if (title) {
+      return title;
+    }
+
+    switch (location.pathname) {
+      case "/dashboard":
+        return "Dashboard";
+
+      case "/admin":
+        return "Management";
+
+      case "/workspace":
+        return "Workspaces";
+
+      case "/reports":
+        return "Reports";
+
+      case "/settings":
+        return "Settings";
+
+      case "/payroll":
+        return "Payroll";
+
+      case "/users":
+        return "Users";
+
+      default:
+        return "WorkPulse";
+    }
+  }, [location.pathname, title]);
 
   function closeMenu() {
     setAnchorEl(null);
@@ -71,9 +86,6 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
     navigate(path);
   }
 
-  /**
-   * Only Platform Owner can switch workspaces.
-   */
   function handleWorkspaceChange(id: string) {
     if (!platformOwner) {
       return;
@@ -92,30 +104,66 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
       sx={{
         height: 72,
         px: 3,
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
-        justifyContent: "space-between",
         background: "rgba(255,255,255,0.08)",
         backdropFilter: "blur(12px)",
         borderBottom: "1px solid rgba(255,255,255,0.12)",
       }}
     >
-      <Typography variant="h6">{title}</Typography>
-
-      {showClock && !loading && settings && (
-        <Clock variant="inline" timezone={settings.timezone} locale={settings.locale} />
-      )}
-
+      {/* Left */}
       <Box
         sx={{
           display: "flex",
           alignItems: "center",
+          minWidth: 0,
+        }}
+      >
+        <Typography
+          variant="h6"
+          noWrap
+          sx={{
+            fontWeight: 700,
+          }}
+        >
+          {pageTitle}
+        </Typography>
+      </Box>
+
+      {/* Center */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        {showClock && !loading && settings && (
+          <Clock variant="header" timezone={settings.timezone} locale={settings.locale} />
+        )}
+      </Box>
+
+      {/* Right */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
           gap: 1,
+          minWidth: 0,
         }}
       >
         <BusinessIcon fontSize="small" />
 
-        <Typography variant="body2">{workspace?.name ?? "No Workspace"}</Typography>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            maxWidth: 180,
+          }}
+        >
+          {workspace?.name ?? "No Workspace"}
+        </Typography>
 
         <Box
           sx={{
@@ -124,10 +172,18 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
             borderRadius: "50%",
             bgcolor: "success.main",
             ml: 1,
+            flexShrink: 0,
           }}
         />
 
-        <Typography>Online</Typography>
+        <Typography
+          variant="body2"
+          sx={{
+            whiteSpace: "nowrap",
+          }}
+        >
+          Online
+        </Typography>
 
         <IconButton onClick={(event) => setAnchorEl(event.currentTarget)}>
           <SettingsIcon />
@@ -166,7 +222,6 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
                   onClick={() => handleWorkspaceChange(item.id)}
                 >
                   <BusinessIcon sx={{ mr: 1 }} />
-
                   {item.name}
                 </MenuItem>
               ))}
@@ -175,49 +230,54 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
             </>
           )}
 
-          <MenuItem onClick={() => handleNavigate("/dashboard")}>
+          <MenuItem
+            selected={location.pathname === "/dashboard"}
+            onClick={() => handleNavigate("/dashboard")}
+          >
             <DashboardIcon sx={{ mr: 1 }} />
             Dashboard
           </MenuItem>
 
           {workspaceManager && (
-            <MenuItem onClick={() => handleNavigate("/admin")}>
+            <MenuItem
+              selected={location.pathname === "/admin"}
+              onClick={() => handleNavigate("/admin")}
+            >
               <AdminPanelSettingsIcon sx={{ mr: 1 }} />
-              Admin Dashboard
+              Management
             </MenuItem>
           )}
 
           {platformOwner && (
-            <MenuItem onClick={() => handleNavigate("/workspace")}>
+            <MenuItem
+              selected={location.pathname === "/workspace"}
+              onClick={() => handleNavigate("/workspace")}
+            >
               <BusinessIcon sx={{ mr: 1 }} />
-              Workspace
+              Workspaces
             </MenuItem>
           )}
 
-          <MenuItem onClick={() => handleNavigate("/reports")}>
+          <MenuItem
+            selected={location.pathname === "/reports"}
+            onClick={() => handleNavigate("/reports")}
+          >
             <AssessmentIcon sx={{ mr: 1 }} />
             Reports
           </MenuItem>
 
-          <MenuItem onClick={() => handleNavigate("/settings")}>
+          <MenuItem
+            selected={location.pathname === "/settings"}
+            onClick={() => handleNavigate("/settings")}
+          >
             <SettingsIcon sx={{ mr: 1 }} />
             Settings
           </MenuItem>
 
           <Divider />
 
-          <MenuItem
-            sx={{
-              color: "error.main",
-            }}
-            onClick={handleLogout}
-          >
-            <LogoutIcon
-              sx={{
-                mr: 1,
-                color: "error.main",
-              }}
-            />
+          <MenuItem sx={{ color: "error.main" }} onClick={handleLogout}>
+            <LogoutIcon sx={{ mr: 1, color: "error.main" }} />
             Logout
           </MenuItem>
         </Menu>
