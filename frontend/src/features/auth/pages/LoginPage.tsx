@@ -4,6 +4,8 @@ import { Clock } from "@/components/ui";
 
 import LoginForm from "@/features/auth/components/LoginForm";
 
+import { getBrowserTimezone } from "@/utils/time";
+
 export default function LoginPage() {
   return (
     <Box
@@ -30,7 +32,7 @@ export default function LoginPage() {
             mb: 4,
           }}
         >
-          <Clock timezone="Asia/Manila" locale="en-US" variant="inline" />
+          <Clock timezone={getBrowserTimezone()} locale="en-US" variant="inline" />
         </Box>
 
         <Typography

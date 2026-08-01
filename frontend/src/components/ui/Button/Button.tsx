@@ -24,13 +24,13 @@ export default function Button({
         maxWidth: 320,
         height: 40,
         minHeight: 40,
-        mx: "auto",
         display: "flex",
         borderRadius: "4px",
         textTransform: "none",
         fontWeight: 500,
         px: 2,
         boxSizing: "border-box",
+
         ...sx,
       }}
       {...props}

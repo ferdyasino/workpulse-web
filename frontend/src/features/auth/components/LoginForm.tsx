@@ -50,7 +50,13 @@ export default function LoginForm() {
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack
+      spacing={3}
+      sx={{
+        width: "100%",
+        alignItems: "center",
+      }}
+    >
       {!emailMode && (
         <>
           <GoogleButton
@@ -77,7 +83,7 @@ export default function LoginForm() {
             }}
           />
 
-          <Divider>
+          <Divider sx={{ width: "100%" }}>
             <Typography variant="body2" color="text.secondary">
               OR
             </Typography>
@@ -86,7 +92,6 @@ export default function LoginForm() {
           <Button
             variant="contained"
             size="large"
-            fullWidth
             onClick={() => {
               setEmailMode(true);
             }}
@@ -125,17 +130,11 @@ export default function LoginForm() {
             }}
           />
 
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
-            disabled={loading}
-            onClick={handleEmailLogin}
-          >
+          <Button variant="contained" size="large" disabled={loading} onClick={handleEmailLogin}>
             {loading ? "Signing in..." : "Sign In"}
           </Button>
 
-          <Button variant="text" fullWidth onClick={backToOptions}>
+          <Button variant="text" onClick={backToOptions}>
             Back to Login Options
           </Button>
         </>

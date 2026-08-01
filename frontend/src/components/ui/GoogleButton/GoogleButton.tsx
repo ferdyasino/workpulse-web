@@ -12,17 +12,32 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
   return (
     <Box
       sx={{
-        width: "100%",
+        width: {
+          xs: "100%",
+          sm: 320,
+        },
         maxWidth: 320,
-        mx: "auto",
+        height: 40,
         display: "flex",
         justifyContent: "center",
+        alignItems: "center",
         overflow: "hidden",
+        boxSizing: "border-box",
+
+        "& > div": {
+          width: "100% !important",
+          display: "flex",
+          justifyContent: "center",
+        },
+
+        "& iframe": {
+          maxWidth: "100%",
+        },
 
         "@media (max-width:360px)": {
           "& > div": {
             transform: "scale(0.9)",
-            transformOrigin: "top center",
+            transformOrigin: "center",
           },
         },
 
