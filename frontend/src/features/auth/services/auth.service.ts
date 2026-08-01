@@ -47,6 +47,40 @@ export async function loginWithGoogle(_workspaceSlug: string, credential: string
   return user;
 }
 
+export async function loginWithEmail(email: string, password: string): Promise<User> {
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("Failed to establish a Supabase session.");
+  }
+
+  const context = await invokeFunction<
+    ApplicationContext,
+    {
+      action: "AUTH_ME";
+    }
+  >("api", {
+    action: "AUTH_ME",
+  });
+
+  const user = context.user;
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+
+  return user;
+}
+
 export async function logout(): Promise<void> {
   await supabase.auth.signOut();
 

@@ -4,49 +4,40 @@ import { Box } from "@mui/material";
 import { GoogleLogin } from "@react-oauth/google";
 
 export interface GoogleButtonProps {
-  width?: number;
-  fullWidth?: boolean;
   onSuccess: (credentialResponse: CredentialResponse) => void;
   onError?: GoogleLoginProps["onError"];
 }
 
-export default function GoogleButton({
-  width = 320,
-  fullWidth = true,
-  onSuccess,
-  onError,
-}: GoogleButtonProps) {
+export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) {
   return (
     <Box
       sx={{
         width: "100%",
+        height: 42,
         display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
+        overflow: "hidden",
+        borderRadius: "4px",
+
+        "& > div": {
+          width: "100% !important",
+        },
+
+        "& iframe": {
+          width: "100% !important",
+          height: "42px !important",
+        },
       }}
     >
-      <Box
-        sx={{
-          width: "100%",
-          display: "flex",
-          justifyContent: "center",
-          "& > div": {
-            transform: "scale(1.08)",
-            transformOrigin: "center",
-          },
-        }}
-      >
-        <GoogleLogin
-          width={fullWidth ? `${width}` : undefined}
-          size="large"
-          shape="pill"
-          theme="filled_black"
-          text="continue_with"
-          logo_alignment="left"
-          onSuccess={onSuccess}
-          onError={onError}
-        />
-      </Box>
+      <GoogleLogin
+        width="100%"
+        size="large"
+        theme="filled_black"
+        text="continue_with"
+        logo_alignment="left"
+        shape="rectangular"
+        onSuccess={onSuccess}
+        onError={onError}
+      />
     </Box>
   );
 }
