@@ -19,17 +19,18 @@ export default function Button({
       sx={{
         width: {
           xs: "100%",
-          sm: 340,
+          sm: 320,
         },
-        maxWidth: 340,
+        maxWidth: 320,
         height: 40,
         minHeight: 40,
         mx: "auto",
         display: "flex",
-        borderRadius: "4px", // Matches Google rectangular more closely
+        borderRadius: "4px",
         textTransform: "none",
         fontWeight: 500,
-        padding: "0 16px",
+        px: 2,
+        boxSizing: "border-box",
         ...sx,
       }}
       {...props}

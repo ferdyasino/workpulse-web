@@ -14,28 +14,16 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
       sx={{
         width: {
           xs: "100%",
-          sm: 340,
+          sm: 320,
         },
-        maxWidth: 340,
+        maxWidth: 320,
         mx: "auto",
         display: "flex",
         justifyContent: "center",
-        overflow: "hidden",
-
-        "& > div": {
-          width: "100% !important",
-          display: "flex",
-          justifyContent: "center",
-        },
-
-        "& iframe": {
-          width: "100% !important",
-          minWidth: "100% !important",
-        },
       }}
     >
       <GoogleLogin
-        width="340"
+        width="320"
         size="large"
         theme="filled_black"
         text="continue_with"
