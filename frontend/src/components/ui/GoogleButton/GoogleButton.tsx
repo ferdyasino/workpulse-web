@@ -17,14 +17,25 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
         mx: "auto",
         display: "flex",
         justifyContent: "center",
+        overflow: "hidden",
 
-        "& > div": {
-          width: "100% !important",
+        "@media (max-width:360px)": {
+          "& > div": {
+            transform: "scale(0.9)",
+            transformOrigin: "top center",
+          },
         },
 
-        "& iframe": {
-          width: "100% !important",
-          minWidth: "0 !important",
+        "@media (max-width:340px)": {
+          "& > div": {
+            transform: "scale(0.85)",
+          },
+        },
+
+        "@media (max-width:320px)": {
+          "& > div": {
+            transform: "scale(0.8)",
+          },
         },
       }}
     >
