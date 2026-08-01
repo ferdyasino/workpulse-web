@@ -17,7 +17,10 @@ export default function Button({
       disableElevation
       disabled={disabled || loading}
       sx={{
+        width: 340,
         height: 42,
+        mx: "auto",
+        display: "flex",
         borderRadius: "4px",
         textTransform: "none",
         fontWeight: 500,

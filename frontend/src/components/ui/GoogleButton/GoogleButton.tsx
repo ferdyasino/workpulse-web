@@ -12,29 +12,18 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
   return (
     <Box
       sx={{
-        width: "100%",
-        height: 42,
         display: "flex",
-        overflow: "hidden",
-        borderRadius: "4px",
-
-        "& > div": {
-          width: "100% !important",
-        },
-
-        "& iframe": {
-          width: "100% !important",
-          height: "42px !important",
-        },
+        justifyContent: "center",
+        width: "100%",
       }}
     >
       <GoogleLogin
-        width="100%"
+        width="340"
         size="large"
         theme="filled_black"
         text="continue_with"
-        logo_alignment="left"
         shape="rectangular"
+        logo_alignment="left"
         onSuccess={onSuccess}
         onError={onError}
       />
