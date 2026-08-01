@@ -11,7 +11,10 @@ import BusinessIcon from "@mui/icons-material/Business";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import { Clock } from "@/components/ui";
+
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { isPlatformOwner, canManageWorkspace } from "@/features/auth/utils/permissions";
+
 import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
@@ -23,14 +26,36 @@ type HeaderProps = {
 export default function Header({ title = "Dashboard", showClock = false }: HeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
-  const { signOut } = useAuth();
-  const { settings, loading } = useSettingsContext();
+  const { signOut, user } = useAuth();
 
   const { workspace, workspaces, setWorkspace } = useWorkspace();
+
+  const { settings, loading } = useSettingsContext();
 
   const navigate = useNavigate();
 
   const open = Boolean(anchorEl);
+
+  /**
+   * Permission resolution
+   *
+   * Platform Owner:
+   * - highest authority
+   * - controlled by VITE_PLATFORM_OWNER_EMAIL
+   * - ignores database role
+   * - manages all workspaces
+   *
+   * Workspace Owner:
+   * - manages owned workspace
+   *
+   * Admin:
+   * - workspace administration
+   */
+  const platformOwner = isPlatformOwner(user);
+
+  const workspaceManager = canManageWorkspace(user, workspace);
+
+  const activeWorkspaces = workspaces.filter((item) => item.status === "ACTIVE");
 
   function closeMenu() {
     setAnchorEl(null);
@@ -46,11 +71,19 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
     navigate(path);
   }
 
+  /**
+   * Only Platform Owner can switch workspaces.
+   */
   function handleWorkspaceChange(id: string) {
-    const selected = workspaces.find((item) => item.id === id);
+    if (!platformOwner) {
+      return;
+    }
+
+    const selected = activeWorkspaces.find((item) => item.id === id);
 
     if (selected) {
       setWorkspace(selected);
+      closeMenu();
     }
   }
 
@@ -96,11 +129,7 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
 
         <Typography>Online</Typography>
 
-        <IconButton
-          onClick={(event) => {
-            setAnchorEl(event.currentTarget);
-          }}
-        >
+        <IconButton onClick={(event) => setAnchorEl(event.currentTarget)}>
           <SettingsIcon />
         </IconButton>
 
@@ -117,45 +146,53 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
             horizontal: "right",
           }}
         >
-          <Typography
-            sx={{
-              px: 2,
-              py: 1,
-              fontSize: 12,
-              opacity: 0.7,
-            }}
-          >
-            Switch Workspace
-          </Typography>
+          {platformOwner && (
+            <>
+              <Typography
+                sx={{
+                  px: 2,
+                  py: 1,
+                  fontSize: 12,
+                  opacity: 0.7,
+                }}
+              >
+                Switch Workspace
+              </Typography>
 
-          {workspaces.map((item) => (
-            <MenuItem
-              key={item.id}
-              selected={item.id === workspace?.id}
-              onClick={() => handleWorkspaceChange(item.id)}
-            >
-              <BusinessIcon sx={{ mr: 1 }} />
+              {activeWorkspaces.map((item) => (
+                <MenuItem
+                  key={item.id}
+                  selected={item.id === workspace?.id}
+                  onClick={() => handleWorkspaceChange(item.id)}
+                >
+                  <BusinessIcon sx={{ mr: 1 }} />
 
-              {item.name}
-            </MenuItem>
-          ))}
+                  {item.name}
+                </MenuItem>
+              ))}
 
-          <Divider />
+              <Divider />
+            </>
+          )}
 
           <MenuItem onClick={() => handleNavigate("/dashboard")}>
             <DashboardIcon sx={{ mr: 1 }} />
             Dashboard
           </MenuItem>
 
-          <MenuItem onClick={() => handleNavigate("/admin")}>
-            <AdminPanelSettingsIcon sx={{ mr: 1 }} />
-            Admin Dashboard
-          </MenuItem>
+          {workspaceManager && (
+            <MenuItem onClick={() => handleNavigate("/admin")}>
+              <AdminPanelSettingsIcon sx={{ mr: 1 }} />
+              Admin Dashboard
+            </MenuItem>
+          )}
 
-          <MenuItem onClick={() => handleNavigate("/workspace")}>
-            <BusinessIcon sx={{ mr: 1 }} />
-            Workspace
-          </MenuItem>
+          {platformOwner && (
+            <MenuItem onClick={() => handleNavigate("/workspace")}>
+              <BusinessIcon sx={{ mr: 1 }} />
+              Workspace
+            </MenuItem>
+          )}
 
           <MenuItem onClick={() => handleNavigate("/reports")}>
             <AssessmentIcon sx={{ mr: 1 }} />

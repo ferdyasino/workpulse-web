@@ -13,7 +13,7 @@ import { AttendanceProvider } from "@/providers/AttendanceProvider";
 import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 import ProtectedRoute from "./ProtectedRoute";
-import OwnerOnlyRoute from "./OwnerOnlyRoute";
+import PlatformOwnerOnlyRoute from "./PlatformOwnerOnlyRoute";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -53,13 +53,20 @@ export default function AppRouter() {
           }
         />
 
+        {/* Platform Owner only
+            Global workspace administration:
+            - create workspace
+            - edit workspace
+            - delete workspace
+            - manage tenants
+        */}
         <Route
           path="/workspace"
           element={
             <ProtectedLayout>
-              <OwnerOnlyRoute>
+              <PlatformOwnerOnlyRoute>
                 <WorkspacePage />
-              </OwnerOnlyRoute>
+              </PlatformOwnerOnlyRoute>
             </ProtectedLayout>
           }
         />

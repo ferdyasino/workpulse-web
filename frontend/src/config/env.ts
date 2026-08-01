@@ -13,5 +13,18 @@ export const env = {
 
   supabaseAnonKey: required(import.meta.env.VITE_SUPABASE_ANON_KEY, "VITE_SUPABASE_ANON_KEY"),
 
-  workspaceOwnerEmail: import.meta.env.VITE_WORKSPACE_OWNER_EMAIL ?? "",
+  /**
+   * Global WorkPulse owner.
+   *
+   * Highest authority.
+   *
+   * Overrides:
+   * - database role
+   * - workspace ownership
+   * - workspace permissions
+   */
+  platformOwnerEmail: required(
+    import.meta.env.VITE_PLATFORM_OWNER_EMAIL,
+    "VITE_PLATFORM_OWNER_EMAIL",
+  ),
 };

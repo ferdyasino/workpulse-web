@@ -2,16 +2,20 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { env } from "@/config/env";
+import { isPlatformOwner } from "@/features/auth/utils/permissions";
 
-export default function OwnerOnlyRoute({ children }: { children: ReactNode }) {
+interface Props {
+  children: ReactNode;
+}
+
+export default function PlatformOwnerOnlyRoute({ children }: Props) {
   const { user } = useAuth();
 
   if (!user) {
     return null;
   }
 
-  if (env.workspaceOwnerEmail && user.email !== env.workspaceOwnerEmail) {
+  if (!isPlatformOwner(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 

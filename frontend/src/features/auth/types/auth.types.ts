@@ -49,7 +49,7 @@ export type User = {
 
   avatar_url: string | null;
 
-  role: UserRole | string;
+  role: UserRole;
 
   employment_status: EmploymentStatus;
 
