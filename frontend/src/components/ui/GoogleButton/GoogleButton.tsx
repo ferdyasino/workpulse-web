@@ -12,14 +12,20 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
   return (
     <Box
       sx={{
-        width: {
-          xs: "100%",
-          sm: 320,
-        },
+        width: "100%",
         maxWidth: 320,
         mx: "auto",
         display: "flex",
         justifyContent: "center",
+
+        "& > div": {
+          width: "100% !important",
+        },
+
+        "& iframe": {
+          width: "100% !important",
+          minWidth: "0 !important",
+        },
       }}
     >
       <GoogleLogin
