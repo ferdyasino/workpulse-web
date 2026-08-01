@@ -12,6 +12,7 @@ import LogoutIcon from "@mui/icons-material/Logout";
 
 import { Clock } from "@/components/ui";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
 type HeaderProps = {
@@ -24,6 +25,8 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
 
   const { signOut } = useAuth();
   const { settings, loading } = useSettingsContext();
+
+  const { workspace, workspaces, setWorkspace } = useWorkspace();
 
   const navigate = useNavigate();
 
@@ -41,6 +44,14 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
   function handleNavigate(path: string) {
     closeMenu();
     navigate(path);
+  }
+
+  function handleWorkspaceChange(id: string) {
+    const selected = workspaces.find((item) => item.id === id);
+
+    if (selected) {
+      setWorkspace(selected);
+    }
   }
 
   return (
@@ -69,12 +80,17 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
           gap: 1,
         }}
       >
+        <BusinessIcon fontSize="small" />
+
+        <Typography variant="body2">{workspace?.name ?? "No Workspace"}</Typography>
+
         <Box
           sx={{
             width: 10,
             height: 10,
             borderRadius: "50%",
             bgcolor: "success.main",
+            ml: 1,
           }}
         />
 
@@ -101,6 +117,31 @@ export default function Header({ title = "Dashboard", showClock = false }: Heade
             horizontal: "right",
           }}
         >
+          <Typography
+            sx={{
+              px: 2,
+              py: 1,
+              fontSize: 12,
+              opacity: 0.7,
+            }}
+          >
+            Switch Workspace
+          </Typography>
+
+          {workspaces.map((item) => (
+            <MenuItem
+              key={item.id}
+              selected={item.id === workspace?.id}
+              onClick={() => handleWorkspaceChange(item.id)}
+            >
+              <BusinessIcon sx={{ mr: 1 }} />
+
+              {item.name}
+            </MenuItem>
+          ))}
+
+          <Divider />
+
           <MenuItem onClick={() => handleNavigate("/dashboard")}>
             <DashboardIcon sx={{ mr: 1 }} />
             Dashboard

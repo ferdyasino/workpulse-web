@@ -15,6 +15,7 @@ import {
   deleteWorkspace,
   restoreWorkspace,
   hardDeleteWorkspace,
+  setActiveWorkspaceId,
 } from "../services/workspace.service";
 
 export function useWorkspaces() {
@@ -25,7 +26,10 @@ export function useWorkspaces() {
     setLoading(true);
 
     try {
-      const data = await listWorkspaces(includeDeleted);
+      const data = await listWorkspaces({
+        include_deleted: includeDeleted,
+      });
+
       setWorkspaces(data);
     } finally {
       setLoading(false);
@@ -37,54 +41,88 @@ export function useWorkspaces() {
   }, [refresh]);
 
   async function create(payload: CreateWorkspacePayload) {
-    await createWorkspace(payload);
+    const workspace = await createWorkspace(payload);
+
     await refresh();
+
+    return workspace;
   }
 
   async function update(payload: UpdateWorkspacePayload) {
-    await updateWorkspace(payload);
+    const workspace = await updateWorkspace(payload);
+
     await refresh();
+
+    return workspace;
   }
 
   async function activate(id: string) {
-    await activateWorkspace({ id });
+    const workspace = await activateWorkspace({
+      id,
+    });
+
+    setActiveWorkspaceId(workspace.id);
+
     await refresh();
+
+    return workspace;
   }
 
   async function deactivate(id: string) {
-    await deactivateWorkspace({ id });
+    const workspace = await deactivateWorkspace({
+      id,
+    });
+
     await refresh();
+
+    return workspace;
   }
 
   async function remove(id: string) {
-    await deleteWorkspace({ id });
+    await deleteWorkspace({
+      id,
+    });
+
     await refresh();
   }
 
   async function restore(id: string) {
-    await restoreWorkspace({ id });
+    const workspace = await restoreWorkspace({
+      id,
+    });
+
     await refresh(true);
+
+    return workspace;
   }
 
   async function hardDelete(id: string) {
-    await hardDeleteWorkspace({ id });
+    await hardDeleteWorkspace({
+      id,
+    });
+
     await refresh(true);
   }
 
   return {
     loading,
+
     workspaces,
 
     refresh,
 
     create,
+
     update,
 
     activate,
+
     deactivate,
 
     remove,
+
     restore,
+
     hardDelete,
   };
 }

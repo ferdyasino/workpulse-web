@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import {
   activateDepartment as activateDepartmentService,
@@ -17,21 +17,23 @@ import {
 } from "../services/departments.service";
 
 export function useDepartments() {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
-  const workspaceId = user?.workspace_id;
+  const workspaceId = workspace?.id;
 
   const [departments, setDepartments] = useState<Department[]>([]);
+
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   const [includeInactive, setIncludeInactive] = useState(false);
+
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
   const loadDepartments = useCallback(async () => {
     if (!workspaceId) {
       setDepartments([]);
-      setLoading(false);
       return;
     }
 
@@ -41,7 +43,9 @@ export function useDepartments() {
 
       const data = await getDepartments({
         workspace_id: workspaceId,
+
         include_inactive: includeInactive,
+
         include_deleted: includeDeleted,
       });
 
@@ -57,14 +61,20 @@ export function useDepartments() {
     void loadDepartments();
   }, [loadDepartments]);
 
+  const requireWorkspace = () => {
+    if (!workspaceId) {
+      throw new Error("Active workspace not selected");
+    }
+
+    return workspaceId;
+  };
+
   const createDepartment = useCallback(
     async (payload: Omit<SaveDepartmentRequest, "workspace_id">) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
+      const id = requireWorkspace();
 
       await createDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: id,
         ...payload,
       });
 
@@ -75,12 +85,10 @@ export function useDepartments() {
 
   const updateDepartment = useCallback(
     async (payload: Omit<UpdateDepartmentRequest, "workspace_id">) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
+      const id = requireWorkspace();
 
       await updateDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: id,
         ...payload,
       });
 
@@ -91,12 +99,8 @@ export function useDepartments() {
 
   const activateDepartment = useCallback(
     async (id: string) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
-
       await activateDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: requireWorkspace(),
         id,
       });
 
@@ -107,12 +111,8 @@ export function useDepartments() {
 
   const deactivateDepartment = useCallback(
     async (id: string) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
-
       await deactivateDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: requireWorkspace(),
         id,
       });
 
@@ -123,12 +123,8 @@ export function useDepartments() {
 
   const deleteDepartment = useCallback(
     async (id: string) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
-
       await deleteDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: requireWorkspace(),
         id,
       });
 
@@ -139,12 +135,8 @@ export function useDepartments() {
 
   const restoreDepartment = useCallback(
     async (id: string) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
-
       await restoreDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: requireWorkspace(),
         id,
       });
 
@@ -155,12 +147,8 @@ export function useDepartments() {
 
   const hardDeleteDepartment = useCallback(
     async (id: string) => {
-      if (!workspaceId) {
-        throw new Error("Workspace not found");
-      }
-
       await hardDeleteDepartmentService({
-        workspace_id: workspaceId,
+        workspace_id: requireWorkspace(),
         id,
       });
 
@@ -171,25 +159,33 @@ export function useDepartments() {
 
   return {
     departments,
+
     loading,
+
     error,
 
     includeInactive,
+
     includeDeleted,
 
     setIncludeInactive,
+
     setIncludeDeleted,
 
     refresh: loadDepartments,
 
     createDepartment,
+
     updateDepartment,
 
     activateDepartment,
+
     deactivateDepartment,
 
     deleteDepartment,
+
     restoreDepartment,
+
     hardDeleteDepartment,
   };
 }

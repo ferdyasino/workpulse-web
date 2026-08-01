@@ -6,10 +6,12 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 
 import { SnackbarProvider } from "@/components/ui";
-import SettingsProvider from "@/providers/SettingsProvider";
+
 import AuthProvider from "@/providers/AuthProvider";
 import GoogleProvider from "@/providers/GoogleProvider";
+import SettingsProvider from "@/providers/SettingsProvider";
 import ThemeProvider from "@/providers/ThemeProvider";
+import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -18,7 +20,9 @@ createRoot(document.getElementById("root")!).render(
         <GoogleProvider>
           <AuthProvider>
             <SettingsProvider>
-              <App />
+              <WorkspaceProvider>
+                <App />
+              </WorkspaceProvider>
             </SettingsProvider>
           </AuthProvider>
         </GoogleProvider>

@@ -64,3 +64,21 @@ export function workspaceToForm(workspace: Workspace): WorkspaceFormValues {
     status: workspace.status,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Active Workspace Storage                                                    */
+/* -------------------------------------------------------------------------- */
+
+const ACTIVE_WORKSPACE_KEY = "workpulse.active_workspace";
+
+export function getActiveWorkspaceId(): string | null {
+  return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+}
+
+export function setActiveWorkspaceId(id: string): void {
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
+}
+
+export function clearActiveWorkspaceId(): void {
+  localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+}

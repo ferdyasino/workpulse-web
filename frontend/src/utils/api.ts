@@ -37,6 +37,16 @@ export async function invokeFunction<TResponse, TBody extends object = object>(
 
 export async function apiRequest<TResponse = unknown, TBody extends object = object>(
   body: TBody,
+  options?: {
+    workspace_id?: string;
+  },
 ): Promise<TResponse> {
-  return invokeFunction<TResponse, TBody>("api", body);
+  return invokeFunction<TResponse, TBody>("api", {
+    ...body,
+    ...(options?.workspace_id
+      ? {
+          workspace_id: options.workspace_id,
+        }
+      : {}),
+  } as TBody);
 }
