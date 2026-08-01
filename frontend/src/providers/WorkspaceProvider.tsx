@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-
 import type { ReactNode } from "react";
+
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import { WorkspaceContext } from "@/features/workspace/context/WorkspaceContext";
 
@@ -18,13 +19,21 @@ interface WorkspaceProviderProps {
 }
 
 export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
+  const { isAuthenticated } = useAuth();
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-
   const [workspace, setWorkspaceState] = useState<Workspace | null>(null);
-
   const [loading, setLoading] = useState(true);
 
   const refreshWorkspaces = useCallback(async () => {
+    if (!isAuthenticated) {
+      setWorkspaces([]);
+      setWorkspaceState(null);
+      clearActiveWorkspace();
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -33,7 +42,6 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       setWorkspaces(data);
 
       const savedId = getActiveWorkspaceId();
-
       const savedWorkspace = data.find((item) => item.id === savedId);
 
       if (savedWorkspace) {
@@ -45,27 +53,22 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
 
       if (activeWorkspace) {
         setWorkspaceState(activeWorkspace);
-
         setActiveWorkspaceId(activeWorkspace.id);
-
         return;
       }
 
       if (data.length > 0) {
         setWorkspaceState(data[0]);
-
         setActiveWorkspaceId(data[0].id);
-
         return;
       }
 
       setWorkspaceState(null);
-
       clearActiveWorkspace();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     void refreshWorkspaces();
@@ -73,7 +76,6 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
 
   function setWorkspace(selectedWorkspace: Workspace) {
     setWorkspaceState(selectedWorkspace);
-
     setActiveWorkspaceId(selectedWorkspace.id);
   }
 
@@ -81,13 +83,9 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     <WorkspaceContext.Provider
       value={{
         workspace,
-
         workspaces,
-
         loading,
-
         setWorkspace,
-
         refreshWorkspaces,
       }}
     >

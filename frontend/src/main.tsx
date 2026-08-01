@@ -11,7 +11,6 @@ import AuthProvider from "@/providers/AuthProvider";
 import GoogleProvider from "@/providers/GoogleProvider";
 import SettingsProvider from "@/providers/SettingsProvider";
 import ThemeProvider from "@/providers/ThemeProvider";
-import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -20,9 +19,7 @@ createRoot(document.getElementById("root")!).render(
         <GoogleProvider>
           <AuthProvider>
             <SettingsProvider>
-              <WorkspaceProvider>
-                <App />
-              </WorkspaceProvider>
+              <App />
             </SettingsProvider>
           </AuthProvider>
         </GoogleProvider>

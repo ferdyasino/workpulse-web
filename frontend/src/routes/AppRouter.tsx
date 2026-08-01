@@ -10,6 +10,7 @@ import { WorkspacePage } from "@/features/workspace";
 import AppLayout from "@/layouts/AppLayout";
 
 import { AttendanceProvider } from "@/providers/AttendanceProvider";
+import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 import ProtectedRoute from "./ProtectedRoute";
 import OwnerOnlyRoute from "./OwnerOnlyRoute";
@@ -17,9 +18,11 @@ import OwnerOnlyRoute from "./OwnerOnlyRoute";
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <AttendanceProvider>
-        <AppLayout>{children}</AppLayout>
-      </AttendanceProvider>
+      <WorkspaceProvider>
+        <AttendanceProvider>
+          <AppLayout>{children}</AppLayout>
+        </AttendanceProvider>
+      </WorkspaceProvider>
     </ProtectedRoute>
   );
 }
