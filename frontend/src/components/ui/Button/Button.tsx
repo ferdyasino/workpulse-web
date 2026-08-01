@@ -17,13 +17,19 @@ export default function Button({
       disableElevation
       disabled={disabled || loading}
       sx={{
-        width: 340,
-        height: 42,
+        width: {
+          xs: "100%",
+          sm: 340,
+        },
+        maxWidth: 340,
+        height: 40,
+        minHeight: 40,
         mx: "auto",
         display: "flex",
-        borderRadius: "4px",
+        borderRadius: "4px", // Matches Google rectangular more closely
         textTransform: "none",
         fontWeight: 500,
+        padding: "0 16px",
         ...sx,
       }}
       {...props}
