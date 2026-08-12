@@ -7,6 +7,8 @@ import ReportsPage from "@/features/reports/pages/ReportsPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
 import { WorkspacePage } from "@/features/workspace";
 
+import { canAccessAdmin, canViewReports } from "@/features/auth/utils/permissions";
+
 import AppLayout from "@/layouts/AppLayout";
 
 import { AttendanceProvider } from "@/providers/AttendanceProvider";
@@ -14,6 +16,7 @@ import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 import ProtectedRoute from "./ProtectedRoute";
 import PlatformOwnerOnlyRoute from "./PlatformOwnerOnlyRoute";
+import PermissionRoute from "./PermissionRoute";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -31,9 +34,17 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* ------------------------------------------------------------------ */}
+        {/* Public                                                              */}
+        {/* ------------------------------------------------------------------ */}
+
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<LoginPage />} />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Dashboard                                                           */}
+        {/* ------------------------------------------------------------------ */}
 
         <Route
           path="/dashboard"
@@ -44,22 +55,25 @@ export default function AppRouter() {
           }
         />
 
+        {/* ------------------------------------------------------------------ */}
+        {/* Workspace Management                                                */}
+        {/* ------------------------------------------------------------------ */}
+
         <Route
           path="/admin"
           element={
             <ProtectedLayout>
-              <AdminPage />
+              <PermissionRoute permission={canAccessAdmin}>
+                <AdminPage />
+              </PermissionRoute>
             </ProtectedLayout>
           }
         />
 
-        {/* Platform Owner only
-            Global workspace administration:
-            - create workspace
-            - edit workspace
-            - delete workspace
-            - manage tenants
-        */}
+        {/* ------------------------------------------------------------------ */}
+        {/* Platform Owner Only                                                 */}
+        {/* ------------------------------------------------------------------ */}
+
         <Route
           path="/workspace"
           element={
@@ -71,14 +85,24 @@ export default function AppRouter() {
           }
         />
 
+        {/* ------------------------------------------------------------------ */}
+        {/* Reports                                                             */}
+        {/* ------------------------------------------------------------------ */}
+
         <Route
           path="/reports"
           element={
             <ProtectedLayout>
-              <ReportsPage />
+              <PermissionRoute permission={canViewReports}>
+                <ReportsPage />
+              </PermissionRoute>
             </ProtectedLayout>
           }
         />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Settings                                                            */}
+        {/* ------------------------------------------------------------------ */}
 
         <Route
           path="/settings"
@@ -88,6 +112,10 @@ export default function AppRouter() {
             </ProtectedLayout>
           }
         />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Unknown route                                                       */}
+        {/* ------------------------------------------------------------------ */}
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

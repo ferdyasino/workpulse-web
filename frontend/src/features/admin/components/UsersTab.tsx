@@ -18,10 +18,16 @@ import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
 
-import UserDialog from "./UserDialog";
+import type {
+  EmploymentStatus,
+  EmploymentType,
+  User,
+  UserListItem,
+  UserRole,
+} from "../services/users.service";
 
 import { useUsers } from "../hooks/useUsers";
-import type { User } from "../services/users.service";
+import UserDialog from "./UserDialog";
 
 export default function UsersTab() {
   const snackbar = useSnackbar();
@@ -36,6 +42,8 @@ export default function UsersTab() {
 
     setIncludeInactive,
     setIncludeDeleted,
+
+    getUser,
 
     createUser,
     updateUser,
@@ -52,11 +60,13 @@ export default function UsersTab() {
 
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserListItem | null>(null);
 
-  const [userToHardDelete, setUserToHardDelete] = useState<User | null>(null);
+  const [userToHardDelete, setUserToHardDelete] = useState<UserListItem | null>(null);
 
   const [saving, setSaving] = useState(false);
+
+  const [loadingUser, setLoadingUser] = useState(false);
 
   const [deleting, setDeleting] = useState(false);
 
@@ -64,12 +74,14 @@ export default function UsersTab() {
     employee_no: string;
     display_name: string;
     email: string;
-    role?: string;
-    employment_status?: string;
-    employment_type?: string;
+    role?: UserRole;
+    employment_status?: EmploymentStatus;
+    employment_type?: EmploymentType;
   }) => {
     const nameParts = values.display_name.trim().split(/\s+/);
+
     const first_name = nameParts[0] ?? "";
+
     const last_name = nameParts.slice(1).join(" ") || first_name;
 
     try {
@@ -101,6 +113,35 @@ export default function UsersTab() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAddUser = () => {
+    setEditingUser(null);
+    setDialogOpen(true);
+  };
+
+  const handleEdit = async (user: UserListItem) => {
+    try {
+      setLoadingUser(true);
+
+      const fullUser = await getUser(user.id);
+
+      setEditingUser(fullUser);
+      setDialogOpen(true);
+    } catch (err) {
+      snackbar.error(err instanceof Error ? err.message : "Unable to load user.");
+    } finally {
+      setLoadingUser(false);
+    }
+  };
+
+  const handleDialogClose = () => {
+    if (saving || loadingUser) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setEditingUser(null);
   };
 
   const handleConfirmDelete = async () => {
@@ -143,11 +184,6 @@ export default function UsersTab() {
     }
   };
 
-  const handleEdit = (user: User) => {
-    setEditingUser(user);
-    setDialogOpen(true);
-  };
-
   return (
     <>
       <Paper
@@ -170,13 +206,7 @@ export default function UsersTab() {
             Users
           </Typography>
 
-          <Button
-            variant="contained"
-            onClick={() => {
-              setEditingUser(null);
-              setDialogOpen(true);
-            }}
-          >
+          <Button variant="contained" onClick={handleAddUser} disabled={loadingUser}>
             Add User
           </Button>
         </Box>
@@ -266,11 +296,21 @@ export default function UsersTab() {
 
                       <TableCell>{user.role}</TableCell>
 
-                      <TableCell>{user.department ?? "-"}</TableCell>
+                      <TableCell>
+                        {typeof user.department === "string"
+                          ? user.department
+                          : (user.department?.name ?? "-")}
+                      </TableCell>
 
-                      <TableCell>{user.position ?? "-"}</TableCell>
+                      <TableCell>
+                        {typeof user.position === "string"
+                          ? user.position
+                          : (user.position?.title ?? "-")}
+                      </TableCell>
 
-                      <TableCell>{user.shift ?? "-"}</TableCell>
+                      <TableCell>
+                        {typeof user.shift === "string" ? user.shift : (user.shift?.name ?? "-")}
+                      </TableCell>
 
                       <TableCell>
                         <Chip
@@ -288,7 +328,7 @@ export default function UsersTab() {
 
                       <TableCell align="right">
                         <TableAction
-                          onEdit={deleted ? undefined : () => handleEdit(user)}
+                          onEdit={deleted ? undefined : () => void handleEdit(user)}
 
                           onActivate={
                             !deleted && user.employment_status !== "ACTIVE"
@@ -320,16 +360,9 @@ export default function UsersTab() {
 
       <UserDialog
         open={dialogOpen}
-        loading={saving}
+        loading={saving || loadingUser}
         user={editingUser}
-
-        onClose={() => {
-          if (!saving) {
-            setDialogOpen(false);
-            setEditingUser(null);
-          }
-        }}
-
+        onClose={handleDialogClose}
         onSubmit={handleSave}
       />
 
@@ -338,13 +371,11 @@ export default function UsersTab() {
         title="Delete User"
         message={`Delete "${userToDelete?.display_name}"?`}
         loading={deleting}
-
         onClose={() => {
           if (!deleting) {
             setUserToDelete(null);
           }
         }}
-
         onConfirm={handleConfirmDelete}
       />
 
@@ -353,13 +384,11 @@ export default function UsersTab() {
         title="Permanently Delete User"
         message={`Permanently delete "${userToHardDelete?.display_name}"? This cannot be undone.`}
         loading={deleting}
-
         onClose={() => {
           if (!deleting) {
             setUserToHardDelete(null);
           }
         }}
-
         onConfirm={handleConfirmHardDelete}
       />
     </>

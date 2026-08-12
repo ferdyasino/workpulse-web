@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 
 import { FormDialog } from "@/components/ui";
 
-import type { User } from "../services/users.service";
+import type { EmploymentStatus, EmploymentType, User, UserRole } from "../services/users.service";
 
 type Props = {
   open: boolean;
@@ -18,9 +22,9 @@ type Props = {
     employee_no: string;
     display_name: string;
     email: string;
-    role?: string;
-    employment_status?: string;
-    employment_type?: string;
+    role?: UserRole;
+    employment_status?: EmploymentStatus;
+    employment_type?: EmploymentType;
   }) => Promise<void>;
 };
 
@@ -34,9 +38,12 @@ export default function UserDialog({
   const [employeeNo, setEmployeeNo] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("");
-  const [employmentStatus, setEmploymentStatus] = useState("");
-  const [employmentType, setEmploymentType] = useState("");
+
+  const [role, setRole] = useState<UserRole | "">("");
+
+  const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus | "">("");
+
+  const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
 
   const isEdit = Boolean(user);
 
@@ -49,6 +56,7 @@ export default function UserDialog({
       setEmployeeNo(user.employee_no ?? "");
       setDisplayName(user.display_name ?? "");
       setEmail(user.email ?? "");
+
       setRole(user.role ?? "");
       setEmploymentStatus(user.employment_status ?? "");
       setEmploymentType(user.employment_type ?? "");
@@ -56,6 +64,7 @@ export default function UserDialog({
       setEmployeeNo("");
       setDisplayName("");
       setEmail("");
+
       setRole("");
       setEmploymentStatus("");
       setEmploymentType("");
@@ -72,21 +81,21 @@ export default function UserDialog({
       display_name: displayName.trim(),
       email: email.trim(),
 
-      ...(role.trim()
+      ...(role
         ? {
-            role: role.trim(),
+            role,
           }
         : {}),
 
-      ...(employmentStatus.trim()
+      ...(employmentStatus
         ? {
-            employment_status: employmentStatus.trim(),
+            employment_status: employmentStatus,
           }
         : {}),
 
-      ...(employmentType.trim()
+      ...(employmentType
         ? {
-            employment_type: employmentType.trim(),
+            employment_type: employmentType,
           }
         : {}),
     });
@@ -100,12 +109,19 @@ export default function UserDialog({
     setEmployeeNo("");
     setDisplayName("");
     setEmail("");
+
     setRole("");
     setEmploymentStatus("");
     setEmploymentType("");
 
     onClose();
   };
+
+  const departmentName = user?.department?.name ?? "-";
+
+  const positionName = user?.position?.title ?? "-";
+
+  const shiftName = user?.shift?.name ?? "-";
 
   return (
     <FormDialog
@@ -142,21 +158,115 @@ export default function UserDialog({
           fullWidth
         />
 
-        <TextField label="Role" value={role} onChange={(e) => setRole(e.target.value)} fullWidth />
+        <FormControl fullWidth>
+          <InputLabel id="user-role-label">Role</InputLabel>
 
-        <TextField
-          label="Employment Status"
-          value={employmentStatus}
-          onChange={(e) => setEmploymentStatus(e.target.value)}
-          fullWidth
-        />
+          <Select
+            labelId="user-role-label"
+            value={role}
+            label="Role"
+            onChange={(e) => setRole(e.target.value as UserRole | "")}
+          >
+            <MenuItem value="">
+              <em>Not specified</em>
+            </MenuItem>
 
-        <TextField
-          label="Employment Type"
-          value={employmentType}
-          onChange={(e) => setEmploymentType(e.target.value)}
-          fullWidth
-        />
+            <MenuItem value="OWNER">OWNER</MenuItem>
+
+            <MenuItem value="ADMIN">ADMIN</MenuItem>
+
+            <MenuItem value="HR">HR</MenuItem>
+
+            <MenuItem value="SUPERVISOR">SUPERVISOR</MenuItem>
+
+            <MenuItem value="EMPLOYEE">EMPLOYEE</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel id="employment-status-label">Employment Status</InputLabel>
+
+          <Select
+            labelId="employment-status-label"
+            value={employmentStatus}
+            label="Employment Status"
+            onChange={(e) => setEmploymentStatus(e.target.value as EmploymentStatus | "")}
+          >
+            <MenuItem value="">
+              <em>Not specified</em>
+            </MenuItem>
+
+            <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+
+            <MenuItem value="INACTIVE">INACTIVE</MenuItem>
+
+            <MenuItem value="ON_LEAVE">ON LEAVE</MenuItem>
+
+            <MenuItem value="RESIGNED">RESIGNED</MenuItem>
+
+            <MenuItem value="TERMINATED">TERMINATED</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel id="employment-type-label">Employment Type</InputLabel>
+
+          <Select
+            labelId="employment-type-label"
+            value={employmentType}
+            label="Employment Type"
+            onChange={(e) => setEmploymentType(e.target.value as EmploymentType | "")}
+          >
+            <MenuItem value="">
+              <em>Not specified</em>
+            </MenuItem>
+
+            <MenuItem value="FULL_TIME">FULL TIME</MenuItem>
+
+            <MenuItem value="PART_TIME">PART TIME</MenuItem>
+
+            <MenuItem value="CONTRACT">CONTRACT</MenuItem>
+
+            <MenuItem value="INTERN">INTERN</MenuItem>
+          </Select>
+        </FormControl>
+
+        {isEdit && (
+          <>
+            <TextField
+              label="Department"
+              value={departmentName}
+              fullWidth
+              slotProps={{
+                input: {
+                  readOnly: true,
+                },
+              }}
+            />
+
+            <TextField
+              label="Position"
+              value={positionName}
+              fullWidth
+              slotProps={{
+                input: {
+                  readOnly: true,
+                },
+              }}
+            />
+
+            <TextField
+              label="Shift"
+              value={shiftName}
+              fullWidth
+              slotProps={{
+                input: {
+                  readOnly: true,
+                },
+              }}
+            />
+          </>
+        )}
       </Stack>
     </FormDialog>
   );

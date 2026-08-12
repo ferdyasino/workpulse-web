@@ -7,6 +7,7 @@ import {
   createUser as createUserService,
   deactivateUser as deactivateUserService,
   deleteUser as deleteUserService,
+  getUser as getUserService,
   getUsers,
   hardDeleteUser as hardDeleteUserService,
   restoreUser as restoreUserService,
@@ -14,6 +15,7 @@ import {
   type SaveUserRequest,
   type UpdateUserRequest,
   type User,
+  type UserListItem,
 } from "../services/users.service";
 
 export function useUsers() {
@@ -21,7 +23,7 @@ export function useUsers() {
 
   const workspaceId = user?.workspace_id;
 
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +58,20 @@ export function useUsers() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const getUser = useCallback(
+    async (id: string): Promise<User> => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
+
+      return await getUserService({
+        workspace_id: workspaceId,
+        id,
+      });
+    },
+    [workspaceId],
+  );
 
   const createUser = useCallback(
     async (payload: Omit<SaveUserRequest, "workspace_id">) => {
@@ -181,6 +197,8 @@ export function useUsers() {
     setIncludeDeleted,
 
     refresh: loadUsers,
+
+    getUser,
 
     createUser,
     updateUser,
