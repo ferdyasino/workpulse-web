@@ -78,7 +78,7 @@ async function ensureUniqueEmail(
   workspace_id: string,
   email: string,
   excludeId?: string,
-) {
+): Promise<void> {
   let query = supabaseAdmin
     .from("users")
     .select("id")
@@ -97,7 +97,13 @@ async function ensureUniqueEmail(
   }
 
   if (data) {
-    throw new Error("A user with this email already exists.");
+    const duplicateError = new Error("A user with this email already exists.");
+
+    Object.assign(duplicateError, {
+      code: "23505",
+    });
+
+    throw duplicateError;
   }
 }
 
@@ -127,20 +133,32 @@ export async function getUserContext(
   );
 
   return {
+    // Identity
     auth_user_id: user.id,
-
     user_id: user.id,
-
     email: user.email,
-
     display_name: user.display_name,
-
     avatar_url: user.avatar_url,
 
+    // Employee information
+    employee_no: user.employee_no,
+    first_name: user.first_name,
+    middle_name: user.middle_name,
+    last_name: user.last_name,
+    hire_date: user.hire_date,
+
+    // Employment
     role: user.role as UserRole,
-
     employment_status: user.employment_status as EmploymentStatus,
+    employment_type: user.employment_type as EmploymentType,
 
+    // Authentication
+    auth_enabled: user.auth_enabled,
+    login_provider: user.login_provider,
+    invited_at: user.invited_at,
+    last_login_at: user.last_login_at,
+
+    // Workspace
     workspace_id: user.workspace_id,
 
     department: user.department
@@ -157,6 +175,7 @@ export async function getUserContext(
         }
       : null,
 
+    // Current shift
     shift: assignment
       ? {
           id: assignment.shift.id,
@@ -171,6 +190,8 @@ export async function getUserContext(
           effective_from: assignment.effective_from,
         }
       : null,
+
+    meta: user.metadata,
   };
 }
 
@@ -232,13 +253,9 @@ export async function listUsers(
 
     return {
       id: user.id,
-
       employee_no: user.employee_no,
-
       display_name: user.display_name,
-
       email: user.email,
-
       avatar_url: user.avatar_url,
 
       role: user.role as UserRole,
@@ -286,47 +303,49 @@ export async function createUser(
 
   const now = new Date().toISOString();
 
+  const insertData: Database["public"]["Tables"]["users"]["Insert"] = {
+    id: crypto.randomUUID(),
+
+    workspace_id: payload.workspace_id,
+
+    employee_no: payload.employee_no,
+
+    first_name: payload.first_name,
+
+    middle_name: payload.middle_name ?? null,
+
+    last_name: payload.last_name,
+
+    display_name: payload.display_name,
+
+    email: payload.email,
+
+    avatar_url: payload.avatar_url ?? null,
+
+    department_id: payload.department_id ?? null,
+
+    position_id: payload.position_id ?? null,
+
+    role: payload.role ?? "EMPLOYEE",
+
+    employment_status: payload.employment_status ?? "ACTIVE",
+
+    employment_type: payload.employment_type ?? "FULL_TIME",
+
+    auth_enabled: payload.auth_enabled ?? false,
+
+    login_provider: payload.login_provider ?? "EMAIL",
+
+    metadata: payload.metadata ?? {},
+
+    created_at: now,
+
+    updated_at: now,
+  };
+
   const { data, error } = await supabaseAdmin
     .from("users")
-    .insert({
-      id: crypto.randomUUID(),
-
-      workspace_id: payload.workspace_id,
-
-      employee_no: payload.employee_no,
-
-      first_name: payload.first_name,
-
-      middle_name: payload.middle_name ?? null,
-
-      last_name: payload.last_name,
-
-      display_name: payload.display_name,
-
-      email: payload.email,
-
-      avatar_url: payload.avatar_url ?? null,
-
-      department_id: payload.department_id ?? null,
-
-      position_id: payload.position_id ?? null,
-
-      role: payload.role ?? "EMPLOYEE",
-
-      employment_status: payload.employment_status ?? "ACTIVE",
-
-      employment_type: payload.employment_type ?? "FULL_TIME",
-
-      auth_enabled: payload.auth_enabled ?? false,
-
-      login_provider: payload.login_provider ?? "EMAIL",
-
-      metadata: payload.metadata ?? {},
-
-      created_at: now,
-
-      updated_at: now,
-    })
+    .insert(insertData)
     .select(USER_SELECT)
     .single();
 
@@ -343,7 +362,7 @@ export async function updateUser(
     workspace_id: string;
   },
 ) {
-  if (payload.email) {
+  if (payload.email !== undefined) {
     await ensureUniqueEmail(
       supabaseAdmin,
       payload.workspace_id,
@@ -352,12 +371,54 @@ export async function updateUser(
     );
   }
 
+  const updateData: Database["public"]["Tables"]["users"]["Update"] = {
+    employee_no: payload.employee_no,
+
+    first_name: payload.first_name,
+
+    middle_name: payload.middle_name ?? null,
+
+    last_name: payload.last_name,
+
+    display_name: payload.display_name,
+
+    email: payload.email,
+
+    avatar_url: payload.avatar_url ?? null,
+
+    department_id: payload.department_id ?? null,
+
+    position_id: payload.position_id ?? null,
+
+    role: payload.role ?? "EMPLOYEE",
+
+    employment_status: payload.employment_status ?? "ACTIVE",
+
+    employment_type: payload.employment_type ?? "FULL_TIME",
+
+    auth_enabled: payload.auth_enabled ?? false,
+
+    login_provider: payload.login_provider ?? "EMAIL",
+
+    hire_date: payload.hire_date ?? null,
+
+    metadata: payload.metadata ?? {},
+
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log(
+    "USER_UPDATE:",
+    JSON.stringify({
+      id: payload.id,
+      workspace_id: payload.workspace_id,
+      updateData,
+    }),
+  );
+
   const { data, error } = await supabaseAdmin
     .from("users")
-    .update({
-      ...payload,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
     .is("deleted_at", null)
@@ -365,6 +426,16 @@ export async function updateUser(
     .single();
 
   if (error) {
+    console.error(
+      "USER_UPDATE DATABASE ERROR:",
+      JSON.stringify({
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      }),
+    );
+
     throw error;
   }
 
@@ -413,11 +484,13 @@ export async function deleteUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
+  const now = new Date().toISOString();
+
   const { data, error } = await supabaseAdmin
     .from("users")
     .update({
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      deleted_at: now,
+      updated_at: now,
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)

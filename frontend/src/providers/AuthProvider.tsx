@@ -21,14 +21,14 @@ export default function AuthProvider({ children }: Props) {
 
   const [state, setState] = useState<AuthState>({
     user: storedUser,
-    isAuthenticated: Boolean(storedUser),
+    isAuthenticated: storedUser !== null,
     isLoading: false,
   });
 
   /**
    * Google Login
    */
-  async function login(credential: string) {
+  async function login(credential: string): Promise<void> {
     setState((current) => ({
       ...current,
       isLoading: true,
@@ -56,7 +56,7 @@ export default function AuthProvider({ children }: Props) {
   /**
    * Email + Password Login
    */
-  async function loginEmail(email: string, password: string) {
+  async function loginEmail(email: string, password: string): Promise<void> {
     setState((current) => ({
       ...current,
       isLoading: true,
@@ -84,7 +84,7 @@ export default function AuthProvider({ children }: Props) {
   /**
    * Logout
    */
-  async function signOut() {
+  async function signOut(): Promise<void> {
     await logout();
 
     setState({
@@ -100,7 +100,7 @@ export default function AuthProvider({ children }: Props) {
   useEffect(() => {
     const user = getStoredUser();
 
-    if (user) {
+    if (user !== null) {
       setState({
         user,
         isAuthenticated: true,
@@ -113,14 +113,8 @@ export default function AuthProvider({ children }: Props) {
     <AuthContext.Provider
       value={{
         ...state,
-
-        // Google login
         login,
-
-        // Email/password login
         loginWithEmail: loginEmail,
-
-        // Logout
         signOut,
       }}
     >

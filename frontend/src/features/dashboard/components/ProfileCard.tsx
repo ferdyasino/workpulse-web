@@ -7,11 +7,9 @@ import { formatShiftTime } from "@/utils/time";
 
 export default function ProfileCard() {
   const { user } = useAuth();
-
   const { state } = useAttendanceContext();
 
   const shift = state?.shift ?? user?.shift ?? null;
-
   const status = state?.status ?? "OFF";
 
   const avatarUrl = user?.avatar_url ?? undefined;
@@ -20,16 +18,15 @@ export default function ProfileCard() {
 
   const initials = name
     .split(/[.\s_-]/)
+    .filter(Boolean)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
 
   const department = user?.department?.name ?? "Unassigned";
-
   const position = user?.position?.name ?? "Unassigned";
-
-  const employeeNo = "--";
+  const employeeNo = user?.employee_no ?? "--";
 
   const timeFormat: "12h" | "24h" = "12h";
 
@@ -112,7 +109,7 @@ export default function ProfileCard() {
                 mt: 0.5,
               }}
             >
-              {user?.email}
+              {user?.email ?? "--"}
             </Typography>
 
             <Typography
@@ -263,7 +260,7 @@ export default function ProfileCard() {
                 fontWeight: 600,
               }}
             >
-              --
+              {user?.hire_date ?? "--"}
             </Typography>
           </Box>
         </Box>

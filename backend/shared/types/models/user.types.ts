@@ -182,27 +182,41 @@ export type UpdateUserPayload = {
  * Authentication user context
  */
 export type UserContext = {
+  // Identity
   auth_user_id: string;
-
   user_id: string;
-
   email: string;
-
   display_name: string;
-
   avatar_url: string | null;
 
+  // Employee information
+  employee_no: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  hire_date: string | null;
+
+  // Employment
   role: UserRole;
-
   employment_status: EmploymentStatus;
+  employment_type: EmploymentType;
 
+  // Authentication
+  auth_enabled: boolean;
+  login_provider: string;
+  invited_at: string | null;
+  last_login_at: string | null;
+
+  // Workspace
   workspace_id: string;
-
   department: UserDepartment | null;
-
   position: UserPosition | null;
 
+  // Current shift
   shift: UserShift | null;
+
+  // Metadata
+  meta: Json;
 };
 
 /**
