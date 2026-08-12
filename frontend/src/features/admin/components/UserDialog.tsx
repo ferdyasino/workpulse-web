@@ -9,23 +9,37 @@ import TextField from "@mui/material/TextField";
 
 import { FormDialog } from "@/components/ui";
 
+import { useDepartments } from "../hooks/useDepartments";
+import { usePositions } from "../hooks/usePositions";
+
 import type { EmploymentStatus, EmploymentType, User, UserRole } from "../services/users.service";
+
+export type UserFormValues = {
+  employee_no: string;
+  display_name: string;
+  email: string;
+
+  role?: UserRole;
+
+  employment_status?: EmploymentStatus;
+
+  employment_type?: EmploymentType;
+
+  department_id?: string | null;
+
+  position_id?: string | null;
+};
 
 type Props = {
   open: boolean;
+
   loading?: boolean;
+
   user?: User | null;
 
   onClose: () => void;
 
-  onSubmit: (values: {
-    employee_no: string;
-    display_name: string;
-    email: string;
-    role?: UserRole;
-    employment_status?: EmploymentStatus;
-    employment_type?: EmploymentType;
-  }) => Promise<void>;
+  onSubmit: (values: UserFormValues) => Promise<void>;
 };
 
 export default function UserDialog({
@@ -35,8 +49,14 @@ export default function UserDialog({
   onClose,
   onSubmit,
 }: Props) {
+  const { departments, loading: departmentsLoading } = useDepartments();
+
+  const { positions, loading: positionsLoading } = usePositions();
+
   const [employeeNo, setEmployeeNo] = useState("");
+
   const [displayName, setDisplayName] = useState("");
+
   const [email, setEmail] = useState("");
 
   const [role, setRole] = useState<UserRole | "">("");
@@ -44,6 +64,10 @@ export default function UserDialog({
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus | "">("");
 
   const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
+
+  const [departmentId, setDepartmentId] = useState("");
+
+  const [positionId, setPositionId] = useState("");
 
   const isEdit = Boolean(user);
 
@@ -54,20 +78,36 @@ export default function UserDialog({
 
     if (user) {
       setEmployeeNo(user.employee_no ?? "");
+
       setDisplayName(user.display_name ?? "");
+
       setEmail(user.email ?? "");
 
       setRole(user.role ?? "");
+
       setEmploymentStatus(user.employment_status ?? "");
+
       setEmploymentType(user.employment_type ?? "");
+
+      setDepartmentId(user.department_id ?? "");
+
+      setPositionId(user.position_id ?? "");
     } else {
       setEmployeeNo("");
+
       setDisplayName("");
+
       setEmail("");
 
       setRole("");
+
       setEmploymentStatus("");
+
       setEmploymentType("");
+
+      setDepartmentId("");
+
+      setPositionId("");
     }
   }, [user, open]);
 
@@ -78,7 +118,9 @@ export default function UserDialog({
 
     await onSubmit({
       employee_no: employeeNo.trim(),
+
       display_name: displayName.trim(),
+
       email: email.trim(),
 
       ...(role
@@ -98,6 +140,10 @@ export default function UserDialog({
             employment_type: employmentType,
           }
         : {}),
+
+      department_id: departmentId || null,
+
+      position_id: positionId || null,
     });
   };
 
@@ -107,21 +153,23 @@ export default function UserDialog({
     }
 
     setEmployeeNo("");
+
     setDisplayName("");
+
     setEmail("");
 
     setRole("");
+
     setEmploymentStatus("");
+
     setEmploymentType("");
+
+    setDepartmentId("");
+
+    setPositionId("");
 
     onClose();
   };
-
-  const departmentName = user?.department?.name ?? "-";
-
-  const positionName = user?.position?.title ?? "-";
-
-  const shiftName = user?.shift?.name ?? "-";
 
   return (
     <FormDialog
@@ -168,105 +216,110 @@ export default function UserDialog({
             onChange={(e) => setRole(e.target.value as UserRole | "")}
           >
             <MenuItem value="">
-              <em>Not specified</em>
+              <em>None</em>
             </MenuItem>
 
-            <MenuItem value="OWNER">OWNER</MenuItem>
+            <MenuItem value="OWNER">Owner</MenuItem>
 
-            <MenuItem value="ADMIN">ADMIN</MenuItem>
+            <MenuItem value="ADMIN">Admin</MenuItem>
 
             <MenuItem value="HR">HR</MenuItem>
 
-            <MenuItem value="SUPERVISOR">SUPERVISOR</MenuItem>
+            <MenuItem value="SUPERVISOR">Supervisor</MenuItem>
 
-            <MenuItem value="EMPLOYEE">EMPLOYEE</MenuItem>
+            <MenuItem value="EMPLOYEE">Employee</MenuItem>
           </Select>
         </FormControl>
 
         <FormControl fullWidth>
-          <InputLabel id="employment-status-label">Employment Status</InputLabel>
+          <InputLabel id="user-employment-status-label">Employment Status</InputLabel>
 
           <Select
-            labelId="employment-status-label"
+            labelId="user-employment-status-label"
             value={employmentStatus}
             label="Employment Status"
             onChange={(e) => setEmploymentStatus(e.target.value as EmploymentStatus | "")}
           >
             <MenuItem value="">
-              <em>Not specified</em>
+              <em>None</em>
             </MenuItem>
 
-            <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+            <MenuItem value="ACTIVE">Active</MenuItem>
 
-            <MenuItem value="INACTIVE">INACTIVE</MenuItem>
+            <MenuItem value="INACTIVE">Inactive</MenuItem>
 
-            <MenuItem value="ON_LEAVE">ON LEAVE</MenuItem>
+            <MenuItem value="ON_LEAVE">On Leave</MenuItem>
 
-            <MenuItem value="RESIGNED">RESIGNED</MenuItem>
+            <MenuItem value="RESIGNED">Resigned</MenuItem>
 
-            <MenuItem value="TERMINATED">TERMINATED</MenuItem>
+            <MenuItem value="TERMINATED">Terminated</MenuItem>
           </Select>
         </FormControl>
 
         <FormControl fullWidth>
-          <InputLabel id="employment-type-label">Employment Type</InputLabel>
+          <InputLabel id="user-employment-type-label">Employment Type</InputLabel>
 
           <Select
-            labelId="employment-type-label"
+            labelId="user-employment-type-label"
             value={employmentType}
             label="Employment Type"
             onChange={(e) => setEmploymentType(e.target.value as EmploymentType | "")}
           >
             <MenuItem value="">
-              <em>Not specified</em>
+              <em>None</em>
             </MenuItem>
 
-            <MenuItem value="FULL_TIME">FULL TIME</MenuItem>
+            <MenuItem value="FULL_TIME">Full Time</MenuItem>
 
-            <MenuItem value="PART_TIME">PART TIME</MenuItem>
+            <MenuItem value="PART_TIME">Part Time</MenuItem>
 
-            <MenuItem value="CONTRACT">CONTRACT</MenuItem>
+            <MenuItem value="CONTRACT">Contract</MenuItem>
 
-            <MenuItem value="INTERN">INTERN</MenuItem>
+            <MenuItem value="INTERN">Intern</MenuItem>
           </Select>
         </FormControl>
 
-        {isEdit && (
-          <>
-            <TextField
-              label="Department"
-              value={departmentName}
-              fullWidth
-              slotProps={{
-                input: {
-                  readOnly: true,
-                },
-              }}
-            />
+        <FormControl fullWidth disabled={departmentsLoading}>
+          <InputLabel id="user-department-label">Department</InputLabel>
 
-            <TextField
-              label="Position"
-              value={positionName}
-              fullWidth
-              slotProps={{
-                input: {
-                  readOnly: true,
-                },
-              }}
-            />
+          <Select
+            labelId="user-department-label"
+            value={departmentId}
+            label="Department"
+            onChange={(e) => setDepartmentId(e.target.value)}
+          >
+            <MenuItem value="">
+              <em>None</em>
+            </MenuItem>
 
-            <TextField
-              label="Shift"
-              value={shiftName}
-              fullWidth
-              slotProps={{
-                input: {
-                  readOnly: true,
-                },
-              }}
-            />
-          </>
-        )}
+            {departments.map((department) => (
+              <MenuItem key={department.id} value={department.id}>
+                {department.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth disabled={positionsLoading}>
+          <InputLabel id="user-position-label">Position</InputLabel>
+
+          <Select
+            labelId="user-position-label"
+            value={positionId}
+            label="Position"
+            onChange={(e) => setPositionId(e.target.value)}
+          >
+            <MenuItem value="">
+              <em>None</em>
+            </MenuItem>
+
+            {positions.map((position) => (
+              <MenuItem key={position.id} value={position.id}>
+                {position.title}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Stack>
     </FormDialog>
   );

@@ -18,16 +18,11 @@ import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
 
-import type {
-  EmploymentStatus,
-  EmploymentType,
-  User,
-  UserListItem,
-  UserRole,
-} from "../services/users.service";
+import type { User, UserListItem } from "../services/users.service";
 
 import { useUsers } from "../hooks/useUsers";
-import UserDialog from "./UserDialog";
+
+import UserDialog, { type UserFormValues } from "./UserDialog";
 
 export default function UsersTab() {
   const snackbar = useSnackbar();
@@ -70,14 +65,7 @@ export default function UsersTab() {
 
   const [deleting, setDeleting] = useState(false);
 
-  const handleSave = async (values: {
-    employee_no: string;
-    display_name: string;
-    email: string;
-    role?: UserRole;
-    employment_status?: EmploymentStatus;
-    employment_type?: EmploymentType;
-  }) => {
+  const handleSave = async (values: UserFormValues) => {
     const nameParts = values.display_name.trim().split(/\s+/);
 
     const first_name = nameParts[0] ?? "";
@@ -90,8 +78,11 @@ export default function UsersTab() {
       if (editingUser) {
         await updateUser({
           id: editingUser.id,
+
           first_name,
+
           last_name,
+
           ...values,
         });
 
@@ -99,7 +90,9 @@ export default function UsersTab() {
       } else {
         await createUser({
           first_name,
+
           last_name,
+
           ...values,
         });
 
@@ -107,17 +100,13 @@ export default function UsersTab() {
       }
 
       setDialogOpen(false);
+
       setEditingUser(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to save user.");
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleAddUser = () => {
-    setEditingUser(null);
-    setDialogOpen(true);
   };
 
   const handleEdit = async (user: UserListItem) => {
@@ -127,6 +116,7 @@ export default function UsersTab() {
       const fullUser = await getUser(user.id);
 
       setEditingUser(fullUser);
+
       setDialogOpen(true);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to load user.");
@@ -135,12 +125,19 @@ export default function UsersTab() {
     }
   };
 
+  const handleAddUser = () => {
+    setEditingUser(null);
+
+    setDialogOpen(true);
+  };
+
   const handleDialogClose = () => {
     if (saving || loadingUser) {
       return;
     }
 
     setDialogOpen(false);
+
     setEditingUser(null);
   };
 
@@ -254,13 +251,21 @@ export default function UsersTab() {
             <TableHead>
               <TableRow>
                 <TableCell>Employee No.</TableCell>
+
                 <TableCell>Name</TableCell>
+
                 <TableCell>Email</TableCell>
+
                 <TableCell>Role</TableCell>
+
                 <TableCell>Department</TableCell>
+
                 <TableCell>Position</TableCell>
+
                 <TableCell>Shift</TableCell>
+
                 <TableCell>Status</TableCell>
+
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -329,23 +334,18 @@ export default function UsersTab() {
                       <TableCell align="right">
                         <TableAction
                           onEdit={deleted ? undefined : () => void handleEdit(user)}
-
                           onActivate={
                             !deleted && user.employment_status !== "ACTIVE"
                               ? () => void activateUser(user.id)
                               : undefined
                           }
-
                           onDeactivate={
                             !deleted && user.employment_status === "ACTIVE"
                               ? () => void deactivateUser(user.id)
                               : undefined
                           }
-
                           onDelete={!deleted ? () => setUserToDelete(user) : undefined}
-
                           onRestore={deleted ? () => void restoreUser(user.id) : undefined}
-
                           onHardDelete={deleted ? () => setUserToHardDelete(user) : undefined}
                         />
                       </TableCell>
