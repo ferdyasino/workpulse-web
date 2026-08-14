@@ -16,7 +16,6 @@ export default function AdminPage() {
   const [tab, setTab] = useState(0);
 
   const { user } = useAuth();
-
   const { users } = useUsers();
 
   console.log("ADMIN AUTH USER:", user);
@@ -26,42 +25,54 @@ export default function AdminPage() {
     <Paper
       elevation={0}
       sx={{
-        p: 4,
-        borderRadius: 2,
         width: "100%",
         minWidth: 0,
+        borderRadius: 2,
         overflow: "hidden",
       }}
     >
-      <Typography
-        variant="h5"
-        sx={{
-          fontWeight: 700,
-          mb: 3,
-        }}
-      >
-        Admin Dashboard
-      </Typography>
-
-      <Tabs
-        value={tab}
-        onChange={(_, value) => setTab(value)}
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{
-          mb: 3,
-        }}
-      >
-        <Tab label="Users" />
-        <Tab label="Departments" />
-        <Tab label="Positions" />
-        <Tab label="Shifts" />
-        <Tab label="User Shift Overrides" />
-        <Tab label="User Shifts" />
-      </Tabs>
-
+      {/* Sticky Admin Navigation */}
       <Box
         sx={{
+          position: "sticky",
+          top: 0,
+          zIndex: (theme) => theme.zIndex.appBar - 1,
+          px: 4,
+          pt: 4,
+          backgroundColor: "background.paper",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+            mb: 3,
+          }}
+        >
+          Admin Dashboard
+        </Typography>
+
+        <Tabs
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label="Users" />
+          <Tab label="Departments" />
+          <Tab label="Positions" />
+          <Tab label="Shifts" />
+          <Tab label="User Shift Overrides" />
+          <Tab label="User Shifts" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Content */}
+      <Box
+        sx={{
+          p: 4,
           width: "100%",
           minWidth: 0,
           overflow: "hidden",
