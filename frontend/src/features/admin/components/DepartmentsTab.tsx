@@ -18,10 +18,10 @@ import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
 
-import DepartmentDialog from "./DepartmentDialog";
-
-import type { Department } from "../services/departments.service";
 import { useDepartments } from "../hooks/useDepartments";
+import type { Department } from "../services/departments.service";
+
+import DepartmentDialog from "./DepartmentDialog";
 
 export default function DepartmentsTab() {
   const snackbar = useSnackbar();
@@ -85,7 +85,9 @@ export default function DepartmentsTab() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!departmentToDelete) return;
+    if (!departmentToDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -93,7 +95,6 @@ export default function DepartmentsTab() {
       await deleteDepartment(departmentToDelete.id);
 
       snackbar.success("Department deleted.");
-
       setDepartmentToDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete department.");
@@ -103,7 +104,9 @@ export default function DepartmentsTab() {
   };
 
   const handleConfirmHardDelete = async () => {
-    if (!departmentToHardDelete) return;
+    if (!departmentToHardDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -111,7 +114,6 @@ export default function DepartmentsTab() {
       await hardDeleteDepartment(departmentToHardDelete.id);
 
       snackbar.success("Department permanently deleted.");
-
       setDepartmentToHardDelete(null);
     } catch (err) {
       snackbar.error(
@@ -130,6 +132,15 @@ export default function DepartmentsTab() {
   const handleEdit = (department: Department) => {
     setEditingDepartment(department);
     setDialogOpen(true);
+  };
+
+  const handleDialogClose = () => {
+    if (saving) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setEditingDepartment(null);
   };
 
   return (
@@ -170,7 +181,7 @@ export default function DepartmentsTab() {
             control={
               <Switch
                 checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
+                onChange={(event) => setIncludeInactive(event.target.checked)}
               />
             }
             label="Show inactive"
@@ -180,7 +191,7 @@ export default function DepartmentsTab() {
             control={
               <Switch
                 checked={includeDeleted}
-                onChange={(e) => setIncludeDeleted(e.target.checked)}
+                onChange={(event) => setIncludeDeleted(event.target.checked)}
               />
             }
             label="Show deleted"
@@ -220,7 +231,14 @@ export default function DepartmentsTab() {
                   const deleted = Boolean(department.deleted_at);
 
                   return (
-                    <TableRow key={department.id} hover>
+                    <TableRow
+                      key={department.id}
+                      hover
+                      onClick={deleted ? undefined : () => handleEdit(department)}
+                      sx={{
+                        cursor: deleted ? "default" : "pointer",
+                      }}
+                    >
                       <TableCell>{department.name}</TableCell>
 
                       <TableCell>{department.description ?? "-"}</TableCell>
@@ -239,7 +257,7 @@ export default function DepartmentsTab() {
                         />
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                         <TableAction
                           onEdit={deleted ? undefined : () => handleEdit(department)}
                           onActivate={
@@ -274,12 +292,7 @@ export default function DepartmentsTab() {
         open={dialogOpen}
         loading={saving}
         department={editingDepartment}
-        onClose={() => {
-          if (!saving) {
-            setDialogOpen(false);
-            setEditingDepartment(null);
-          }
-        }}
+        onClose={handleDialogClose}
         onSubmit={handleSave}
       />
 

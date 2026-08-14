@@ -18,10 +18,10 @@ import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
 
-import PositionDialog from "./PositionDialog";
-
-import type { Position } from "../services/positions.service";
 import { usePositions } from "../hooks/usePositions";
+import type { Position } from "../services/positions.service";
+
+import PositionDialog from "./PositionDialog";
 
 export default function PositionsTab() {
   const snackbar = useSnackbar();
@@ -85,7 +85,9 @@ export default function PositionsTab() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!positionToDelete) return;
+    if (!positionToDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -93,7 +95,6 @@ export default function PositionsTab() {
       await deletePosition(positionToDelete.id);
 
       snackbar.success("Position deleted.");
-
       setPositionToDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete position.");
@@ -103,7 +104,9 @@ export default function PositionsTab() {
   };
 
   const handleConfirmHardDelete = async () => {
-    if (!positionToHardDelete) return;
+    if (!positionToHardDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -111,13 +114,31 @@ export default function PositionsTab() {
       await hardDeletePosition(positionToHardDelete.id);
 
       snackbar.success("Position permanently deleted.");
-
       setPositionToHardDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to permanently delete position.");
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingPosition(null);
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (position: Position) => {
+    setEditingPosition(position);
+    setDialogOpen(true);
+  };
+
+  const handleDialogClose = () => {
+    if (saving) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setEditingPosition(null);
   };
 
   return (
@@ -142,13 +163,7 @@ export default function PositionsTab() {
             Positions
           </Typography>
 
-          <Button
-            variant="contained"
-            onClick={() => {
-              setEditingPosition(null);
-              setDialogOpen(true);
-            }}
-          >
+          <Button variant="contained" onClick={handleOpenCreate}>
             Add Position
           </Button>
         </Box>
@@ -164,7 +179,7 @@ export default function PositionsTab() {
             control={
               <Switch
                 checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
+                onChange={(event) => setIncludeInactive(event.target.checked)}
               />
             }
             label="Show inactive"
@@ -174,7 +189,7 @@ export default function PositionsTab() {
             control={
               <Switch
                 checked={includeDeleted}
-                onChange={(e) => setIncludeDeleted(e.target.checked)}
+                onChange={(event) => setIncludeDeleted(event.target.checked)}
               />
             }
             label="Show deleted"
@@ -214,7 +229,14 @@ export default function PositionsTab() {
                   const deleted = Boolean(position.deleted_at);
 
                   return (
-                    <TableRow key={position.id} hover>
+                    <TableRow
+                      key={position.id}
+                      hover
+                      onClick={deleted ? undefined : () => handleEdit(position)}
+                      sx={{
+                        cursor: deleted ? "default" : "pointer",
+                      }}
+                    >
                       <TableCell>{position.title}</TableCell>
 
                       <TableCell>{position.description ?? "-"}</TableCell>
@@ -229,16 +251,9 @@ export default function PositionsTab() {
                         />
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                         <TableAction
-                          onEdit={
-                            deleted
-                              ? undefined
-                              : () => {
-                                  setEditingPosition(position);
-                                  setDialogOpen(true);
-                                }
-                          }
+                          onEdit={deleted ? undefined : () => handleEdit(position)}
                           onActivate={
                             !deleted && position.status === "INACTIVE"
                               ? () => void activatePosition(position.id)
@@ -269,12 +284,7 @@ export default function PositionsTab() {
         open={dialogOpen}
         loading={saving}
         position={editingPosition}
-        onClose={() => {
-          if (!saving) {
-            setDialogOpen(false);
-            setEditingPosition(null);
-          }
-        }}
+        onClose={handleDialogClose}
         onSubmit={handleSave}
       />
 

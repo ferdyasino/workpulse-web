@@ -17,13 +17,12 @@ import Typography from "@mui/material/Typography";
 import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
-
 import { formatTime } from "@/utils/time";
 
-import ShiftDialog from "./ShiftDialog";
-
-import type { Shift } from "../services/shifts.service";
 import { useShifts } from "../hooks/useShifts";
+import type { Shift } from "../services/shifts.service";
+
+import ShiftDialog from "./ShiftDialog";
 
 export default function ShiftsTab() {
   const snackbar = useSnackbar();
@@ -52,7 +51,6 @@ export default function ShiftsTab() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
 
   const [shiftToDelete, setShiftToDelete] = useState<Shift | null>(null);
@@ -97,7 +95,9 @@ export default function ShiftsTab() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!shiftToDelete) return;
+    if (!shiftToDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -105,7 +105,6 @@ export default function ShiftsTab() {
       await deleteShift(shiftToDelete.id);
 
       snackbar.success("Shift deleted.");
-
       setShiftToDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete shift.");
@@ -115,7 +114,9 @@ export default function ShiftsTab() {
   };
 
   const handleConfirmHardDelete = async () => {
-    if (!shiftToHardDelete) return;
+    if (!shiftToHardDelete) {
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -123,7 +124,6 @@ export default function ShiftsTab() {
       await hardDeleteShift(shiftToHardDelete.id);
 
       snackbar.success("Shift permanently deleted.");
-
       setShiftToHardDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to permanently delete shift.");
@@ -132,9 +132,23 @@ export default function ShiftsTab() {
     }
   };
 
+  const handleOpenCreate = () => {
+    setEditingShift(null);
+    setDialogOpen(true);
+  };
+
   const handleEdit = (shift: Shift) => {
     setEditingShift(shift);
     setDialogOpen(true);
+  };
+
+  const handleDialogClose = () => {
+    if (saving) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setEditingShift(null);
   };
 
   return (
@@ -164,13 +178,7 @@ export default function ShiftsTab() {
               Import Shifts
             </Button>
 
-            <Button
-              variant="contained"
-              onClick={() => {
-                setEditingShift(null);
-                setDialogOpen(true);
-              }}
-            >
+            <Button variant="contained" onClick={handleOpenCreate}>
               Add Shift
             </Button>
           </Box>
@@ -187,7 +195,7 @@ export default function ShiftsTab() {
             control={
               <Switch
                 checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
+                onChange={(event) => setIncludeInactive(event.target.checked)}
               />
             }
             label="Show inactive"
@@ -197,7 +205,7 @@ export default function ShiftsTab() {
             control={
               <Switch
                 checked={includeDeleted}
-                onChange={(e) => setIncludeDeleted(e.target.checked)}
+                onChange={(event) => setIncludeDeleted(event.target.checked)}
               />
             }
             label="Show deleted"
@@ -241,7 +249,14 @@ export default function ShiftsTab() {
                   const deleted = Boolean(shift.deleted_at);
 
                   return (
-                    <TableRow key={shift.id} hover>
+                    <TableRow
+                      key={shift.id}
+                      hover
+                      onClick={deleted ? undefined : () => handleEdit(shift)}
+                      sx={{
+                        cursor: deleted ? "default" : "pointer",
+                      }}
+                    >
                       <TableCell>{shift.name}</TableCell>
 
                       <TableCell>{formatTime(shift.start_time, "12h")}</TableCell>
@@ -264,7 +279,7 @@ export default function ShiftsTab() {
                         />
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                         <TableAction
                           onEdit={deleted ? undefined : () => handleEdit(shift)}
                           onActivate={
@@ -295,12 +310,7 @@ export default function ShiftsTab() {
         open={dialogOpen}
         loading={saving}
         shift={editingShift}
-        onClose={() => {
-          if (!saving) {
-            setDialogOpen(false);
-            setEditingShift(null);
-          }
-        }}
+        onClose={handleDialogClose}
         onSubmit={handleSave}
       />
 
