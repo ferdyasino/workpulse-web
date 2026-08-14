@@ -52,24 +52,19 @@ export default function UsersTab() {
   } = useUsers();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const [userToDelete, setUserToDelete] = useState<UserListItem | null>(null);
-
   const [userToHardDelete, setUserToHardDelete] = useState<UserListItem | null>(null);
 
   const [saving, setSaving] = useState(false);
-
   const [loadingUser, setLoadingUser] = useState(false);
-
   const [deleting, setDeleting] = useState(false);
 
   const handleSave = async (values: UserFormValues) => {
     const nameParts = values.display_name.trim().split(/\s+/);
 
     const first_name = nameParts[0] ?? "";
-
     const last_name = nameParts.slice(1).join(" ") || first_name;
 
     try {
@@ -78,11 +73,8 @@ export default function UsersTab() {
       if (editingUser) {
         await updateUser({
           id: editingUser.id,
-
           first_name,
-
           last_name,
-
           ...values,
         });
 
@@ -90,9 +82,7 @@ export default function UsersTab() {
       } else {
         await createUser({
           first_name,
-
           last_name,
-
           ...values,
         });
 
@@ -100,7 +90,6 @@ export default function UsersTab() {
       }
 
       setDialogOpen(false);
-
       setEditingUser(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to save user.");
@@ -110,15 +99,17 @@ export default function UsersTab() {
   };
 
   const handleEdit = async (user: UserListItem) => {
-    try {
-      setLoadingUser(true);
+    setEditingUser(null);
+    setDialogOpen(true);
+    setLoadingUser(true);
 
+    try {
       const fullUser = await getUser(user.id);
 
       setEditingUser(fullUser);
-
-      setDialogOpen(true);
     } catch (err) {
+      setDialogOpen(false);
+
       snackbar.error(err instanceof Error ? err.message : "Unable to load user.");
     } finally {
       setLoadingUser(false);
@@ -127,7 +118,6 @@ export default function UsersTab() {
 
   const handleAddUser = () => {
     setEditingUser(null);
-
     setDialogOpen(true);
   };
 
@@ -137,7 +127,6 @@ export default function UsersTab() {
     }
 
     setDialogOpen(false);
-
     setEditingUser(null);
   };
 
@@ -152,7 +141,6 @@ export default function UsersTab() {
       await deleteUser(userToDelete.id);
 
       snackbar.success("User deleted.");
-
       setUserToDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to delete user.");
@@ -172,7 +160,6 @@ export default function UsersTab() {
       await hardDeleteUser(userToHardDelete.id);
 
       snackbar.success("User permanently deleted.");
-
       setUserToHardDelete(null);
     } catch (err) {
       snackbar.error(err instanceof Error ? err.message : "Unable to permanently delete user.");
@@ -251,21 +238,13 @@ export default function UsersTab() {
             <TableHead>
               <TableRow>
                 <TableCell>Employee No.</TableCell>
-
                 <TableCell>Name</TableCell>
-
                 <TableCell>Email</TableCell>
-
                 <TableCell>Role</TableCell>
-
                 <TableCell>Department</TableCell>
-
                 <TableCell>Position</TableCell>
-
                 <TableCell>Shift</TableCell>
-
                 <TableCell>Status</TableCell>
-
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -292,7 +271,14 @@ export default function UsersTab() {
                   const deleted = Boolean(user.deleted_at);
 
                   return (
-                    <TableRow key={user.id} hover>
+                    <TableRow
+                      key={user.id}
+                      hover
+                      onClick={deleted ? undefined : () => void handleEdit(user)}
+                      sx={{
+                        cursor: deleted ? "default" : "pointer",
+                      }}
+                    >
                       <TableCell>{user.employee_no}</TableCell>
 
                       <TableCell>{user.display_name}</TableCell>
@@ -331,7 +317,7 @@ export default function UsersTab() {
                         />
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                         <TableAction
                           onEdit={deleted ? undefined : () => void handleEdit(user)}
                           onActivate={
