@@ -19,14 +19,16 @@ interface WorkspaceProviderProps {
 }
 
 export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspace, setWorkspaceState] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isPlatformOwner = user?.role === "OWNER";
+
   const refreshWorkspaces = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       setWorkspaces([]);
       setWorkspaceState(null);
       clearActiveWorkspace();
@@ -37,44 +39,89 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     setLoading(true);
 
     try {
-      const data = await listWorkspaces();
+      /*
+       * OWNER is the platform-level workspace administrator.
+       * OWNER can see and switch between all workspaces.
+       */
+      if (isPlatformOwner) {
+        const data = await listWorkspaces();
 
-      setWorkspaces(data);
+        setWorkspaces(data);
 
-      const savedId = getActiveWorkspaceId();
-      const savedWorkspace = data.find((item) => item.id === savedId);
+        const savedId = getActiveWorkspaceId();
+        const savedWorkspace = data.find((item) => item.id === savedId);
 
-      if (savedWorkspace) {
-        setWorkspaceState(savedWorkspace);
+        if (savedWorkspace) {
+          setWorkspaceState(savedWorkspace);
+          return;
+        }
+
+        const activeWorkspace = data.find((item) => item.status === "ACTIVE");
+
+        if (activeWorkspace) {
+          setWorkspaceState(activeWorkspace);
+          setActiveWorkspaceId(activeWorkspace.id);
+          return;
+        }
+
+        if (data.length > 0) {
+          setWorkspaceState(data[0]);
+          setActiveWorkspaceId(data[0].id);
+          return;
+        }
+
+        setWorkspaceState(null);
+        clearActiveWorkspace();
         return;
       }
 
-      const activeWorkspace = data.find((item) => item.status === "ACTIVE");
+      /*
+       * Normal users are restricted to their assigned workspace.
+       *
+       * Do not use the saved workspace ID here.
+       * Do not choose the first active workspace.
+       */
+      const userWorkspace = await listWorkspaces();
 
-      if (activeWorkspace) {
-        setWorkspaceState(activeWorkspace);
-        setActiveWorkspaceId(activeWorkspace.id);
-        return;
+      const assignedWorkspace = userWorkspace.find((item) => item.id === user.workspace_id);
+
+      if (!assignedWorkspace) {
+        setWorkspaces([]);
+        setWorkspaceState(null);
+        clearActiveWorkspace();
+
+        throw new Error("Your assigned workspace could not be found.");
       }
 
-      if (data.length > 0) {
-        setWorkspaceState(data[0]);
-        setActiveWorkspaceId(data[0].id);
-        return;
-      }
-
-      setWorkspaceState(null);
-      clearActiveWorkspace();
+      setWorkspaces([assignedWorkspace]);
+      setWorkspaceState(assignedWorkspace);
+      setActiveWorkspaceId(assignedWorkspace.id);
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user, isPlatformOwner]);
 
   useEffect(() => {
     void refreshWorkspaces();
   }, [refreshWorkspaces]);
 
   function setWorkspace(selectedWorkspace: Workspace) {
+    /*
+     * Platform OWNER may switch workspaces.
+     */
+    if (isPlatformOwner) {
+      setWorkspaceState(selectedWorkspace);
+      setActiveWorkspaceId(selectedWorkspace.id);
+      return;
+    }
+
+    /*
+     * Normal users can only select their assigned workspace.
+     */
+    if (selectedWorkspace.id !== user?.workspace_id) {
+      return;
+    }
+
     setWorkspaceState(selectedWorkspace);
     setActiveWorkspaceId(selectedWorkspace.id);
   }

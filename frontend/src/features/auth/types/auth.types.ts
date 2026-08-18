@@ -40,13 +40,27 @@ export type Shift = {
   effective_from?: string | null;
 };
 
+/**
+ * Application-level authenticated user.
+ *
+ * Normal workspace users:
+ * - have a public.users record
+ * - have a workspace
+ * - have employee information
+ *
+ * Platform Owner:
+ * - exists only in Supabase Auth
+ * - does NOT have a public.users record
+ * - does NOT belong to a workspace
+ * - is identified by meta.platform_owner
+ */
 export type User = {
   /*
    * Identity
    */
   auth_user_id: string;
 
-  user_id: string;
+  user_id: string | null;
 
   email: string;
 
@@ -57,13 +71,13 @@ export type User = {
   /*
    * Employee information
    */
-  employee_no: string;
+  employee_no: string | null;
 
-  first_name: string;
+  first_name: string | null;
 
   middle_name: string | null;
 
-  last_name: string;
+  last_name: string | null;
 
   hire_date: string | null;
 
@@ -90,7 +104,7 @@ export type User = {
   /*
    * Workspace
    */
-  workspace_id: string;
+  workspace_id: string | null;
 
   department: UserDepartment | null;
 
@@ -102,9 +116,11 @@ export type User = {
   shift: Shift | null;
 
   /*
-   * Optional context metadata
+   * Application context metadata
    */
   meta?: {
+    platform_owner?: boolean;
+
     resolved_by?: string;
 
     bootstrap?: boolean;

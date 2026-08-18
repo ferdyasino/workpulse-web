@@ -30,15 +30,13 @@ export async function handleRequest(
 
   const authUser = await getAuthenticatedUser(req);
 
-  if (!authUser.email) {
-    throw new Error("Authenticated user email is missing");
-  }
-
   const ctx = {
     req,
     body,
     supabaseAdmin,
-    email: authUser.email,
+
+    authUserId: authUser.id,
+    email: authUser.email ?? null,
   };
 
   const authResult = await handleAuthRoutes(ctx);

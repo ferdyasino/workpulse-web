@@ -16,7 +16,7 @@ import {
 export async function handleUserRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
     case "USER_CONTEXT_GET": {
-      return await getUserContext(ctx.supabaseAdmin, ctx.email);
+      return await getUserContext(ctx.supabaseAdmin, ctx.authUserId, ctx.email);
     }
 
     case "USER_LIST": {

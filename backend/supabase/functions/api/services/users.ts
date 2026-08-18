@@ -109,12 +109,13 @@ async function ensureUniqueEmail(
 
 export async function getUserContext(
   supabaseAdmin: SupabaseClient<Database>,
-  email: string,
+  authUserId: string,
+  authEmail: string | null,
 ): Promise<UserContext> {
   const { data: user, error } = await supabaseAdmin
     .from("users")
     .select(USER_SELECT)
-    .eq("email", email)
+    .eq("id", authUserId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -123,7 +124,28 @@ export async function getUserContext(
   }
 
   if (!user) {
-    throw new Error("User not found.");
+    throw new Error("User account is not registered in WorkPulse.");
+  }
+
+  if (
+    authEmail &&
+    user.email.trim().toLowerCase() !== authEmail.trim().toLowerCase()
+  ) {
+    throw new Error(
+      "Authenticated email does not match the WorkPulse account.",
+    );
+  }
+
+  if (!user.auth_enabled) {
+    throw new Error("This user is not enabled for authentication.");
+  }
+
+  if (user.employment_status !== "ACTIVE") {
+    throw new Error(
+      `This user account is ${String(user.employment_status)
+        .toLowerCase()
+        .replace("_", " ")}.`,
+    );
   }
 
   const assignment = await getCurrentUserShift(
@@ -133,32 +155,27 @@ export async function getUserContext(
   );
 
   return {
-    // Identity
     auth_user_id: user.id,
     user_id: user.id,
     email: user.email,
     display_name: user.display_name,
     avatar_url: user.avatar_url,
 
-    // Employee information
     employee_no: user.employee_no,
     first_name: user.first_name,
     middle_name: user.middle_name,
     last_name: user.last_name,
     hire_date: user.hire_date,
 
-    // Employment
     role: user.role as UserRole,
     employment_status: user.employment_status as EmploymentStatus,
     employment_type: user.employment_type as EmploymentType,
 
-    // Authentication
     auth_enabled: user.auth_enabled,
     login_provider: user.login_provider,
     invited_at: user.invited_at,
     last_login_at: user.last_login_at,
 
-    // Workspace
     workspace_id: user.workspace_id,
 
     department: user.department
@@ -175,7 +192,6 @@ export async function getUserContext(
         }
       : null,
 
-    // Current shift
     shift: assignment
       ? {
           id: assignment.shift.id,
