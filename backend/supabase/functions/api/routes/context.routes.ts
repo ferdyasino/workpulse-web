@@ -5,12 +5,30 @@ import { getSettings, updateSettings } from "../services/settings.ts";
 
 export async function handleContextRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
+    /* ---------------------------------------------------------------------- */
+    /* USER CONTEXT                                                            */
+    /* ---------------------------------------------------------------------- */
+
     case "USER_CONTEXT_GET": {
-      return await getUserContext(ctx.supabaseAdmin, ctx.email);
+      return await getUserContext(
+        ctx.supabaseAdmin,
+        ctx.authUserId,
+        ctx.email,
+        ctx.authProvider,
+      );
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* WORKSPACE                                                               */
+    /* ---------------------------------------------------------------------- */
+
     case "WORKSPACE_GET": {
-      const user = await getUserContext(ctx.supabaseAdmin, ctx.email);
+      const user = await getUserContext(
+        ctx.supabaseAdmin,
+        ctx.authUserId,
+        ctx.email,
+        ctx.authProvider,
+      );
 
       if (!user.workspace_id) {
         throw new Error("User workspace_id is missing");
@@ -27,33 +45,149 @@ export async function handleContextRoutes(ctx: RouteContext) {
         throw error;
       }
 
-      return data;
+      if (!data) {
+        throw new Error("Workspace not found.");
+      }
+
+      return {
+        success: true,
+        workspace: data,
+      };
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* SETTINGS GET                                                            */
+    /* ---------------------------------------------------------------------- */
 
     case "SETTINGS_GET": {
-      const user = await getUserContext(ctx.supabaseAdmin, ctx.email);
+      console.log(
+        "SETTINGS GET REQUEST:",
+        JSON.stringify({
+          workspace_id: ctx.body.workspace_id,
+          auth_user_id: ctx.authUserId,
+          email: ctx.email,
+        }),
+      );
 
-      if (!user.workspace_id) {
-        throw new Error("User workspace_id is missing");
+      try {
+        const user = await getUserContext(
+          ctx.supabaseAdmin,
+          ctx.authUserId,
+          ctx.email,
+          ctx.authProvider,
+        );
+
+        if (!user.workspace_id) {
+          throw new Error("User workspace_id is missing");
+        }
+
+        /*
+         * Always use the authenticated user's workspace.
+         *
+         * Do not trust workspace_id supplied by the frontend.
+         */
+        const settings = await getSettings(
+          ctx.supabaseAdmin,
+          user.workspace_id,
+        );
+
+        console.log(
+          "SETTINGS GET SUCCESS:",
+          JSON.stringify({
+            workspace_id: user.workspace_id,
+          }),
+        );
+
+        return {
+          success: true,
+          settings,
+        };
+      } catch (error) {
+        console.error("SETTINGS GET ERROR:", error);
+
+        return {
+          success: false,
+          message:
+            error instanceof Error ? error.message : "Unable to load settings.",
+        };
       }
-
-      return await getSettings(ctx.supabaseAdmin, user.workspace_id);
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* SETTINGS UPDATE                                                         */
+    /* ---------------------------------------------------------------------- */
 
     case "SETTINGS_UPDATE": {
-      const user = await getUserContext(ctx.supabaseAdmin, ctx.email);
+      console.log(
+        "SETTINGS UPDATE REQUEST:",
+        JSON.stringify({
+          workspace_id: ctx.body.workspace_id,
+          timezone: ctx.body.timezone,
+          locale: ctx.body.locale,
+          currency: ctx.body.currency,
+          metadata: ctx.body.metadata,
+          auth_user_id: ctx.authUserId,
+          email: ctx.email,
+        }),
+      );
 
-      if (!user.workspace_id) {
-        throw new Error("User workspace_id is missing");
+      try {
+        const user = await getUserContext(
+          ctx.supabaseAdmin,
+          ctx.authUserId,
+          ctx.email,
+          ctx.authProvider,
+        );
+
+        if (!user.workspace_id) {
+          throw new Error("User workspace_id is missing");
+        }
+
+        /*
+         * Always update the authenticated user's workspace.
+         *
+         * The frontend workspace_id is intentionally ignored as the
+         * authorization source.
+         */
+        const settings = await updateSettings(
+          ctx.supabaseAdmin,
+          user.workspace_id,
+          {
+            timezone: ctx.body.timezone,
+            locale: ctx.body.locale,
+            currency: ctx.body.currency,
+            metadata: ctx.body.metadata,
+          },
+        );
+
+        console.log(
+          "SETTINGS UPDATE SUCCESS:",
+          JSON.stringify({
+            workspace_id: user.workspace_id,
+          }),
+        );
+
+        return {
+          success: true,
+          message: "Settings updated successfully",
+          settings,
+        };
+      } catch (error) {
+        console.error("SETTINGS UPDATE ERROR:", error);
+
+        return {
+          success: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unable to update settings.",
+        };
       }
-
-      return await updateSettings(ctx.supabaseAdmin, user.workspace_id, {
-        timezone: ctx.body.timezone,
-        locale: ctx.body.locale,
-        currency: ctx.body.currency,
-        metadata: ctx.body.metadata,
-      });
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* UNKNOWN                                                                 */
+    /* ---------------------------------------------------------------------- */
 
     default:
       return null;

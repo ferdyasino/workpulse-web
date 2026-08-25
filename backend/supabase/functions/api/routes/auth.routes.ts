@@ -9,6 +9,7 @@ export async function handleAuthRoutes(ctx: RouteContext) {
         ctx.supabaseAdmin,
         ctx.authUserId,
         ctx.email,
+        ctx.authProvider,
       );
     }
 

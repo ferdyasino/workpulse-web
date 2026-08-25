@@ -48,7 +48,11 @@ export async function handleRequest(
 
     authUserId: authUser.id,
     email: authUser.email ?? null,
-    authProvider,
+
+    authProvider:
+      authUser.app_metadata?.provider ??
+      authUser.app_metadata?.providers?.[0] ??
+      null,
   };
 
   const authResult = await handleAuthRoutes(ctx);
