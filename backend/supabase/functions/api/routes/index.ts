@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApiRequest } from "@shared/types/api/api.request.ts";
 import type { Database } from "@shared/types/database.ts";
 
-import { getAuthenticatedUser } from "../lib/auth.ts";
+import { getAuthenticatedUser, getAuthProvider } from "../lib/auth.ts";
 
 import { handleAuthRoutes } from "./auth.routes.ts";
 import { handleContextRoutes } from "./context.routes.ts";
@@ -30,6 +30,17 @@ export async function handleRequest(
 
   const authUser = await getAuthenticatedUser(req);
 
+  const authProvider = getAuthProvider(authUser);
+
+  console.log(
+    "AUTH CONTEXT:",
+    JSON.stringify({
+      authUserId: authUser.id,
+      email: authUser.email ?? null,
+      provider: authProvider,
+    }),
+  );
+
   const ctx = {
     req,
     body,
@@ -37,6 +48,7 @@ export async function handleRequest(
 
     authUserId: authUser.id,
     email: authUser.email ?? null,
+    authProvider,
   };
 
   const authResult = await handleAuthRoutes(ctx);

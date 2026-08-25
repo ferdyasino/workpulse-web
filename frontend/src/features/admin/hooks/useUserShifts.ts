@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import {
   createUserShift as createUserShiftService,
@@ -16,10 +16,9 @@ import {
 } from "../services/userShifts.service";
 
 export function useUserShifts(userId?: string) {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
-  const workspaceId = user?.workspace_id;
-
+  const workspaceId = workspace?.id ?? null;
   const [userShifts, setUserShifts] = useState<UserShift[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

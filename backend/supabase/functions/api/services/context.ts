@@ -109,6 +109,7 @@ export async function getApplicationContext(
   supabaseAdmin: SupabaseClient<Database>,
   authUserId: string,
   authEmail: string | null,
+  authProvider: string | null,
 ) {
   /* ------------------------------------------------------------------------ */
   /* Platform Owner                                                           */
@@ -133,10 +134,22 @@ export async function getApplicationContext(
   /* Normal Workspace User                                                    */
   /* ------------------------------------------------------------------------ */
 
+  /*
+   * The authenticated Supabase Auth account is linked to WorkPulse
+   * through the shared UUID:
+   *
+   *     auth.users.id = public.users.id
+   *
+   * Google authentication does NOT create a separate WorkPulse user.
+   *
+   * If the authenticated Auth account already exists in public.users,
+   * that existing employee record is used.
+   */
   const userContext = await getUserContext(
     supabaseAdmin,
     authUserId,
     authEmail,
+    authProvider,
   );
 
   /*
@@ -153,6 +166,10 @@ export async function getApplicationContext(
     throw new Error("User WorkPulse record is missing.");
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Workspace                                                                */
+  /* ------------------------------------------------------------------------ */
+
   const { data: workspace, error } = await supabaseAdmin
     .from("workspaces")
     .select("*")
@@ -167,6 +184,10 @@ export async function getApplicationContext(
   if (!workspace) {
     throw new Error("User workspace not found.");
   }
+
+  /* ------------------------------------------------------------------------ */
+  /* Return Application Context                                               */
+  /* ------------------------------------------------------------------------ */
 
   return {
     user: {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import { getUsers } from "@/features/admin/services/users.service";
 import { getShifts, type Shift } from "@/features/admin/services/shifts.service";
@@ -24,9 +24,9 @@ type UserOption = {
 };
 
 export function useUserShiftOverrides(userId?: string) {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
-  const workspaceId = user?.workspace_id;
+  const workspaceId = workspace?.id ?? null;
 
   const [userShiftOverrides, setUserShiftOverrides] = useState<UserShiftOverride[]>([]);
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import {
   activateShift as activateShiftService,
@@ -17,9 +17,9 @@ import {
 } from "../services/shifts.service";
 
 export function useShifts() {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
-  const workspaceId = user?.workspace_id;
+  const workspaceId = workspace?.id ?? null;
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(false);

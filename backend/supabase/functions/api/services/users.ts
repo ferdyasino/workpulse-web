@@ -73,6 +73,10 @@ function isActiveShift(item: {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
 async function ensureUniqueEmail(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
@@ -107,10 +111,15 @@ async function ensureUniqueEmail(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Authentication / User Context                                              */
+/* -------------------------------------------------------------------------- */
+
 export async function getUserContext(
   supabaseAdmin: SupabaseClient<Database>,
   authUserId: string,
   authEmail: string | null,
+  authProvider: string | null = null,
 ): Promise<UserContext> {
   const { data: user, error } = await supabaseAdmin
     .from("users")
@@ -123,10 +132,19 @@ export async function getUserContext(
     throw error;
   }
 
+  /*
+   * The Auth account must already be linked to a WorkPulse employee.
+   *
+   * public.users.id = auth.users.id
+   */
   if (!user) {
     throw new Error("User account is not registered in WorkPulse.");
   }
 
+  /*
+   * The email stored in public.users must correspond to the
+   * authenticated Supabase Auth account.
+   */
   if (
     authEmail &&
     user.email.trim().toLowerCase() !== authEmail.trim().toLowerCase()
@@ -136,10 +154,99 @@ export async function getUserContext(
     );
   }
 
-  if (!user.auth_enabled) {
-    throw new Error("This user is not enabled for authentication.");
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT reject Google users merely because auth_enabled is false.
+   *
+   * The authenticated Supabase Auth account has already passed
+   * authentication. At this point we are linking that Auth account
+   * to the existing public.users employee record.
+   *
+   * auth_enabled remains available as an application/user-management
+   * field, but it is not used as the Google authentication gate.
+   */
+
+  /*
+   * If authentication came from Google, synchronize the provider
+   * information into public.users.
+   *
+   * We only update when the provider is actually known.
+   */
+  if (authProvider) {
+    const normalizedProvider = authProvider.trim().toUpperCase();
+
+    let loginProvider: string | null = null;
+
+    if (normalizedProvider === "GOOGLE") {
+      loginProvider = "GOOGLE";
+    } else if (
+      normalizedProvider === "EMAIL" ||
+      normalizedProvider === "PASSWORD"
+    ) {
+      loginProvider = "EMAIL";
+    }
+
+    if (
+      loginProvider &&
+      user.login_provider !== loginProvider &&
+      user.login_provider !== "BOTH"
+    ) {
+      const { error: providerUpdateError } = await supabaseAdmin
+        .from("users")
+        .update({
+          login_provider: loginProvider,
+          last_login_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (providerUpdateError) {
+        throw providerUpdateError;
+      }
+
+      user.login_provider = loginProvider;
+      user.last_login_at = new Date().toISOString();
+    } else {
+      const { error: loginUpdateError } = await supabaseAdmin
+        .from("users")
+        .update({
+          last_login_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (loginUpdateError) {
+        throw loginUpdateError;
+      }
+
+      user.last_login_at = new Date().toISOString();
+    }
+  } else {
+    /*
+     * Even when the provider is unavailable, record the successful
+     * application login time.
+     */
+    const { error: loginUpdateError } = await supabaseAdmin
+      .from("users")
+      .update({
+        last_login_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+
+    if (loginUpdateError) {
+      throw loginUpdateError;
+    }
+
+    user.last_login_at = new Date().toISOString();
   }
 
+  /*
+   * Employment status remains an application authorization rule.
+   *
+   * Inactive/resigned/terminated users must not enter WorkPulse.
+   */
   if (user.employment_status !== "ACTIVE") {
     throw new Error(
       `This user account is ${String(user.employment_status)
@@ -157,23 +264,31 @@ export async function getUserContext(
   return {
     auth_user_id: user.id,
     user_id: user.id,
+
     email: user.email,
     display_name: user.display_name,
     avatar_url: user.avatar_url,
 
     employee_no: user.employee_no,
+
     first_name: user.first_name,
     middle_name: user.middle_name,
     last_name: user.last_name,
+
     hire_date: user.hire_date,
 
     role: user.role as UserRole,
+
     employment_status: user.employment_status as EmploymentStatus,
+
     employment_type: user.employment_type as EmploymentType,
 
     auth_enabled: user.auth_enabled,
+
     login_provider: user.login_provider,
+
     invited_at: user.invited_at,
+
     last_login_at: user.last_login_at,
 
     workspace_id: user.workspace_id,
@@ -210,6 +325,10 @@ export async function getUserContext(
     meta: user.metadata,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* User List                                                                  */
+/* -------------------------------------------------------------------------- */
 
 export async function listUsers(
   supabaseAdmin: SupabaseClient<Database>,
@@ -291,6 +410,10 @@ export async function listUsers(
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Get User                                                                   */
+/* -------------------------------------------------------------------------- */
+
 export async function getUser(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
@@ -311,16 +434,68 @@ export async function getUser(
   return data;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Create User                                                                */
+/* -------------------------------------------------------------------------- */
+
 export async function createUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: CreateUserPayload,
 ) {
-  await ensureUniqueEmail(supabaseAdmin, payload.workspace_id, payload.email);
+  const email = payload.email.trim().toLowerCase();
+
+  console.log(
+    "CREATE USER PAYLOAD:",
+    JSON.stringify({
+      ...payload,
+      email,
+    }),
+  );
+
+  await ensureUniqueEmail(supabaseAdmin, payload.workspace_id, email);
+
+  /*
+   * public.users.id references auth.users.id.
+   *
+   * Therefore the Auth account MUST be created first and its UUID
+   * must be used as public.users.id.
+   */
+  const { data: authData, error: authError } =
+    await supabaseAdmin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+
+      user_metadata: {
+        display_name: payload.display_name,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        workspace_id: payload.workspace_id,
+        role: payload.role ?? "EMPLOYEE",
+      },
+    });
+
+  if (authError) {
+    console.error(
+      "CREATE USER AUTH ERROR:",
+      JSON.stringify({
+        code: authError.status,
+        message: authError.message,
+      }),
+    );
+
+    throw authError;
+  }
+
+  const authUser = authData.user;
+
+  if (!authUser) {
+    throw new Error("Failed to create authentication user.");
+  }
 
   const now = new Date().toISOString();
 
   const insertData: Database["public"]["Tables"]["users"]["Insert"] = {
-    id: crypto.randomUUID(),
+    id: authUser.id,
 
     workspace_id: payload.workspace_id,
 
@@ -334,7 +509,7 @@ export async function createUser(
 
     display_name: payload.display_name,
 
-    email: payload.email,
+    email,
 
     avatar_url: payload.avatar_url ?? null,
 
@@ -359,18 +534,61 @@ export async function createUser(
     updated_at: now,
   };
 
-  const { data, error } = await supabaseAdmin
-    .from("users")
-    .insert(insertData)
-    .select(USER_SELECT)
-    .single();
+  console.log("CREATE USER INSERT:", JSON.stringify(insertData));
 
-  if (error) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .insert(insertData)
+      .select(USER_SELECT)
+      .single();
+
+    if (error) {
+      console.error(
+        "CREATE USER INSERT FAILED:",
+        JSON.stringify({
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        }),
+      );
+
+      const { error: cleanupError } = await supabaseAdmin.auth.admin.deleteUser(
+        authUser.id,
+      );
+
+      if (cleanupError) {
+        console.error(
+          "CREATE USER AUTH CLEANUP FAILED:",
+          JSON.stringify({
+            user_id: authUser.id,
+            message: cleanupError.message,
+          }),
+        );
+      }
+
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(
+        "CREATE USER DATABASE ERROR:",
+        JSON.stringify({
+          message: error.message,
+        }),
+      );
+    }
+
     throw error;
   }
-
-  return data;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Update User                                                                */
+/* -------------------------------------------------------------------------- */
 
 export async function updateUser(
   supabaseAdmin: SupabaseClient<Database>,
@@ -382,7 +600,7 @@ export async function updateUser(
     await ensureUniqueEmail(
       supabaseAdmin,
       payload.workspace_id,
-      payload.email,
+      payload.email.trim().toLowerCase(),
       payload.id,
     );
   }
@@ -398,7 +616,10 @@ export async function updateUser(
 
     display_name: payload.display_name,
 
-    email: payload.email,
+    email:
+      payload.email !== undefined
+        ? payload.email.trim().toLowerCase()
+        : undefined,
 
     avatar_url: payload.avatar_url ?? null,
 
@@ -458,15 +679,45 @@ export async function updateUser(
   return data;
 }
 
-async function updateUserStatus(
+/* -------------------------------------------------------------------------- */
+/* Activate User                                                              */
+/* -------------------------------------------------------------------------- */
+
+export async function activateUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
-  status: EmploymentStatus,
 ) {
   const { data, error } = await supabaseAdmin
     .from("users")
     .update({
-      employment_status: status,
+      employment_status: "ACTIVE",
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.id)
+    .eq("workspace_id", payload.workspace_id)
+    .select(USER_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Deactivate User                                                            */
+/* -------------------------------------------------------------------------- */
+
+export async function deactivateUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: UserActionPayload,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({
+      employment_status: "INACTIVE",
       updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
@@ -482,47 +733,32 @@ async function updateUserStatus(
   return data;
 }
 
-export function activateUser(
-  supabaseAdmin: SupabaseClient<Database>,
-  payload: UserActionPayload,
-) {
-  return updateUserStatus(supabaseAdmin, payload, "ACTIVE");
-}
-
-export function deactivateUser(
-  supabaseAdmin: SupabaseClient<Database>,
-  payload: UserActionPayload,
-) {
-  return updateUserStatus(supabaseAdmin, payload, "INACTIVE");
-}
+/* -------------------------------------------------------------------------- */
+/* Soft Delete User                                                           */
+/* -------------------------------------------------------------------------- */
 
 export async function deleteUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
-  const now = new Date().toISOString();
-
-  const { data, error } = await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("users")
     .update({
-      deleted_at: now,
-      updated_at: now,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
-    .is("deleted_at", null)
-    .select("id")
-    .single();
+    .is("deleted_at", null);
 
   if (error) {
     throw error;
   }
-
-  return {
-    success: true,
-    id: data.id,
-  };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Restore User                                                               */
+/* -------------------------------------------------------------------------- */
 
 export async function restoreUser(
   supabaseAdmin: SupabaseClient<Database>,
@@ -532,11 +768,11 @@ export async function restoreUser(
     .from("users")
     .update({
       deleted_at: null,
+      employment_status: "ACTIVE",
       updated_at: new Date().toISOString(),
     })
     .eq("id", payload.id)
     .eq("workspace_id", payload.workspace_id)
-    .not("deleted_at", "is", null)
     .select(USER_SELECT)
     .single();
 
@@ -547,28 +783,21 @@ export async function restoreUser(
   return data;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Hard Delete User                                                           */
+/* -------------------------------------------------------------------------- */
+
 export async function hardDeleteUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
-  const { data, error } = await supabaseAdmin
-    .from("users")
-    .delete()
-    .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id)
-    .select("id")
-    .maybeSingle();
+  /*
+   * Because public.users.id references auth.users.id ON DELETE CASCADE,
+   * deleting the Auth account also removes the public.users record.
+   */
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(payload.id);
 
   if (error) {
     throw error;
   }
-
-  if (!data) {
-    throw new Error("User not found.");
-  }
-
-  return {
-    success: true,
-    id: data.id,
-  };
 }

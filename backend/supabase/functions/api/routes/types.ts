@@ -11,4 +11,5 @@ export type RouteContext = {
 
   authUserId: string;
   email: string | null;
+  authProvider: string | null;
 };
