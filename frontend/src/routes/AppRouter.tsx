@@ -12,6 +12,7 @@ import { canAccessAdmin, canViewReports } from "@/features/auth/utils/permission
 import AppLayout from "@/layouts/AppLayout";
 
 import { AttendanceProvider } from "@/providers/AttendanceProvider";
+import SettingsProvider from "@/providers/SettingsProvider";
 import { WorkspaceProvider } from "@/providers/WorkspaceProvider";
 
 import ProtectedRoute from "./ProtectedRoute";
@@ -22,9 +23,11 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <WorkspaceProvider>
-        <AttendanceProvider>
-          <AppLayout>{children}</AppLayout>
-        </AttendanceProvider>
+        <SettingsProvider>
+          <AttendanceProvider>
+            <AppLayout>{children}</AppLayout>
+          </AttendanceProvider>
+        </SettingsProvider>
       </WorkspaceProvider>
     </ProtectedRoute>
   );
@@ -56,7 +59,7 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Workspace Management                                                */}
+        {/* Admin                                                               */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
@@ -71,7 +74,7 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Platform Owner Only                                                 */}
+        {/* Workspace Management                                                */}
         {/* ------------------------------------------------------------------ */}
 
         <Route

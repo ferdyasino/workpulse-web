@@ -9,7 +9,6 @@ import { SnackbarProvider } from "@/components/ui";
 
 import AuthProvider from "@/providers/AuthProvider";
 import GoogleProvider from "@/providers/GoogleProvider";
-import SettingsProvider from "@/providers/SettingsProvider";
 import ThemeProvider from "@/providers/ThemeProvider";
 
 createRoot(document.getElementById("root")!).render(
@@ -18,9 +17,7 @@ createRoot(document.getElementById("root")!).render(
       <SnackbarProvider>
         <GoogleProvider>
           <AuthProvider>
-            <SettingsProvider>
-              <App />
-            </SettingsProvider>
+            <App />
           </AuthProvider>
         </GoogleProvider>
       </SnackbarProvider>

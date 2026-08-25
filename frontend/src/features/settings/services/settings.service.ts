@@ -2,15 +2,58 @@ import { apiRequest } from "@/utils/api";
 
 import type { Settings, UpdateSettingsRequest } from "@/features/settings/types/settings.types";
 
-export async function getSettings() {
-  return apiRequest<Settings>({
+/* -------------------------------------------------------------------------- */
+/* GET SETTINGS                                                               */
+/* -------------------------------------------------------------------------- */
+
+export type SettingsGetRequest = {
+  workspace_id: string;
+};
+
+type SettingsGetResponse = Settings;
+
+/* -------------------------------------------------------------------------- */
+/* UPDATE SETTINGS                                                            */
+/* -------------------------------------------------------------------------- */
+
+export type SettingsUpdateRequest = UpdateSettingsRequest & {
+  workspace_id: string;
+};
+
+type SettingsUpdateResponse = Settings;
+
+/* -------------------------------------------------------------------------- */
+/* GET                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export async function getSettings(payload: SettingsGetRequest): Promise<Settings> {
+  const response = await apiRequest<
+    SettingsGetResponse,
+    SettingsGetRequest & {
+      action: "SETTINGS_GET";
+    }
+  >({
     action: "SETTINGS_GET",
+    ...payload,
   });
+
+  return response;
 }
 
-export async function updateSettings(settings: UpdateSettingsRequest) {
-  return apiRequest<Settings>({
+/* -------------------------------------------------------------------------- */
+/* UPDATE                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export async function updateSettings(payload: SettingsUpdateRequest): Promise<Settings> {
+  const response = await apiRequest<
+    SettingsUpdateResponse,
+    SettingsUpdateRequest & {
+      action: "SETTINGS_UPDATE";
+    }
+  >({
     action: "SETTINGS_UPDATE",
-    ...settings,
+    ...payload,
   });
+
+  return response;
 }

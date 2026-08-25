@@ -1,75 +1,100 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import { getSettings, updateSettings } from "@/features/settings/services/settings.service";
 
 import type { Settings, UpdateSettingsRequest } from "@/features/settings/types/settings.types";
 
 export function useSettings() {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
+
+  const workspaceId = workspace?.id ?? null;
 
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  /* ------------------------------------------------------------------------ */
+  /* Load                                                                      */
+  /* ------------------------------------------------------------------------ */
+
+  const loadSettings = useCallback(async () => {
+    if (!workspaceId) {
+      setSettings(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const result = await getSettings();
+      const data = await getSettings({
+        workspace_id: workspaceId,
+      });
 
-      setSettings(result);
+      setSettings(data);
 
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load settings";
+      return data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load settings");
 
-      setError(message);
-
-      throw error;
+      throw err;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
-  const save = useCallback(async (values: UpdateSettingsRequest) => {
-    try {
-      setSaving(true);
-      setError(null);
+  /* ------------------------------------------------------------------------ */
+  /* Save                                                                      */
+  /* ------------------------------------------------------------------------ */
 
-      const result = await updateSettings(values);
+  const saveSettings = useCallback(
+    async (values: UpdateSettingsRequest) => {
+      if (!workspaceId) {
+        throw new Error("Workspace not found");
+      }
 
-      setSettings(result);
+      try {
+        setSaving(true);
+        setError(null);
 
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update settings";
+        const data = await updateSettings({
+          workspace_id: workspaceId,
+          ...values,
+        });
 
-      setError(message);
+        setSettings(data);
 
-      throw error;
-    } finally {
-      setSaving(false);
-    }
-  }, []);
+        return data;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update settings");
+
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [workspaceId],
+  );
+
+  /* ------------------------------------------------------------------------ */
+  /* Auto load when workspace changes                                         */
+  /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
-    if (!user?.workspace_id) {
-      return;
-    }
-
-    void refresh();
-  }, [user?.workspace_id, refresh]);
+    void loadSettings();
+  }, [loadSettings]);
 
   return {
     settings,
     loading,
     saving,
     error,
-    refresh,
-    save,
+
+    refresh: loadSettings,
+    save: saveSettings,
   };
 }
