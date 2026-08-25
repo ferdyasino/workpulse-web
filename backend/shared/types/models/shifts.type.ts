@@ -1,23 +1,57 @@
 import type { Database } from "../database.ts";
 
+type ShiftRow = Database["public"]["Tables"]["shifts"]["Row"];
+
+type ShiftMetadata = ShiftRow["metadata"];
+
 export type ShiftPayload = {
   workspace_id: string;
+
   name: string;
-  description?: string;
+
+  description?: string | null;
+
   start_time: string;
+
   end_time: string;
+
   timezone: string;
-  break_minutes?: number;
+
   grace_minutes?: number;
+
+  break_minutes?: number;
+
   is_overnight?: boolean;
-  metadata?: Database["public"]["Tables"]["shifts"]["Insert"]["metadata"];
+
+  metadata?: ShiftMetadata;
 };
 
-export type UpdateShiftPayload = ShiftPayload & {
+export type UpdateShiftPayload = {
   id: string;
+
+  workspace_id: string;
+
+  name: string;
+
+  description?: string | null;
+
+  start_time: string;
+
+  end_time: string;
+
+  timezone: string;
+
+  grace_minutes?: number;
+
+  break_minutes?: number;
+
+  is_overnight?: boolean;
+
+  metadata?: ShiftMetadata;
 };
 
 export type ShiftActionPayload = {
   id: string;
+
   workspace_id: string;
 };

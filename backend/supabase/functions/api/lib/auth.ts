@@ -35,11 +35,46 @@ export async function getAuthenticatedUser(req: Request): Promise<User> {
     error,
   } = await client.auth.getUser();
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 
   if (!user) {
     throw new Error("Unauthorized");
   }
 
+  console.log(
+    "AUTHENTICATED USER:",
+    JSON.stringify({
+      id: user.id,
+      email: user.email,
+      provider: user.app_metadata?.provider ?? null,
+      providers: user.app_metadata?.providers ?? null,
+    }),
+  );
+
   return user;
+}
+
+export function getAuthProvider(user: User): string | null {
+  const provider = user.app_metadata?.provider;
+
+  if (typeof provider === "string" && provider.trim()) {
+    return provider.trim().toLowerCase();
+  }
+
+  const providers = user.app_metadata?.providers;
+
+  if (Array.isArray(providers)) {
+    const latestProvider = providers.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
+
+    if (latestProvider) {
+      return latestProvider.trim().toLowerCase();
+    }
+  }
+
+  return null;
 }

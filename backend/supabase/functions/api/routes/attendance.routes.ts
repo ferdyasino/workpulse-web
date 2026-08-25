@@ -13,7 +13,14 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
       const currentState = await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        email: ctx.email,
+        /*
+         * IMPORTANT:
+         * These values come from the authenticated Supabase session,
+         * not from the request body.
+         */
+        authUserId: ctx.authUserId,
+        email: ctx.email ?? "",
+        authProvider: ctx.authProvider,
 
         ...(ctx.body.shift_id
           ? {
@@ -44,10 +51,16 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
         };
       }
 
+      /*
+       * IMPORTANT:
+       * The authenticated user should be the user creating the timelog.
+       *
+       * Do not trust ctx.body.user_id for authentication identity.
+       */
       const log = await createTimeLog(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        user_id: ctx.body.user_id,
+        user_id: ctx.authUserId,
 
         action_type: ctx.body.action_type,
 
@@ -76,12 +89,31 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
     }
 
     case "ATTENDANCE_STATE_GET": {
-      console.log("CURRENT STATE REQUEST:", JSON.stringify(ctx.body));
+      console.log(
+        "CURRENT STATE REQUEST:",
+        JSON.stringify({
+          ...ctx.body,
+
+          /*
+           * Do not log or trust a client-supplied authUserId.
+           * The real identity is ctx.authUserId.
+           */
+          authenticated_user_id: ctx.authUserId,
+          authenticated_email: ctx.email,
+          authenticated_provider: ctx.authProvider,
+        }),
+      );
 
       return await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        email: ctx.body.email,
+        /*
+         * IMPORTANT:
+         * Use the authenticated identity from RouteContext.
+         */
+        authUserId: ctx.authUserId,
+        email: ctx.email ?? "",
+        authProvider: ctx.authProvider,
 
         ...(ctx.body.shift_id
           ? {

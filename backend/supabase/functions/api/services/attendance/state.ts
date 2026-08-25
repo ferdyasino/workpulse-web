@@ -72,10 +72,21 @@ export async function getCurrentAttendanceState(
 ): Promise<AttendanceState> {
   const { workspace_id, email } = payload;
 
-  const context = await getUserContext(supabaseAdmin, email);
+  const context = await getUserContext(
+    supabaseAdmin,
+    payload.authUserId,
+    email,
+    payload.authProvider ?? null,
+  );
 
   if (context.workspace_id !== workspace_id) {
     throw new Error("User does not belong to this workspace.");
+  }
+
+  const userId = context.user_id;
+
+  if (!userId) {
+    throw new Error("User context does not contain a user ID.");
   }
 
   const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
@@ -87,7 +98,7 @@ export async function getCurrentAttendanceState(
 
   const resolved = await resolveUserShift(supabaseAdmin, {
     workspace_id,
-    user_id: context.user_id,
+    user_id: userId,
     date: lookupDate,
   });
 
@@ -129,7 +140,7 @@ export async function getCurrentAttendanceState(
     .from("time_logs")
     .select("*")
     .eq("workspace_id", workspace_id)
-    .eq("user_id", context.user_id)
+    .eq("user_id", userId)
     .eq("user_shift_id", userShiftId)
     .eq("work_date", workDate)
     .order("event_time_utc");

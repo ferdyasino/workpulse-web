@@ -75,6 +75,10 @@ export type AttendanceStateRequest = {
 
   email: string;
 
+  authUserId: string;
+
+  authProvider?: string | null;
+
   shift_id?: string;
 
   /**

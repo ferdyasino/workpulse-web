@@ -13,31 +13,41 @@ import {
 
 export async function handleShiftRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
+    /* ---------------------------------------------------------------------- */
+    /* LIST                                                                     */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_LIST": {
       console.log("SHIFT LIST REQUEST:", JSON.stringify(ctx.body));
 
       return {
         success: true,
         shifts: await listShifts(ctx.supabaseAdmin, ctx.body.workspace_id, {
-          include_inactive: ctx.body.include_inactive,
-          include_deleted: ctx.body.include_deleted,
+          include_inactive: ctx.body.include_inactive ?? false,
+          include_deleted: ctx.body.include_deleted ?? false,
         }),
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* CREATE                                                                   */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_CREATE": {
+      console.log("SHIFT CREATE REQUEST:", JSON.stringify(ctx.body));
+
       try {
         const shift = await createShift(ctx.supabaseAdmin, {
           workspace_id: ctx.body.workspace_id,
           name: ctx.body.name,
-          description: ctx.body.description,
+          description: ctx.body.description ?? null,
           start_time: ctx.body.start_time,
           end_time: ctx.body.end_time,
           timezone: ctx.body.timezone,
           break_minutes: ctx.body.break_minutes,
           grace_minutes: ctx.body.grace_minutes,
           is_overnight: ctx.body.is_overnight,
-          metadata: ctx.body.metadata,
+          metadata: ctx.body.metadata ?? {},
         });
 
         return {
@@ -58,24 +68,38 @@ export async function handleShiftRoutes(ctx: RouteContext) {
           };
         }
 
+        console.error("SHIFT CREATE ERROR:", error);
+
         throw error;
       }
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* UPDATE                                                                   */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_UPDATE": {
+      console.log("SHIFT UPDATE REQUEST:", JSON.stringify(ctx.body));
+
       try {
         const shift = await updateShift(ctx.supabaseAdmin, {
           id: ctx.body.id,
           workspace_id: ctx.body.workspace_id,
+
           name: ctx.body.name,
-          description: ctx.body.description,
+          description: ctx.body.description ?? null,
+
           start_time: ctx.body.start_time,
           end_time: ctx.body.end_time,
+
           timezone: ctx.body.timezone,
+
           break_minutes: ctx.body.break_minutes,
           grace_minutes: ctx.body.grace_minutes,
+
           is_overnight: ctx.body.is_overnight,
-          metadata: ctx.body.metadata,
+
+          metadata: ctx.body.metadata ?? {},
         });
 
         return {
@@ -96,11 +120,19 @@ export async function handleShiftRoutes(ctx: RouteContext) {
           };
         }
 
+        console.error("SHIFT UPDATE ERROR:", error);
+
         throw error;
       }
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* ACTIVATE                                                                 */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_ACTIVATE": {
+      console.log("SHIFT ACTIVATE REQUEST:", JSON.stringify(ctx.body));
+
       const shift = await activateShift(ctx.supabaseAdmin, {
         id: ctx.body.id,
         workspace_id: ctx.body.workspace_id,
@@ -113,7 +145,13 @@ export async function handleShiftRoutes(ctx: RouteContext) {
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* DEACTIVATE                                                               */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_DEACTIVATE": {
+      console.log("SHIFT DEACTIVATE REQUEST:", JSON.stringify(ctx.body));
+
       const shift = await deactivateShift(ctx.supabaseAdmin, {
         id: ctx.body.id,
         workspace_id: ctx.body.workspace_id,
@@ -126,7 +164,13 @@ export async function handleShiftRoutes(ctx: RouteContext) {
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* SOFT DELETE                                                              */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_DELETE": {
+      console.log("SHIFT DELETE REQUEST:", JSON.stringify(ctx.body));
+
       await deleteShift(ctx.supabaseAdmin, {
         id: ctx.body.id,
         workspace_id: ctx.body.workspace_id,
@@ -138,7 +182,13 @@ export async function handleShiftRoutes(ctx: RouteContext) {
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* RESTORE                                                                  */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_RESTORE": {
+      console.log("SHIFT RESTORE REQUEST:", JSON.stringify(ctx.body));
+
       const shift = await restoreShift(ctx.supabaseAdmin, {
         id: ctx.body.id,
         workspace_id: ctx.body.workspace_id,
@@ -151,7 +201,13 @@ export async function handleShiftRoutes(ctx: RouteContext) {
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* HARD DELETE                                                              */
+    /* ---------------------------------------------------------------------- */
+
     case "SHIFT_HARD_DELETE": {
+      console.log("SHIFT HARD DELETE REQUEST:", JSON.stringify(ctx.body));
+
       await hardDeleteShift(ctx.supabaseAdmin, {
         id: ctx.body.id,
         workspace_id: ctx.body.workspace_id,
@@ -162,6 +218,10 @@ export async function handleShiftRoutes(ctx: RouteContext) {
         message: "Shift permanently deleted",
       };
     }
+
+    /* ---------------------------------------------------------------------- */
+    /* UNKNOWN                                                                  */
+    /* ---------------------------------------------------------------------- */
 
     default:
       return null;

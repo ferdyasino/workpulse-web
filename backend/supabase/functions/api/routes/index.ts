@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApiRequest } from "@shared/types/api/api.request.ts";
 import type { Database } from "@shared/types/database.ts";
 
-import { getAuthenticatedUser } from "../lib/auth.ts";
+import { getAuthenticatedUser, getAuthProvider } from "../lib/auth.ts";
 
 import { handleAuthRoutes } from "./auth.routes.ts";
 import { handleContextRoutes } from "./context.routes.ts";
@@ -30,15 +30,29 @@ export async function handleRequest(
 
   const authUser = await getAuthenticatedUser(req);
 
-  if (!authUser.email) {
-    throw new Error("Authenticated user email is missing");
-  }
+  const authProvider = getAuthProvider(authUser);
+
+  console.log(
+    "AUTH CONTEXT:",
+    JSON.stringify({
+      authUserId: authUser.id,
+      email: authUser.email ?? null,
+      provider: authProvider,
+    }),
+  );
 
   const ctx = {
     req,
     body,
     supabaseAdmin,
-    email: authUser.email,
+
+    authUserId: authUser.id,
+    email: authUser.email ?? null,
+
+    authProvider:
+      authUser.app_metadata?.provider ??
+      authUser.app_metadata?.providers?.[0] ??
+      null,
   };
 
   const authResult = await handleAuthRoutes(ctx);

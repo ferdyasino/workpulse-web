@@ -13,10 +13,79 @@ import {
   activateUser,
 } from "../services/users.ts";
 
+function getErrorDetails(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return {
+      code: undefined,
+      message: error instanceof Error ? error.message : String(error),
+      details: undefined,
+      hint: undefined,
+    };
+  }
+
+  const value = error as Record<string, unknown>;
+
+  return {
+    code: typeof value.code === "string" ? value.code : undefined,
+    message:
+      typeof value.message === "string"
+        ? value.message
+        : "Unknown database error",
+    details: typeof value.details === "string" ? value.details : undefined,
+    hint: typeof value.hint === "string" ? value.hint : undefined,
+  };
+}
+
+function getDatabaseErrorMessage(error: unknown, fallback: string) {
+  const details = getErrorDetails(error);
+
+  switch (details.code) {
+    case "23505": {
+      const combined = [details.message, details.details, details.hint]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (combined.includes("email")) {
+        return "A user with this email already exists.";
+      }
+
+      if (combined.includes("employee_no")) {
+        return "A user with this employee number already exists.";
+      }
+
+      if (combined.includes("users_email")) {
+        return "A user with this email already exists.";
+      }
+
+      if (combined.includes("users_employee_no")) {
+        return "A user with this employee number already exists.";
+      }
+
+      return "A user with the same unique information already exists.";
+    }
+
+    case "23503":
+      return "The selected workspace, department, position, or another related record does not exist.";
+
+    case "23502":
+      return "A required user field is missing.";
+
+    case "23514":
+      return "The user contains a value that is not allowed by the database.";
+
+    case "22P02":
+      return "One of the supplied user values has an invalid format.";
+
+    default:
+      return fallback;
+  }
+}
+
 export async function handleUserRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
     case "USER_CONTEXT_GET": {
-      return await getUserContext(ctx.supabaseAdmin, ctx.email);
+      return await getUserContext(ctx.supabaseAdmin, ctx.authUserId, ctx.email);
     }
 
     case "USER_LIST": {
@@ -47,10 +116,38 @@ export async function handleUserRoutes(ctx: RouteContext) {
     }
 
     case "USER_CREATE": {
+      console.log(
+        "USER CREATE REQUEST:",
+        JSON.stringify({
+          workspace_id: ctx.body.workspace_id,
+          employee_no: ctx.body.employee_no,
+          first_name: ctx.body.first_name,
+          last_name: ctx.body.last_name,
+          display_name: ctx.body.display_name,
+          email: ctx.body.email,
+          department_id: ctx.body.department_id,
+          position_id: ctx.body.position_id,
+          role: ctx.body.role,
+          employment_status: ctx.body.employment_status,
+          employment_type: ctx.body.employment_type,
+          auth_enabled: ctx.body.auth_enabled,
+          login_provider: ctx.body.login_provider,
+        }),
+      );
+
       try {
-        const { ...payload } = ctx.body;
+        const { action: _action, ...payload } = ctx.body;
 
         const user = await createUser(ctx.supabaseAdmin, payload);
+
+        console.log(
+          "USER CREATE SUCCESS:",
+          JSON.stringify({
+            id: user.id,
+            workspace_id: user.workspace_id,
+            email: user.email,
+          }),
+        );
 
         return {
           success: true,
@@ -58,25 +155,23 @@ export async function handleUserRoutes(ctx: RouteContext) {
           user,
         };
       } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "23505"
-        ) {
-          return {
-            success: false,
-            message: "User email already exists",
-          };
-        }
+        const details = getErrorDetails(error);
 
-        throw error;
+        console.error("USER CREATE DATABASE ERROR:", JSON.stringify(details));
+
+        return {
+          success: false,
+          message: getDatabaseErrorMessage(
+            error,
+            details.message || "Unable to create user.",
+          ),
+        };
       }
     }
 
     case "USER_UPDATE": {
       try {
-        const { ...payload } = ctx.body;
+        const { action: _action, ...payload } = ctx.body;
 
         const user = await updateUser(ctx.supabaseAdmin, payload);
 
@@ -86,19 +181,17 @@ export async function handleUserRoutes(ctx: RouteContext) {
           user,
         };
       } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "23505"
-        ) {
-          return {
-            success: false,
-            message: "User email already exists",
-          };
-        }
+        const details = getErrorDetails(error);
 
-        throw error;
+        console.error("USER UPDATE DATABASE ERROR:", JSON.stringify(details));
+
+        return {
+          success: false,
+          message: getDatabaseErrorMessage(
+            error,
+            details.message || "Unable to update user.",
+          ),
+        };
       }
     }
 

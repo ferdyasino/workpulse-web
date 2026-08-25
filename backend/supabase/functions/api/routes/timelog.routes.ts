@@ -8,7 +8,12 @@ export async function handleTimelogRoutes(ctx: RouteContext) {
     case "TIMELOG_LIST": {
       console.log("TIMELOG LIST REQUEST:", JSON.stringify(ctx.body));
 
-      const user = await getUserContext(ctx.supabaseAdmin, ctx.email);
+      const user = await getUserContext(
+        ctx.supabaseAdmin,
+        ctx.authUserId,
+        ctx.email,
+        ctx.authProvider,
+      );
 
       if (!user.workspace_id) {
         throw new Error("User workspace_id is missing");
@@ -21,9 +26,11 @@ export async function handleTimelogRoutes(ctx: RouteContext) {
           ? {
               user_id: ctx.body.user_id,
             }
-          : {
-              user_id: user.user_id,
-            }),
+          : user.user_id
+            ? {
+                user_id: user.user_id,
+              }
+            : {}),
 
         ...(ctx.body.work_date
           ? {

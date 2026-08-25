@@ -158,7 +158,7 @@ export async function createShift(
         payload.end_time,
         payload.is_overnight,
       ),
-      metadata: payload.metadata ?? {},
+      metadata: payload.metadata ?? null,
       status: "ACTIVE",
       created_at: now,
       updated_at: now,

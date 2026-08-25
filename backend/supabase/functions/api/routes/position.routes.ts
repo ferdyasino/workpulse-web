@@ -21,8 +21,8 @@ export async function handlePositionRoutes(ctx: RouteContext) {
         positions: await listPositions(
           ctx.supabaseAdmin,
           ctx.body.workspace_id,
-          ctx.body.include_inactive,
-          ctx.body.include_deleted,
+          ctx.body.include_inactive ?? false,
+          ctx.body.include_deleted ?? false,
         ),
       };
     }
@@ -46,10 +46,15 @@ export async function handlePositionRoutes(ctx: RouteContext) {
 
       return {
         success: true,
-        position: await updatePosition(ctx.supabaseAdmin, ctx.body.id, {
-          title: ctx.body.title,
-          description: ctx.body.description,
-        }),
+        position: await updatePosition(
+          ctx.supabaseAdmin,
+          ctx.body.id,
+          ctx.body.workspace_id,
+          {
+            title: ctx.body.title,
+            description: ctx.body.description,
+          },
+        ),
       };
     }
 
@@ -58,7 +63,11 @@ export async function handlePositionRoutes(ctx: RouteContext) {
 
       return {
         success: true,
-        position: await activatePosition(ctx.supabaseAdmin, ctx.body.id),
+        position: await activatePosition(
+          ctx.supabaseAdmin,
+          ctx.body.id,
+          ctx.body.workspace_id,
+        ),
       };
     }
 
@@ -67,17 +76,26 @@ export async function handlePositionRoutes(ctx: RouteContext) {
 
       return {
         success: true,
-        position: await deactivatePosition(ctx.supabaseAdmin, ctx.body.id),
+        position: await deactivatePosition(
+          ctx.supabaseAdmin,
+          ctx.body.id,
+          ctx.body.workspace_id,
+        ),
       };
     }
 
     case "POSITION_DELETE": {
       console.log("POSITION DELETE REQUEST:", JSON.stringify(ctx.body));
 
-      await deletePosition(ctx.supabaseAdmin, ctx.body.id);
+      await deletePosition(
+        ctx.supabaseAdmin,
+        ctx.body.id,
+        ctx.body.workspace_id,
+      );
 
       return {
         success: true,
+        message: "Position deleted successfully",
       };
     }
 
@@ -86,17 +104,26 @@ export async function handlePositionRoutes(ctx: RouteContext) {
 
       return {
         success: true,
-        position: await restorePosition(ctx.supabaseAdmin, ctx.body.id),
+        position: await restorePosition(
+          ctx.supabaseAdmin,
+          ctx.body.id,
+          ctx.body.workspace_id,
+        ),
       };
     }
 
     case "POSITION_HARD_DELETE": {
       console.log("POSITION HARD DELETE REQUEST:", JSON.stringify(ctx.body));
 
-      await hardDeletePosition(ctx.supabaseAdmin, ctx.body.id);
+      await hardDeletePosition(
+        ctx.supabaseAdmin,
+        ctx.body.id,
+        ctx.body.workspace_id,
+      );
 
       return {
         success: true,
+        message: "Position permanently deleted",
       };
     }
 

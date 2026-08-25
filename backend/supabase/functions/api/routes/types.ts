@@ -8,5 +8,8 @@ export type RouteContext = {
   req: Request;
   body: ApiRequest;
   supabaseAdmin: SupabaseClient<Database>;
-  email: string;
+
+  authUserId: string;
+  email: string | null;
+  authProvider: string | null;
 };

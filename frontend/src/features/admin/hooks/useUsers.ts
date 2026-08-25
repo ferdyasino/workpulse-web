@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import {
   activateUser as activateUserService,
@@ -19,9 +19,9 @@ import {
 } from "../services/users.service";
 
 export function useUsers() {
-  const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
-  const workspaceId = user?.workspace_id;
+  const workspaceId = workspace?.id ?? null;
 
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(false);
