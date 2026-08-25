@@ -19,6 +19,16 @@ import { usePositions } from "../hooks/usePositions";
 
 import type { EmploymentStatus, EmploymentType, User, UserRole } from "../services/users.service";
 
+import {
+  DEFAULT_EMPLOYEE_NUMBER_FORMAT,
+  formatEmployeeNumber,
+  normalizeEmployeeNumber,
+  normalizeEmployeeNumberFormat,
+  parseEmployeeNumber,
+  validateEmployeeNumber,
+  type EmployeeNumberFormat,
+} from "@/utils/employeeNo";
+
 export type UserFormValues = {
   employee_no: string;
   display_name: string;
@@ -36,6 +46,29 @@ type Props = {
   user?: User | null;
   onClose: () => void;
   onSubmit: (values: UserFormValues) => Promise<void>;
+
+  /**
+   * Existing Employee Nos. currently loaded in the Users table.
+   *
+   * Used only by the frontend Auto-generate function.
+   *
+   * The backend/database remains the final authority for uniqueness.
+   */
+  existingEmployeeNumbers?: string[];
+
+  /**
+   * Workspace Employee No. generation format.
+   *
+   * This can later come from ADMIN workspace settings.
+   *
+   * Example:
+   * {
+   *   prefix: "EMP",
+   *   padding: 6,
+   *   separator: "-"
+   * }
+   */
+  employeeNumberFormat?: EmployeeNumberFormat;
 };
 
 type DialogValues = {
@@ -55,6 +88,8 @@ export default function UserDialog({
   user = null,
   onClose,
   onSubmit,
+  existingEmployeeNumbers = [],
+  employeeNumberFormat = DEFAULT_EMPLOYEE_NUMBER_FORMAT,
 }: Props) {
   const { departments, loading: departmentsLoading } = useDepartments();
   const { positions, loading: positionsLoading } = usePositions();
@@ -74,6 +109,8 @@ export default function UserDialog({
   });
 
   const [employeeNo, setEmployeeNo] = useState("");
+  const [employeeNoError, setEmployeeNoError] = useState("");
+
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole | "">("");
@@ -83,6 +120,7 @@ export default function UserDialog({
   const [positionId, setPositionId] = useState("");
 
   const isLoadingUser = open && loading && !user && !addModeRef.current;
+
   const activeDialogIsEdit = Boolean(user) || isLoadingUser;
 
   // Preserve the edit/add label while the dialog is closing.
@@ -135,6 +173,8 @@ export default function UserDialog({
       };
 
       setEmployeeNo(values.employeeNo);
+      setEmployeeNoError("");
+
       setDisplayName(values.displayName);
       setEmail(values.email);
       setRole(values.role);
@@ -157,6 +197,8 @@ export default function UserDialog({
       };
 
       setEmployeeNo(values.employeeNo);
+      setEmployeeNoError("");
+
       setDisplayName(values.displayName);
       setEmail(values.email);
       setRole(values.role);
@@ -169,13 +211,107 @@ export default function UserDialog({
     }
   }, [isLoadingUser, open, user]);
 
+  /**
+   * Handle manual Employee No. input.
+   *
+   * Custom Employee Nos. are allowed.
+   *
+   * Examples:
+   *   EMP-000001
+   *   HR-001
+   *   FIN-2026-001
+   *   STAFF-A001
+   */
+  const handleEmployeeNoChange = (value: string) => {
+    const normalizedValue = normalizeEmployeeNumber(value);
+
+    setEmployeeNo(normalizedValue);
+
+    if (!normalizedValue) {
+      setEmployeeNoError("");
+      return;
+    }
+
+    const validation = validateEmployeeNumber(normalizedValue);
+
+    setEmployeeNoError(validation.valid ? "" : (validation.error ?? "Invalid Employee No."));
+  };
+
+  /**
+   * Generate the next available Employee No. using the currently loaded
+   * Employee Nos.
+   *
+   * Example:
+   *
+   * Existing:
+   *   EMP-000001
+   *   EMP-000002
+   *   EMP-000005
+   *
+   * Result:
+   *   EMP-000006
+   *
+   * If there are gaps, we deliberately use MAX + 1 rather than filling
+   * an old deleted Employee No.
+   */
+  const handleAutoGenerate = () => {
+    const format = normalizeEmployeeNumberFormat(employeeNumberFormat);
+
+    let highestSequence = 0;
+
+    for (const existingEmployeeNumber of existingEmployeeNumbers) {
+      const normalizedExisting = normalizeEmployeeNumber(existingEmployeeNumber);
+
+      if (!normalizedExisting) {
+        continue;
+      }
+
+      const sequence = parseEmployeeNumber(normalizedExisting, format);
+
+      if (sequence !== null && sequence > highestSequence) {
+        highestSequence = sequence;
+      }
+    }
+
+    let nextSequence = highestSequence + 1;
+
+    /*
+     * Safety check against the currently loaded Employee Nos.
+     *
+     * Normally MAX + 1 is already available, but this additionally protects
+     * against unusual data or formatting situations.
+     */
+    let generatedEmployeeNo = formatEmployeeNumber(nextSequence, format);
+
+    const existingSet = new Set(
+      existingEmployeeNumbers.map((value) => normalizeEmployeeNumber(value)),
+    );
+
+    while (existingSet.has(normalizeEmployeeNumber(generatedEmployeeNo))) {
+      nextSequence += 1;
+      generatedEmployeeNo = formatEmployeeNumber(nextSequence, format);
+    }
+
+    setEmployeeNo(generatedEmployeeNo);
+    setEmployeeNoError("");
+  };
+
   const handleSubmit = async () => {
     if (isLoadingUser || !displayName.trim() || !email.trim()) {
       return;
     }
 
+    const normalizedEmployeeNo = normalizeEmployeeNumber(employeeNo);
+
+    const validation = validateEmployeeNumber(normalizedEmployeeNo);
+
+    if (!validation.valid) {
+      setEmployeeNoError(validation.error ?? "Invalid Employee No.");
+      return;
+    }
+
     await onSubmit({
-      employee_no: employeeNo.trim(),
+      employee_no: normalizedEmployeeNo,
       display_name: displayName.trim(),
       email: email.trim(),
       ...(role ? { role } : {}),
@@ -192,6 +328,7 @@ export default function UserDialog({
     }
 
     setEmployeeNo("");
+    setEmployeeNoError("");
     setDisplayName("");
     setEmail("");
     setRole("");
@@ -262,12 +399,47 @@ export default function UserDialog({
             </Box>
           ) : (
             <Stack spacing={2} sx={{ pt: 1 }}>
-              <TextField
-                label="Employee No."
-                value={employeeNo}
-                onChange={(event) => setEmployeeNo(event.target.value)}
-                fullWidth
-              />
+              {/* ---------------------------------------------------------------- */}
+              {/* Employee No.                                                      */}
+              {/* ---------------------------------------------------------------- */}
+
+              <Stack spacing={0.75}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 1,
+                  }}
+                >
+                  <TextField
+                    label="Employee No."
+                    value={employeeNo}
+                    onChange={(event) => handleEmployeeNoChange(event.target.value)}
+                    error={Boolean(employeeNoError)}
+                    helperText={
+                      employeeNoError || "Leave blank to let the system generate one on save."
+                    }
+                    fullWidth
+                  />
+
+                  <Button
+                    variant="outlined"
+                    onClick={handleAutoGenerate}
+                    disabled={loading || isLoadingUser}
+                    sx={{
+                      minWidth: 130,
+                      mt: 1,
+                      flexShrink: 0,
+                    }}
+                  >
+                    Auto-generate
+                  </Button>
+                </Box>
+              </Stack>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Display Name                                                      */}
+              {/* ---------------------------------------------------------------- */}
 
               <TextField
                 label="Display Name"
@@ -278,6 +450,10 @@ export default function UserDialog({
                 fullWidth
               />
 
+              {/* ---------------------------------------------------------------- */}
+              {/* Email                                                              */}
+              {/* ---------------------------------------------------------------- */}
+
               <TextField
                 label="Email"
                 type="email"
@@ -286,6 +462,10 @@ export default function UserDialog({
                 required
                 fullWidth
               />
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Role                                                               */}
+              {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-role-label">Role</InputLabel>
@@ -299,13 +479,22 @@ export default function UserDialog({
                   <MenuItem value="">
                     <em>None</em>
                   </MenuItem>
+
                   <MenuItem value="OWNER">Owner</MenuItem>
+
                   <MenuItem value="ADMIN">Admin</MenuItem>
+
                   <MenuItem value="HR">HR</MenuItem>
+
                   <MenuItem value="SUPERVISOR">Supervisor</MenuItem>
+
                   <MenuItem value="EMPLOYEE">Employee</MenuItem>
                 </Select>
               </FormControl>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Employment Status                                                 */}
+              {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-employment-status-label">Employment Status</InputLabel>
@@ -321,13 +510,22 @@ export default function UserDialog({
                   <MenuItem value="">
                     <em>None</em>
                   </MenuItem>
+
                   <MenuItem value="ACTIVE">Active</MenuItem>
+
                   <MenuItem value="INACTIVE">Inactive</MenuItem>
+
                   <MenuItem value="ON_LEAVE">On Leave</MenuItem>
+
                   <MenuItem value="RESIGNED">Resigned</MenuItem>
+
                   <MenuItem value="TERMINATED">Terminated</MenuItem>
                 </Select>
               </FormControl>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Employment Type                                                   */}
+              {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-employment-type-label">Employment Type</InputLabel>
@@ -341,12 +539,20 @@ export default function UserDialog({
                   <MenuItem value="">
                     <em>None</em>
                   </MenuItem>
+
                   <MenuItem value="FULL_TIME">Full Time</MenuItem>
+
                   <MenuItem value="PART_TIME">Part Time</MenuItem>
+
                   <MenuItem value="CONTRACT">Contract</MenuItem>
+
                   <MenuItem value="INTERN">Intern</MenuItem>
                 </Select>
               </FormControl>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Department                                                         */}
+              {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={departmentsLoading}>
                 <InputLabel id="user-department-label">Department</InputLabel>
@@ -368,6 +574,10 @@ export default function UserDialog({
                   ))}
                 </Select>
               </FormControl>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Position                                                           */}
+              {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={positionsLoading}>
                 <InputLabel id="user-position-label">Position</InputLabel>

@@ -29,7 +29,7 @@ function formatDate(date: Date, timezone: string, locale: string) {
 }
 
 export default function Clock({
-  timezone = "UTC",
+  timezone = "America/New_York",
   locale = "en-US",
   variant = "card",
 }: ClockProps) {
