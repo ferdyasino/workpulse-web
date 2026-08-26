@@ -1,6 +1,8 @@
+import type { TimezoneId } from "@workpulse/shared";
+
 export interface Settings {
   workspace_id: string;
-  timezone: string;
+  timezone: TimezoneId;
   locale: string;
   currency: string;
   metadata: Record<string, unknown>;
@@ -9,7 +11,7 @@ export interface Settings {
 }
 
 export interface UpdateSettingsRequest {
-  timezone?: string;
+  timezone?: TimezoneId;
   locale?: string;
   currency?: string;
   metadata?: Record<string, unknown>;

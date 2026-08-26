@@ -39,8 +39,9 @@ export function useSettings() {
 
       return data;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load settings");
+      const message = err instanceof Error ? err.message : "Failed to load settings";
 
+      setError(message);
       throw err;
     } finally {
       setLoading(false);
@@ -70,8 +71,9 @@ export function useSettings() {
 
         return data;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update settings");
+        const message = err instanceof Error ? err.message : "Failed to update settings";
 
+        setError(message);
         throw err;
       } finally {
         setSaving(false);
@@ -93,7 +95,6 @@ export function useSettings() {
     loading,
     saving,
     error,
-
     refresh: loadSettings,
     save: saveSettings,
   };

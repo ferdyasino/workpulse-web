@@ -14,10 +14,12 @@ import {
 
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
+import type { TimezoneId } from "@workpulse/shared";
+
 export default function SettingsPage() {
   const { settings, loading, saving, save } = useSettingsContext();
 
-  const [timezone, setTimezone] = useState("");
+  const [timezone, setTimezone] = useState<TimezoneId>("Asia/Manila");
   const [locale, setLocale] = useState("");
   const [currency, setCurrency] = useState("");
 
@@ -26,9 +28,9 @@ export default function SettingsPage() {
       return;
     }
 
-    setTimezone(settings.timezone ?? "");
-    setLocale(settings.locale ?? "");
-    setCurrency(settings.currency ?? "");
+    setTimezone(settings.timezone);
+    setLocale(settings.locale);
+    setCurrency(settings.currency);
   }, [settings]);
 
   async function handleSave() {
@@ -54,12 +56,14 @@ export default function SettingsPage() {
         fullWidth
         label="Timezone"
         value={timezone}
-        onChange={(event) => setTimezone(event.target.value)}
+        onChange={(event) => {
+          setTimezone(event.target.value as TimezoneId);
+        }}
         margin="normal"
       >
-        {TIMEZONES.map((timezone) => (
-          <MenuItem key={timezone.id} value={timezone.id}>
-            {timezone.label}
+        {TIMEZONES.map((timezoneOption) => (
+          <MenuItem key={timezoneOption.id} value={timezoneOption.id}>
+            {timezoneOption.label}
           </MenuItem>
         ))}
       </TextField>
@@ -69,12 +73,14 @@ export default function SettingsPage() {
         fullWidth
         label="Locale"
         value={locale}
-        onChange={(event) => setLocale(event.target.value)}
+        onChange={(event) => {
+          setLocale(event.target.value);
+        }}
         margin="normal"
       >
-        {LOCALE_OPTIONS.map((locale) => (
-          <MenuItem key={locale} value={locale}>
-            {locale}
+        {LOCALE_OPTIONS.map((localeOption) => (
+          <MenuItem key={localeOption} value={localeOption}>
+            {localeOption}
           </MenuItem>
         ))}
       </TextField>
@@ -84,17 +90,26 @@ export default function SettingsPage() {
         fullWidth
         label="Currency"
         value={currency}
-        onChange={(event) => setCurrency(event.target.value)}
+        onChange={(event) => {
+          setCurrency(event.target.value);
+        }}
         margin="normal"
       >
-        {CURRENCY_OPTIONS.map((currency) => (
-          <MenuItem key={currency} value={currency}>
-            {currency}
+        {CURRENCY_OPTIONS.map((currencyOption) => (
+          <MenuItem key={currencyOption} value={currencyOption}>
+            {currencyOption}
           </MenuItem>
         ))}
       </TextField>
 
-      <Button sx={{ mt: 2 }} variant="contained" disabled={saving} onClick={handleSave}>
+      <Button
+        sx={{ mt: 2 }}
+        variant="contained"
+        disabled={saving}
+        onClick={() => {
+          void handleSave();
+        }}
+      >
         {saving ? "Saving..." : "Save Settings"}
       </Button>
     </Box>

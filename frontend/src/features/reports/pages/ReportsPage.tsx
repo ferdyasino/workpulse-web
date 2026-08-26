@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Box,
@@ -18,8 +18,22 @@ import {
 } from "@mui/material";
 
 import { useUsers } from "@/features/admin/hooks/useUsers";
+import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
 import { useAttendanceReport } from "../hooks/useAttendanceReport";
+
+/* -------------------------------------------------------------------------- */
+/* Date / Time Helpers                                                        */
+/* -------------------------------------------------------------------------- */
+
+function getTodayInTimezone(timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
 
 function formatMinutes(minutes: number): string {
   if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -32,7 +46,7 @@ function formatMinutes(minutes: number): string {
   return `${String(hours).padStart(2, "0")}:${String(remainingMinutes).padStart(2, "0")}`;
 }
 
-function formatTime(value: string | null): string {
+function formatTime(value: string | null, timezone: string): string {
   if (!value) {
     return "—";
   }
@@ -44,6 +58,7 @@ function formatTime(value: string | null): string {
   }
 
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -51,6 +66,10 @@ function formatTime(value: string | null): string {
 }
 
 function formatDate(value: string): string {
+  if (!value) {
+    return "—";
+  }
+
   const date = new Date(`${value}T00:00:00`);
 
   if (Number.isNaN(date.getTime())) {
@@ -64,18 +83,51 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Component                                                                  */
+/* -------------------------------------------------------------------------- */
+
 export default function ReportsPage() {
   const { users } = useUsers();
+  const { settings, loading: settingsLoading } = useSettingsContext();
 
-  const [date, setDate] = useState(() => {
-    return new Date().toISOString().slice(0, 10);
-  });
+  /*
+   * Workspace settings are authoritative.
+   *
+   * Keep a safe fallback while settings are loading so Intl.DateTimeFormat
+   * always receives a valid timezone.
+   */
+  const timezone = settings?.timezone || "Asia/Manila";
 
+  const [date, setDate] = useState("");
   const [userId, setUserId] = useState("");
+
+  /* ------------------------------------------------------------------------ */
+  /* Initialize report date using workspace timezone                          */
+  /* ------------------------------------------------------------------------ */
+
+  useEffect(() => {
+    if (!settings?.timezone) {
+      return;
+    }
+
+    setDate((current) => {
+      if (current) {
+        return current;
+      }
+
+      return getTodayInTimezone(settings.timezone);
+    });
+  }, [settings?.timezone]);
+
+  /* ------------------------------------------------------------------------ */
+  /* Attendance Report                                                        */
+  /* ------------------------------------------------------------------------ */
 
   const { rows, loading, error, refresh } = useAttendanceReport({
     date_from: date,
     date_to: date,
+    timezone,
     ...(userId
       ? {
           user_id: userId,
@@ -83,9 +135,47 @@ export default function ReportsPage() {
       : {}),
   });
 
+  /* ------------------------------------------------------------------------ */
+  /* Selected Date Label                                                      */
+  /* ------------------------------------------------------------------------ */
+
   const selectedDateLabel = useMemo(() => {
+    if (!date) {
+      return "—";
+    }
+
     return formatDate(date);
   }, [date]);
+
+  /* ------------------------------------------------------------------------ */
+  /* Settings Loading                                                         */
+  /* ------------------------------------------------------------------------ */
+
+  if (settingsLoading && !settings) {
+    return (
+      <Paper
+        elevation={0}
+        sx={{
+          width: "100%",
+          minWidth: 0,
+          borderRadius: 2,
+          p: 4,
+        }}
+      >
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+          Attendance Reports
+        </Typography>
+
+        <Typography variant="body2" color="text.secondary">
+          Loading workspace settings...
+        </Typography>
+      </Paper>
+    );
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render                                                                   */
+  /* ------------------------------------------------------------------------ */
 
   return (
     <Paper
@@ -97,7 +187,10 @@ export default function ReportsPage() {
         overflow: "hidden",
       }}
     >
-      {/* Report Header / Filters */}
+      {/* ------------------------------------------------------------------ */}
+      {/* Report Header / Filters                                             */}
+      {/* ------------------------------------------------------------------ */}
+
       <Box
         sx={{
           px: 4,
@@ -136,6 +229,10 @@ export default function ReportsPage() {
             alignItems: "center",
           }}
         >
+          {/* -------------------------------------------------------------- */}
+          {/* Date                                                             */}
+          {/* -------------------------------------------------------------- */}
+
           <TextField
             label="Date"
             type="date"
@@ -152,6 +249,10 @@ export default function ReportsPage() {
               minWidth: 190,
             }}
           />
+
+          {/* -------------------------------------------------------------- */}
+          {/* Agent                                                            */}
+          {/* -------------------------------------------------------------- */}
 
           <FormControl
             sx={{
@@ -178,9 +279,27 @@ export default function ReportsPage() {
             </Select>
           </FormControl>
         </Box>
+
+        {/* -------------------------------------------------------------- */}
+        {/* Active Timezone                                                 */}
+        {/* -------------------------------------------------------------- */}
+
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            display: "block",
+            mt: 2,
+          }}
+        >
+          Report timezone: {timezone}
+        </Typography>
       </Box>
 
-      {/* Report Content */}
+      {/* ------------------------------------------------------------------ */}
+      {/* Report Content                                                      */}
+      {/* ------------------------------------------------------------------ */}
+
       <Box
         sx={{
           p: 4,
@@ -189,6 +308,10 @@ export default function ReportsPage() {
           overflow: "hidden",
         }}
       >
+        {/* ---------------------------------------------------------------- */}
+        {/* Error                                                             */}
+        {/* ---------------------------------------------------------------- */}
+
         {error && (
           <Box
             sx={{
@@ -203,6 +326,10 @@ export default function ReportsPage() {
           </Box>
         )}
 
+        {/* ---------------------------------------------------------------- */}
+        {/* Report Title                                                      */}
+        {/* ---------------------------------------------------------------- */}
+
         <Typography
           variant="subtitle1"
           sx={{
@@ -212,6 +339,10 @@ export default function ReportsPage() {
         >
           Daily Report — {selectedDateLabel}
         </Typography>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Table                                                             */}
+        {/* ---------------------------------------------------------------- */}
 
         <TableContainer
           sx={{
@@ -251,6 +382,10 @@ export default function ReportsPage() {
             </TableHead>
 
             <TableBody>
+              {/* ---------------------------------------------------------- */}
+              {/* Loading                                                       */}
+              {/* ---------------------------------------------------------- */}
+
               {loading ? (
                 <TableRow>
                   <TableCell
@@ -266,6 +401,10 @@ export default function ReportsPage() {
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
+                /* -------------------------------------------------------- */
+                /* Empty                                                       */
+                /* -------------------------------------------------------- */
+
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -280,8 +419,16 @@ export default function ReportsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
+                /* -------------------------------------------------------- */
+                /* Rows                                                        */
+                /* -------------------------------------------------------- */
+
                 rows.map((row) => (
                   <TableRow key={`${row.user_id}-${row.work_date}`} hover>
+                    {/* -------------------------------------------------- */}
+                    {/* Agent                                                  */}
+                    {/* -------------------------------------------------- */}
+
                     <TableCell>
                       <Box>
                         <Typography
@@ -299,11 +446,27 @@ export default function ReportsPage() {
                       </Box>
                     </TableCell>
 
+                    {/* -------------------------------------------------- */}
+                    {/* Work Date                                              */}
+                    {/* -------------------------------------------------- */}
+
                     <TableCell>{formatDate(row.work_date)}</TableCell>
 
-                    <TableCell>{formatTime(row.time_in)}</TableCell>
+                    {/* -------------------------------------------------- */}
+                    {/* Time In                                                */}
+                    {/* -------------------------------------------------- */}
 
-                    <TableCell>{formatTime(row.time_out)}</TableCell>
+                    <TableCell>{formatTime(row.time_in, timezone)}</TableCell>
+
+                    {/* -------------------------------------------------- */}
+                    {/* Time Out                                               */}
+                    {/* -------------------------------------------------- */}
+
+                    <TableCell>{formatTime(row.time_out, timezone)}</TableCell>
+
+                    {/* -------------------------------------------------- */}
+                    {/* Break                                                  */}
+                    {/* -------------------------------------------------- */}
 
                     <TableCell align="right">
                       {formatMinutes(
@@ -313,6 +476,10 @@ export default function ReportsPage() {
                         ),
                       )}
                     </TableCell>
+
+                    {/* -------------------------------------------------- */}
+                    {/* Worked Hours                                           */}
+                    {/* -------------------------------------------------- */}
 
                     <TableCell align="right">
                       <Typography
@@ -325,6 +492,10 @@ export default function ReportsPage() {
                       </Typography>
                     </TableCell>
 
+                    {/* -------------------------------------------------- */}
+                    {/* Status                                                 */}
+                    {/* -------------------------------------------------- */}
+
                     <TableCell>{row.attendance_status}</TableCell>
                   </TableRow>
                 ))
@@ -333,7 +504,10 @@ export default function ReportsPage() {
           </Table>
         </TableContainer>
 
-        {/* Refresh */}
+        {/* ---------------------------------------------------------------- */}
+        {/* Refresh                                                           */}
+        {/* ---------------------------------------------------------------- */}
+
         {!loading && rows.length > 0 && (
           <Box
             sx={{

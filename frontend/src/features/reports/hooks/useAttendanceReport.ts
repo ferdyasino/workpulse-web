@@ -20,13 +20,25 @@ export function useAttendanceReport(params: {
   const workspaceId = workspace?.id ?? null;
 
   const [rows, setRows] = useState<AttendanceReportRow[]>([]);
-
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
 
   const loadReport = useCallback(async () => {
-    if (!workspaceId) {
+    /*
+     * Do not call the API until we have a workspace and valid dates.
+     *
+     * This prevents:
+     *
+     * date_from: ""
+     * date_to: ""
+     *
+     * from reaching the Edge Function.
+     */
+    if (
+      !workspaceId ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(params.date_from) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(params.date_to)
+    ) {
       setRows([]);
       setLoading(false);
       return;
@@ -38,9 +50,7 @@ export function useAttendanceReport(params: {
 
       const payload: AttendanceReportRequest = {
         workspace_id: workspaceId,
-
         date_from: params.date_from,
-
         date_to: params.date_to,
 
         ...(params.user_id
@@ -85,11 +95,8 @@ export function useAttendanceReport(params: {
 
   return {
     rows,
-
     loading,
-
     error,
-
     refresh: loadReport,
   };
 }
