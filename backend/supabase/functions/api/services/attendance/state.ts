@@ -9,7 +9,6 @@ import type {
 } from "@shared/types/models/attendance.types.ts";
 
 import { getUserContext } from "../users.ts";
-import { resolveUserShift } from "../user_shift_resolver.ts";
 
 import {
   buildAttendanceSessions,
@@ -17,7 +16,7 @@ import {
   getLatestAttendanceSession,
 } from "./sessions.ts";
 
-import { resolveWorkDate } from "./workdate.ts";
+import { resolveAttendanceContext } from "../context.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
@@ -46,12 +45,6 @@ export function buildAttendanceState(
   sessions: AttendanceSession[],
   currentSession: AttendanceSession | null,
 ): AttendanceState {
-  /*
-   * The latest session is used to determine the employee's displayed
-   * attendance state.
-   *
-   * The active session is separately used by validation.
-   */
   const latestSession = getLatestAttendanceSession(sessions);
 
   if (!latestSession || !latestSession.time_in) {
@@ -72,7 +65,8 @@ export function buildAttendanceState(
   }
 
   /*
-   * No TIME_OUT means this is an active session.
+   * No active session means the latest event cannot currently
+   * be represented as working.
    */
   if (!currentSession) {
     return {
@@ -85,7 +79,7 @@ export function buildAttendanceState(
   }
 
   /*
-   * Check active break first.
+   * Active break takes priority.
    */
   const activeBreak = currentSession.breaks.at(-1);
 
@@ -100,7 +94,7 @@ export function buildAttendanceState(
   }
 
   /*
-   * Then check lunch.
+   * Then lunch.
    */
   if (currentSession.lunch.in && !currentSession.lunch.out) {
     return {
@@ -113,7 +107,7 @@ export function buildAttendanceState(
   }
 
   /*
-   * Otherwise employee is actively working.
+   * Otherwise actively working.
    */
   return {
     status: "WORKING",
@@ -132,11 +126,20 @@ export async function getCurrentAttendanceState(
   supabaseAdmin: SupabaseClient<Database>,
   payload: AttendanceStateContext,
 ): Promise<AttendanceState> {
-  const { workspace_id, authUserId, email, authProvider, date, timestamp } =
-    payload;
+  const {
+    workspace_id,
+    authUserId,
+    email,
+    authProvider,
+    date,
+    timestamp,
+    shift_id,
+  } = payload;
 
   /*
-   * Resolve the authenticated identity to the application user.
+   * ------------------------------------------------------------------------
+   * Resolve authenticated application user
+   * ------------------------------------------------------------------------
    */
   const context = await getUserContext(
     supabaseAdmin,
@@ -145,9 +148,6 @@ export async function getCurrentAttendanceState(
     authProvider ?? null,
   );
 
-  /*
-   * Prevent cross-workspace attendance access.
-   */
   if (context.workspace_id !== workspace_id) {
     throw new Error("User does not belong to this workspace.");
   }
@@ -168,77 +168,54 @@ export async function getCurrentAttendanceState(
   }
 
   /*
-   * We need a date for resolving the effective assignment.
-   *
-   * When an explicit date is supplied, it is authoritative.
-   *
-   * Otherwise use the server/client instant's calendar date as the
-   * initial assignment lookup date. The final work_date is resolved
-   * using the effective shift timezone below.
+   * ------------------------------------------------------------------------
+   * Resolve ONE authoritative attendance context
+   * ------------------------------------------------------------------------
    */
-  const lookupDate = date ?? now.toISOString().slice(0, 10);
+  const attendanceContext = await resolveAttendanceContext({
+    supabaseAdmin,
 
-  /*
-   * Resolve effective shift.
-   *
-   * Priority:
-   *
-   * 1. user_shift_overrides
-   * 2. user_shifts
-   */
-  const resolved = await resolveUserShift(supabaseAdmin, {
-    workspace_id,
-    user_id: userId,
-    date: lookupDate,
+    workspaceId: workspace_id,
+
+    userId,
+
+    timestamp: now,
+
+    requestedShiftId: shift_id ?? null,
+
+    requestedWorkDate: date ?? null,
   });
 
-  if (!resolved) {
-    return createEmptyState(lookupDate);
-  }
-
-  const shift = resolved.shift;
-
-  if (!shift) {
-    throw new Error("Resolved user shift does not contain a shift.");
-  }
-
   /*
-   * Attendance logs always reference user_shifts.id.
+   * No assignment means employee has no attendance context.
    *
-   * Even when the effective shift came from an override,
-   * resolved.user_shift_id must point to the permanent assignment.
+   * If an explicit date was requested, preserve that date.
+   * Otherwise use the UTC date as a safe fallback for an empty state.
    */
-  const userShiftId = resolved.user_shift_id;
+  if (!attendanceContext) {
+    const fallbackDate = date ?? now.toISOString().slice(0, 10);
 
-  if (!userShiftId) {
-    throw new Error(
-      "Resolved shift does not have a matching user shift assignment.",
-    );
+    return createEmptyState(fallbackDate);
   }
 
-  /*
-   * Shift timezone is authoritative.
-   */
-  const timezone = shift.timezone;
+  const {
+    workDate,
+    shift,
+    userShiftId,
+    assignmentId,
+    assignmentSource,
+    startsAt,
+    endsAt,
+  } = attendanceContext;
 
   /*
-   * Explicit date is used as-is.
+   * ------------------------------------------------------------------------
+   * Retrieve attendance events
+   * ------------------------------------------------------------------------
    *
-   * Otherwise resolve work_date from the timestamp and shift.
-   */
-  const workDate =
-    date ??
-    resolveWorkDate({
-      timestamp: now,
-      shiftStart: shift.start_time,
-      shiftEnd: shift.end_time,
-      isOvernight: shift.is_overnight,
-      timezone,
-    });
-
-  /*
-   * Retrieve only logs belonging to the authenticated application user,
-   * workspace, permanent user_shift assignment, and work date.
+   * user_shift_id references the permanent user_shifts row.
+   *
+   * work_date comes from the authoritative attendance context.
    */
   const { data: logs, error: logsError } = await supabaseAdmin
     .from("time_logs")
@@ -261,7 +238,7 @@ export async function getCurrentAttendanceState(
   const sessions = logs.length > 0 ? buildAttendanceSessions(logs) : [];
 
   /*
-   * Active session is used by action validation.
+   * Active session is used by validation.
    */
   const currentSession = getCurrentAttendanceSession(sessions);
 
@@ -274,16 +251,24 @@ export async function getCurrentAttendanceState(
     "ATTENDANCE STATE",
     JSON.stringify({
       email,
+
       timestamp: now.toISOString(),
 
-      resolver: {
-        source: resolved.source,
-        assignment_id: resolved.assignment_id,
+      context: {
+        work_date: workDate,
+
+        timezone: attendanceContext.timezone,
+
+        starts_at: startsAt.toISOString(),
+
+        ends_at: endsAt.toISOString(),
+
+        assignment_source: assignmentSource,
+
+        assignment_id: assignmentId,
+
         user_shift_id: userShiftId,
       },
-
-      lookupDate,
-      workDate,
 
       shift: {
         id: shift.id,

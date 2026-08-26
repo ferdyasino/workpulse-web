@@ -15,10 +15,12 @@ import type {
 export type ApiRequest =
   | {
       action: "AUTH_ME";
+      workspace_id: string;
     }
   | WorkspaceApiRequest
   | {
       action: "USER_CONTEXT_GET";
+      workspace_id: string;
     }
   | DepartmentApiRequest
   | PositionApiRequest
@@ -29,6 +31,7 @@ export type ApiRequest =
   | UserShiftOverrideApiRequest
   | ({
       action: "TIMELOG_CREATE";
+      workspace_id: string;
     } & SubmitTimeLogRequest)
   | {
       action: "TIMELOG_LIST";
@@ -37,4 +40,5 @@ export type ApiRequest =
     }
   | ({
       action: "ATTENDANCE_STATE_GET";
+      workspace_id: string;
     } & AttendanceStateRequest);

@@ -32,28 +32,30 @@ export async function resolveUserShift(
   const { workspace_id, user_id, date } = params;
 
   /*
-   * 1. Check temporary override first
+   * ------------------------------------------------------------------------
+   * 1. Temporary override
+   * ------------------------------------------------------------------------
    */
   const { data: override, error: overrideError } = await supabaseAdmin
     .from("user_shift_overrides")
     .select(
       `
-        id,
-        shift_id,
+      id,
+      shift_id,
 
-        shifts!inner (
-          id,
-          name,
-          description,
-          status,
-          start_time,
-          end_time,
-          timezone,
-          grace_minutes,
-          break_minutes,
-          is_overnight
-        )
-      `,
+      shifts!inner (
+        id,
+        name,
+        description,
+        status,
+        start_time,
+        end_time,
+        timezone,
+        grace_minutes,
+        break_minutes,
+        is_overnight
+      )
+    `,
     )
     .eq("workspace_id", workspace_id)
     .eq("user_id", user_id)
@@ -72,12 +74,13 @@ export async function resolveUserShift(
 
   if (override) {
     /*
-     * Override changes the effective shift only.
-     * Attendance logs still belong to the permanent user_shift.
+     * The override changes the effective shift.
+     *
+     * Attendance logs still reference the permanent user_shifts row.
      */
-    const { data: baseAssignment, error: baseError } = await supabaseAdmin
+    const { data: baseAssignments, error: baseError } = await supabaseAdmin
       .from("user_shifts")
-      .select("id")
+      .select("id, effective_from, effective_to")
       .eq("workspace_id", workspace_id)
       .eq("user_id", user_id)
       .is("deleted_at", null)
@@ -86,12 +89,13 @@ export async function resolveUserShift(
       .order("effective_from", {
         ascending: false,
       })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
     if (baseError) {
       throw baseError;
     }
+
+    const baseAssignment = baseAssignments?.[0] ?? null;
 
     if (!baseAssignment) {
       throw new Error(
@@ -101,8 +105,17 @@ export async function resolveUserShift(
 
     return {
       source: "OVERRIDE",
+
+      /*
+       * The actual effective assignment.
+       */
       assignment_id: override.id,
+
+      /*
+       * Permanent FK used by time_logs.
+       */
       user_shift_id: baseAssignment.id,
+
       shift: Array.isArray(override.shifts)
         ? override.shifts[0]
         : override.shifts,
@@ -110,7 +123,9 @@ export async function resolveUserShift(
   }
 
   /*
+   * ------------------------------------------------------------------------
    * 2. Permanent user shift assignment
+   * ------------------------------------------------------------------------
    */
   const { data: assignments, error } = await supabaseAdmin
     .from("user_shifts")
@@ -127,6 +142,9 @@ export async function resolveUserShift(
     throw error;
   }
 
+  /*
+   * The latest assignment covering the requested date wins.
+   */
   const assignment = (assignments ?? []).find((item) => {
     return item.effective_to === null || item.effective_to >= date;
   });
@@ -137,8 +155,13 @@ export async function resolveUserShift(
 
   return {
     source: "ASSIGNMENT",
+
+    /*
+     * For a permanent assignment, both IDs are the same.
+     */
     assignment_id: assignment.id,
     user_shift_id: assignment.id,
+
     shift: Array.isArray(assignment.shifts)
       ? assignment.shifts[0]
       : assignment.shifts,

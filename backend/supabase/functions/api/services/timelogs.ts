@@ -4,8 +4,7 @@ import type { Json, Database } from "@shared/types/database.ts";
 
 import type { SubmitTimeLogRequest } from "@shared/types/models/attendance.types.ts";
 
-import { resolveWorkDate } from "./attendance/workdate.ts";
-import { resolveUserShift } from "./user_shift_resolver.ts";
+import { resolveAttendanceContext } from "./context.ts";
 import { getUserContext } from "./users.ts";
 
 /* -------------------------------------------------------------------------- */
@@ -23,8 +22,11 @@ export async function createTimeLog(
     "TIMELOG CREATE",
     JSON.stringify({
       authenticated_user_id: authUserId,
+
       workspace_id: payload.workspace_id,
+
       action_type: payload.action_type,
+
       shift_id: payload.shift_id ?? null,
     }),
   );
@@ -34,18 +36,9 @@ export async function createTimeLog(
   }
 
   /*
-   * Resolve Supabase Auth identity to the application's users.id.
-   *
-   * This is important because:
-   *
-   * auth.users.id
-   *
-   * and
-   *
-   * public.users.id
-   *
-   * must not be assumed to be the same unless the schema explicitly
-   * guarantees that relationship.
+   * ------------------------------------------------------------------------
+   * Resolve authenticated application user
+   * ------------------------------------------------------------------------
    */
   const context = await getUserContext(
     supabaseAdmin,
@@ -65,7 +58,9 @@ export async function createTimeLog(
   }
 
   /*
-   * Parse the submitted timestamp.
+   * ------------------------------------------------------------------------
+   * Parse timestamp
+   * ------------------------------------------------------------------------
    */
   const timestamp = new Date(payload.timestamp);
 
@@ -74,71 +69,44 @@ export async function createTimeLog(
   }
 
   /*
-   * Initial assignment lookup date.
+   * ------------------------------------------------------------------------
+   * Resolve ONE authoritative attendance context
+   * ------------------------------------------------------------------------
    *
-   * The final attendance work_date is resolved using the effective
-   * shift timezone.
+   * This is intentionally the same resolver used by
+   * ATTENDANCE_STATE_GET.
    */
-  const lookupDate = timestamp.toISOString().slice(0, 10);
+  const attendanceContext = await resolveAttendanceContext({
+    supabaseAdmin,
 
-  /*
-   * Resolve effective shift.
-   */
-  const assignment = await resolveUserShift(supabaseAdmin, {
-    workspace_id: payload.workspace_id,
-    user_id: userId,
-    date: lookupDate,
+    workspaceId: payload.workspace_id,
+
+    userId,
+
+    timestamp,
+
+    requestedShiftId: payload.shift_id ?? null,
   });
 
-  if (!assignment) {
+  if (!attendanceContext) {
     throw new Error("No active user shift found.");
   }
 
-  const shift = assignment.shift;
-
-  if (!shift) {
-    throw new Error("Resolved user shift does not contain a shift.");
-  }
-
-  /*
-   * If the client supplied a shift_id, it must match the server-resolved
-   * effective shift.
-   */
-  if (payload.shift_id && payload.shift_id !== shift.id) {
-    throw new Error(
-      "The requested shift does not match the user's effective shift.",
-    );
-  }
+  const {
+    workDate,
+    timezone,
+    shift,
+    userShiftId,
+    assignmentId,
+    assignmentSource,
+    startsAt,
+    endsAt,
+  } = attendanceContext;
 
   /*
-   * time_logs.user_shift_id MUST reference user_shifts.id.
-   *
-   * When an override is active:
-   *
-   * assignment.assignment_id = override.id
-   * assignment.user_shift_id = permanent user_shifts.id
-   */
-  const userShiftId = assignment.user_shift_id;
-
-  if (!userShiftId) {
-    throw new Error(
-      "Resolved shift does not have a matching user shift assignment.",
-    );
-  }
-
-  /*
-   * Resolve work_date using the effective shift's timezone.
-   */
-  const workDate = resolveWorkDate({
-    timestamp,
-    shiftStart: shift.start_time,
-    shiftEnd: shift.end_time,
-    timezone: shift.timezone,
-    isOvernight: shift.is_overnight,
-  });
-
-  /*
-   * Immutable attendance event.
+   * ------------------------------------------------------------------------
+   * Immutable attendance event
+   * ------------------------------------------------------------------------
    */
   const { data, error } = await supabaseAdmin
     .from("time_logs")
@@ -146,12 +114,12 @@ export async function createTimeLog(
       workspace_id: payload.workspace_id,
 
       /*
-       * Application user ID, NOT blindly the Supabase Auth ID.
+       * Application user ID.
        */
       user_id: userId,
 
       /*
-       * Permanent user_shift FK.
+       * Permanent user_shifts FK.
        */
       user_shift_id: userShiftId,
 
@@ -163,17 +131,17 @@ export async function createTimeLog(
       event_time_utc: timestamp.toISOString(),
 
       /*
-       * Preserve original client timestamp for auditing.
+       * Preserve original client timestamp.
        */
       client_timestamp: payload.timestamp,
 
       /*
-       * Store the timezone used to resolve the attendance event.
+       * Store the timezone used by the effective shift.
        */
-      timezone: shift.timezone,
+      timezone,
 
       /*
-       * Shift-aware work date.
+       * Authoritative shift-aware work date.
        */
       work_date: workDate,
 
@@ -190,6 +158,19 @@ export async function createTimeLog(
         location_status: payload.location_status,
 
         location_message: payload.location_message,
+
+        /*
+         * Attendance resolution audit data.
+         */
+        assignment_id: assignmentId,
+
+        assignment_source: assignmentSource,
+
+        shift_id: shift.id,
+
+        shift_start: startsAt.toISOString(),
+
+        shift_end: endsAt.toISOString(),
       } satisfies Json,
     })
     .select()
@@ -203,14 +184,28 @@ export async function createTimeLog(
     "TIMELOG CREATED",
     JSON.stringify({
       id: data.id,
+
       authenticated_user_id: authUserId,
+
       user_id: userId,
+
       user_shift_id: userShiftId,
+
       workspace_id: payload.workspace_id,
+
       event_type: payload.action_type,
+
       event_time_utc: data.event_time_utc,
+
       work_date: data.work_date,
+
       timezone: data.timezone,
+
+      shift_id: shift.id,
+
+      assignment_id: assignmentId,
+
+      assignment_source: assignmentSource,
     }),
   );
 

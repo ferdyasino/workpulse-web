@@ -1,0 +1,1378 @@
+===== attendance directory =====
+backend/supabase/functions/api/services/attendance/sessions.ts
+
+===== backend/supabase/functions/api/services/attendance/sessions.ts =====
+import type { Tables } from "@shared/types/database.ts";
+
+import type {
+  AttendanceSession,
+  TimeLogEvent,
+} from "@shared/types/models/attendance.types.ts";
+
+export function createEmptyAttendanceSession(): AttendanceSession {
+  return {
+    time_in: null,
+    time_out: null,
+
+    breaks: [],
+
+    lunch: {
+      in: null,
+      out: null,
+    },
+  };
+}
+
+export function buildAttendanceSessions(
+  logs: Tables<"time_logs">[],
+): AttendanceSession[] {
+  const sessions: AttendanceSession[] = [];
+
+  let current: AttendanceSession | null = null;
+
+  for (const log of logs) {
+    const event = log.event_type as TimeLogEvent;
+
+    switch (event) {
+      case "TIME_IN": {
+        if (current && !current.time_out) {
+          console.warn(
+            "TIME_IN encountered before TIME_OUT. Closing previous session.",
+            log.id,
+          );
+
+          current.time_out = log.event_time_utc;
+        }
+
+        current = createEmptyAttendanceSession();
+
+        current.time_in = log.event_time_utc;
+
+        sessions.push(current);
+
+        break;
+      }
+
+      case "BREAK_START": {
+        if (!current) {
+          console.warn("BREAK_START without active session.", log.id);
+          break;
+        }
+
+        const activeBreak = current.breaks.at(-1);
+
+        if (activeBreak && !activeBreak.out) {
+          console.warn("BREAK_START while already on break.", log.id);
+          break;
+        }
+
+        current.breaks.push({
+          in: log.event_time_utc,
+          out: null,
+        });
+
+        break;
+      }
+
+      case "BREAK_END": {
+        if (!current) {
+          console.warn("BREAK_END without active session.", log.id);
+          break;
+        }
+
+        const activeBreak = current.breaks.at(-1);
+
+        if (!activeBreak || activeBreak.out) {
+          console.warn("BREAK_END without BREAK_START.", log.id);
+          break;
+        }
+
+        activeBreak.out = log.event_time_utc;
+
+        break;
+      }
+
+      case "LUNCH_START": {
+        if (!current) {
+          console.warn("LUNCH_START without active session.", log.id);
+          break;
+        }
+
+        if (current.lunch.in && !current.lunch.out) {
+          console.warn("LUNCH_START while already at lunch.", log.id);
+          break;
+        }
+
+        current.lunch = {
+          in: log.event_time_utc,
+          out: null,
+        };
+
+        break;
+      }
+
+      case "LUNCH_END": {
+        if (!current) {
+          console.warn("LUNCH_END without active session.", log.id);
+          break;
+        }
+
+        if (!current.lunch.in || current.lunch.out) {
+          console.warn("LUNCH_END without LUNCH_START.", log.id);
+          break;
+        }
+
+        current.lunch.out = log.event_time_utc;
+
+        break;
+      }
+
+      case "TIME_OUT": {
+        if (!current) {
+          console.warn("TIME_OUT without TIME_IN.", log.id);
+          break;
+        }
+
+        current.time_out = log.event_time_utc;
+
+        current = null;
+
+        break;
+      }
+
+      default: {
+        console.warn("Unknown attendance event.", event, log.id);
+      }
+    }
+  }
+
+  return sessions;
+}
+
+export function getCurrentAttendanceSession(
+  sessions: AttendanceSession[],
+): AttendanceSession | null {
+  const session = sessions.at(-1);
+
+  if (!session) {
+    return null;
+  }
+
+  if (session.time_out) {
+    return null;
+  }
+
+  return session;
+}
+backend/supabase/functions/api/services/attendance/state.ts
+
+===== backend/supabase/functions/api/services/attendance/state.ts =====
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@shared/types/database.ts";
+
+import type {
+  AttendanceSession,
+  AttendanceState,
+  AttendanceStateContext,
+} from "@shared/types/models/attendance.types.ts";
+
+import { getUserContext } from "../users.ts";
+import { resolveUserShift } from "../user_shift_resolver.ts";
+
+import {
+  buildAttendanceSessions,
+  getCurrentAttendanceSession,
+} from "./sessions.ts";
+
+import { resolveWorkDate } from "./workdate.ts";
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function createEmptyState(
+  workDate: string,
+  shift: AttendanceState["shift"] = null,
+): AttendanceState {
+  return {
+    status: "OFF",
+    work_date: workDate,
+    shift,
+    sessions: [],
+    current_session: null,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Attendance State                                                           */
+/* -------------------------------------------------------------------------- */
+
+export function buildAttendanceState(
+  workDate: string,
+  shift: AttendanceState["shift"],
+  sessions: AttendanceSession[],
+  currentSession: AttendanceSession | null,
+): AttendanceState {
+  /*
+   * No active session means the employee is currently OFF.
+   */
+  if (!currentSession || !currentSession.time_in) {
+    return createEmptyState(workDate, shift);
+  }
+
+  let status: AttendanceState["status"];
+
+  /*
+   * A completed session is CLOCKED_OUT.
+   */
+  if (currentSession.time_out) {
+    status = "CLOCKED_OUT";
+  } else {
+    /*
+     * Check for an active break first.
+     */
+    const activeBreak = currentSession.breaks.at(-1);
+
+    if (activeBreak && !activeBreak.out) {
+      status = "BREAK";
+    } else if (currentSession.lunch.in && !currentSession.lunch.out) {
+      status = "LUNCH";
+    } else {
+      status = "WORKING";
+    }
+  }
+
+  return {
+    status,
+    work_date: workDate,
+    shift,
+    sessions,
+    current_session: currentSession,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Get Current Attendance State                                               */
+/* -------------------------------------------------------------------------- */
+
+export async function getCurrentAttendanceState(
+  supabaseAdmin: SupabaseClient<Database>,
+  payload: AttendanceStateContext,
+): Promise<AttendanceState> {
+  const { workspace_id, authUserId, email, authProvider, date, timestamp } =
+    payload;
+
+  /*
+   * IMPORTANT:
+   *
+   * The authenticated identity comes from the server-side Supabase session.
+   *
+   * Never trust user_id, email, or auth identity supplied by the client body.
+   */
+  const context = await getUserContext(
+    supabaseAdmin,
+    authUserId,
+    email,
+    authProvider ?? null,
+  );
+
+  /*
+   * Prevent users from querying another workspace.
+   */
+  if (context.workspace_id !== workspace_id) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  const userId = context.user_id;
+
+  if (!userId) {
+    throw new Error("User context does not contain a user ID.");
+  }
+
+  /*
+   * Timestamp is always interpreted as an absolute point in time.
+   *
+   * If the client does not provide one, use the server's current time.
+   */
+  const now = timestamp ? new Date(timestamp) : new Date();
+
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Invalid attendance timestamp.");
+  }
+
+  /*
+   * Date used for selecting the user's effective assignment/override.
+   *
+   * IMPORTANT:
+   *
+   * When date is explicitly provided, it is treated as the requested
+   * work date. Otherwise, the effective assignment date is initially
+   * derived from the timestamp.
+   *
+   * The actual overnight work_date is resolved below using the shift
+   * timezone and shift configuration.
+   */
+  const lookupDate = date ?? now.toISOString().slice(0, 10);
+
+  /*
+   * Resolve the effective shift.
+   *
+   * Resolver priority:
+   *
+   * 1. user_shift_overrides
+   * 2. user_shifts
+   * 3. null
+   */
+  const resolved = await resolveUserShift(supabaseAdmin, {
+    workspace_id,
+    user_id: userId,
+    date: lookupDate,
+  });
+
+  /*
+   * No shift means the employee has no effective assignment.
+   */
+  if (!resolved) {
+    return createEmptyState(lookupDate);
+  }
+
+  const shift = resolved.shift;
+
+  /*
+   * IMPORTANT:
+   *
+   * resolved.assignment_id may refer to either:
+   *
+   * - user_shifts.id
+   * - user_shift_overrides.id
+   *
+   * However, time_logs.user_shift_id has a foreign key to
+   * user_shifts.id.
+   *
+   * Therefore the resolver must provide the actual user_shifts.id
+   * through resolved.user_shift_id.
+   */
+  const userShiftId = resolved.user_shift_id;
+
+  if (!userShiftId) {
+    throw new Error(
+      "Resolved shift does not have a matching user shift assignment.",
+    );
+  }
+
+  /*
+   * The shift's timezone is authoritative for attendance/work-date
+   * calculations.
+   */
+  const timezone = shift.timezone;
+
+  /*
+   * Resolve the actual work date.
+   *
+   * If the caller explicitly provided date, respect it.
+   *
+   * Otherwise calculate it from:
+   *
+   * - UTC timestamp
+   * - shift start time
+   * - shift end time
+   * - overnight configuration
+   * - shift timezone
+   */
+  const workDate =
+    date ??
+    resolveWorkDate({
+      timestamp: now,
+      shiftStart: shift.start_time,
+      shiftEnd: shift.end_time,
+      isOvernight: shift.is_overnight,
+      timezone,
+    });
+
+  /*
+   * Retrieve only logs belonging to:
+   *
+   * - this workspace
+   * - authenticated application user
+   * - resolved user_shift assignment
+   * - resolved work date
+   */
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from("time_logs")
+    .select("*")
+    .eq("workspace_id", workspace_id)
+    .eq("user_id", userId)
+    .eq("user_shift_id", userShiftId)
+    .eq("work_date", workDate)
+    .order("event_time_utc", {
+      ascending: true,
+    });
+
+  if (logsError) {
+    throw logsError;
+  }
+
+  /*
+   * Build logical attendance sessions from raw timelog events.
+   */
+  const sessions = logs.length > 0 ? buildAttendanceSessions(logs) : [];
+
+  /*
+   * Determine the session currently relevant to the employee.
+   */
+  const currentSession = getCurrentAttendanceSession(sessions);
+
+  /*
+   * Convert raw sessions into the client-facing attendance state.
+   */
+  const state = buildAttendanceState(workDate, shift, sessions, currentSession);
+
+  console.log(
+    "ATTENDANCE STATE",
+    JSON.stringify({
+      email,
+      timestamp: now.toISOString(),
+
+      resolver: {
+        source: resolved.source,
+        assignment_id: resolved.assignment_id,
+        user_shift_id: userShiftId,
+      },
+
+      lookupDate,
+      workDate,
+
+      shift: {
+        id: shift.id,
+        name: shift.name,
+        timezone: shift.timezone,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+        is_overnight: shift.is_overnight,
+      },
+
+      logs: logs.length,
+
+      state,
+    }),
+  );
+
+  return state;
+}
+backend/supabase/functions/api/services/attendance/validation.ts
+
+===== backend/supabase/functions/api/services/attendance/validation.ts =====
+import type {
+  AttendanceState,
+  TimeLogEvent,
+} from "@shared/types/models/attendance.types.ts";
+
+export type AttendanceValidationResult =
+  | {
+      valid: true;
+    }
+  | {
+      valid: false;
+      message: string;
+    };
+
+export function validateAttendanceAction(
+  state: AttendanceState,
+  action: TimeLogEvent,
+): AttendanceValidationResult {
+  const session = state.current_session;
+
+  switch (action) {
+    case "TIME_IN": {
+      if (session && !session.time_out) {
+        return {
+          valid: false,
+          message: "Already clocked in.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    case "TIME_OUT": {
+      if (!session) {
+        return {
+          valid: false,
+          message: "No active session.",
+        };
+      }
+
+      if (session.time_out) {
+        return {
+          valid: false,
+          message: "Already clocked out.",
+        };
+      }
+
+      const activeBreak = session.breaks.at(-1);
+
+      if (activeBreak && !activeBreak.out) {
+        return {
+          valid: false,
+          message: "End break before clocking out.",
+        };
+      }
+
+      if (session.lunch.in && !session.lunch.out) {
+        return {
+          valid: false,
+          message: "End lunch before clocking out.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    case "BREAK_START": {
+      if (!session || session.time_out) {
+        return {
+          valid: false,
+          message: "You are not clocked in.",
+        };
+      }
+
+      const activeBreak = session.breaks.at(-1);
+
+      if (activeBreak && !activeBreak.out) {
+        return {
+          valid: false,
+          message: "Break already active.",
+        };
+      }
+
+      if (session.lunch.in && !session.lunch.out) {
+        return {
+          valid: false,
+          message: "Cannot start break during lunch.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    case "BREAK_END": {
+      if (!session) {
+        return {
+          valid: false,
+          message: "No active session.",
+        };
+      }
+
+      const activeBreak = session.breaks.at(-1);
+
+      if (!activeBreak || activeBreak.out) {
+        return {
+          valid: false,
+          message: "No active break.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    case "LUNCH_START": {
+      if (!session || session.time_out) {
+        return {
+          valid: false,
+          message: "You are not clocked in.",
+        };
+      }
+
+      if (session.lunch.in && !session.lunch.out) {
+        return {
+          valid: false,
+          message: "Lunch already active.",
+        };
+      }
+
+      const activeBreak = session.breaks.at(-1);
+
+      if (activeBreak && !activeBreak.out) {
+        return {
+          valid: false,
+          message: "Cannot start lunch during break.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    case "LUNCH_END": {
+      if (!session) {
+        return {
+          valid: false,
+          message: "No active session.",
+        };
+      }
+
+      if (!session.lunch.in || session.lunch.out) {
+        return {
+          valid: false,
+          message: "No active lunch.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    default: {
+      return {
+        valid: false,
+        message: "Unsupported attendance action.",
+      };
+    }
+  }
+}
+backend/supabase/functions/api/services/attendance/workdate.ts
+
+===== backend/supabase/functions/api/services/attendance/workdate.ts =====
+export type ResolveWorkDateOptions = {
+  timestamp: Date;
+
+  shiftStart: string; // HH:mm:ss
+
+  shiftEnd: string; // HH:mm:ss
+
+  isOvernight: boolean;
+
+  timezone: string;
+};
+
+function toMinutes(time: string): number {
+  const [hour = 0, minute = 0] = time.split(":").map(Number);
+
+  return hour * 60 + minute;
+}
+
+function formatDate(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function getMinutes(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(date);
+
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value ?? "0",
+  );
+
+  return hour * 60 + minute;
+}
+
+function subtractOneDay(date: Date, timezone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+
+  return new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0));
+}
+
+export function resolveWorkDate(options: ResolveWorkDateOptions): string {
+  const { timestamp, shiftEnd, isOvernight, timezone } = options;
+
+  let workDate = timestamp;
+
+  if (isOvernight) {
+    const currentMinutes = getMinutes(timestamp, timezone);
+
+    const endMinutes = toMinutes(shiftEnd);
+
+    if (currentMinutes < endMinutes) {
+      workDate = subtractOneDay(timestamp, timezone);
+    }
+  }
+
+  return formatDate(workDate, timezone);
+}
+backend/supabase/functions/api/services/attendance/workwindow.ts
+
+===== backend/supabase/functions/api/services/attendance/workwindow.ts =====
+import { resolveWorkDate } from "./workdate.ts";
+
+export type ResolveWorkWindowOptions = {
+  timestamp: Date;
+  shiftStart: string;
+  shiftEnd: string;
+  isOvernight: boolean;
+  timezone: string;
+};
+
+export type WorkWindow = {
+  workDate: string;
+  startsAt: Date;
+  endsAt: Date;
+};
+
+function getTimezoneOffsetMinutes(date: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  const local = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  );
+
+  return (local - date.getTime()) / 60000;
+}
+
+function zonedDateTimeToUtc(
+  date: string,
+  time: string,
+  timezone: string,
+): Date {
+  const [hour, minute, second = 0] = time.split(":").map(Number);
+
+  const assumedUtc = new Date(
+    `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}.000Z`,
+  );
+
+  const offset = getTimezoneOffsetMinutes(assumedUtc, timezone);
+
+  return new Date(assumedUtc.getTime() - offset * 60_000);
+}
+
+function addCalendarDay(date: string): string {
+  const value = new Date(`${date}T12:00:00Z`);
+
+  value.setUTCDate(value.getUTCDate() + 1);
+
+  return value.toISOString().slice(0, 10);
+}
+
+export function resolveWorkWindow(
+  options: ResolveWorkWindowOptions,
+): WorkWindow {
+  const workDate = resolveWorkDate(options);
+
+  const endDate = options.isOvernight ? addCalendarDay(workDate) : workDate;
+
+  const startsAt = zonedDateTimeToUtc(
+    workDate,
+    options.shiftStart,
+    options.timezone,
+  );
+
+  const endsAt = zonedDateTimeToUtc(
+    endDate,
+    options.shiftEnd,
+    options.timezone,
+  );
+
+  return {
+    workDate,
+    startsAt,
+    endsAt,
+  };
+}
+
+===== user_shift_resolver.ts =====
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@shared/types/database.ts";
+
+const SHIFT_SELECT = `
+  id,
+  shift_id,
+  effective_from,
+  effective_to,
+
+  shifts!inner (
+    id,
+    name,
+    description,
+    status,
+    start_time,
+    end_time,
+    timezone,
+    grace_minutes,
+    break_minutes,
+    is_overnight
+  )
+`;
+
+export async function resolveUserShift(
+  supabaseAdmin: SupabaseClient<Database>,
+  params: {
+    workspace_id: string;
+    user_id: string;
+    date: string;
+  },
+) {
+  const { workspace_id, user_id, date } = params;
+
+  /*
+   * 1. Check temporary override first
+   */
+  const { data: override, error: overrideError } = await supabaseAdmin
+    .from("user_shift_overrides")
+    .select(
+      `
+        id,
+        shift_id,
+
+        shifts!inner (
+          id,
+          name,
+          description,
+          status,
+          start_time,
+          end_time,
+          timezone,
+          grace_minutes,
+          break_minutes,
+          is_overnight
+        )
+      `,
+    )
+    .eq("workspace_id", workspace_id)
+    .eq("user_id", user_id)
+    .lte("effective_from", date)
+    .or(`effective_to.is.null,effective_to.gte.${date}`)
+    .is("deleted_at", null)
+    .order("effective_from", {
+      ascending: false,
+    })
+    .limit(1)
+    .maybeSingle();
+
+  if (overrideError) {
+    throw overrideError;
+  }
+
+  if (override) {
+    /*
+     * Override changes the effective shift only.
+     * Attendance logs still belong to the permanent user_shift.
+     */
+    const { data: baseAssignment, error: baseError } = await supabaseAdmin
+      .from("user_shifts")
+      .select("id")
+      .eq("workspace_id", workspace_id)
+      .eq("user_id", user_id)
+      .is("deleted_at", null)
+      .lte("effective_from", date)
+      .or(`effective_to.is.null,effective_to.gte.${date}`)
+      .order("effective_from", {
+        ascending: false,
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (baseError) {
+      throw baseError;
+    }
+
+    if (!baseAssignment) {
+      throw new Error(
+        "User shift override exists but no permanent user shift assignment was found.",
+      );
+    }
+
+    return {
+      source: "OVERRIDE",
+      assignment_id: override.id,
+      user_shift_id: baseAssignment.id,
+      shift: Array.isArray(override.shifts)
+        ? override.shifts[0]
+        : override.shifts,
+    };
+  }
+
+  /*
+   * 2. Permanent user shift assignment
+   */
+  const { data: assignments, error } = await supabaseAdmin
+    .from("user_shifts")
+    .select(SHIFT_SELECT)
+    .eq("workspace_id", workspace_id)
+    .eq("user_id", user_id)
+    .is("deleted_at", null)
+    .lte("effective_from", date)
+    .order("effective_from", {
+      ascending: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const assignment = (assignments ?? []).find((item) => {
+    return item.effective_to === null || item.effective_to >= date;
+  });
+
+  if (!assignment) {
+    return null;
+  }
+
+  return {
+    source: "ASSIGNMENT",
+    assignment_id: assignment.id,
+    user_shift_id: assignment.id,
+    shift: Array.isArray(assignment.shifts)
+      ? assignment.shifts[0]
+      : assignment.shifts,
+  };
+}
+
+===== timelogs.ts =====
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Json, Database } from "@shared/types/database.ts";
+
+import type { SubmitTimeLogRequest } from "@shared/types/models/attendance.types.ts";
+
+import { resolveWorkDate } from "./attendance/workdate.ts";
+import { resolveUserShift } from "./user_shift_resolver.ts";
+
+/* -------------------------------------------------------------------------- */
+/* Create Time Log                                                            */
+/* -------------------------------------------------------------------------- */
+
+export async function createTimeLog(
+  supabaseAdmin: SupabaseClient<Database>,
+  authUserId: string,
+  payload: SubmitTimeLogRequest,
+) {
+  console.log(
+    "TIMELOG CREATE",
+    JSON.stringify({
+      authenticated_user_id: authUserId,
+      workspace_id: payload.workspace_id,
+      action_type: payload.action_type,
+      shift_id: payload.shift_id ?? null,
+    }),
+  );
+
+  /*
+   * The authenticated Supabase user ID is supplied by the server.
+   *
+   * Never trust a user_id supplied by the client.
+   */
+  if (!authUserId) {
+    throw new Error("Authenticated user ID is required.");
+  }
+
+  const timestamp = new Date(payload.timestamp);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Invalid timestamp.");
+  }
+
+  /*
+   * Resolve the assignment using the authenticated application user.
+   *
+   * Do not use payload.user_id.
+   */
+  const lookupDate = timestamp.toISOString().slice(0, 10);
+
+  const assignment = await resolveUserShift(supabaseAdmin, {
+    workspace_id: payload.workspace_id,
+    user_id: authUserId,
+    date: lookupDate,
+  });
+
+  if (!assignment) {
+    throw new Error("No active user shift found.");
+  }
+
+  const shift = assignment.shift;
+
+  /*
+   * If the client supplied a shift_id, it must match the
+   * server-resolved effective shift.
+   *
+   * This prevents the client from choosing an arbitrary shift.
+   */
+  if (payload.shift_id && payload.shift_id !== shift.id) {
+    throw new Error(
+      "The requested shift does not match the user's effective shift.",
+    );
+  }
+
+  /*
+   * user_shift_id MUST always reference user_shifts.id.
+   *
+   * The resolver may also expose assignment_id for the source
+   * assignment, which could be an override ID. Do NOT blindly
+   * use assignment_id as the time_logs.user_shift_id FK.
+   */
+  const userShiftId = assignment.user_shift_id;
+
+  if (!userShiftId) {
+    throw new Error(
+      "Resolved shift does not have a matching user shift assignment.",
+    );
+  }
+
+  /*
+   * Work date is calculated using the resolved shift timezone.
+   *
+   * This is especially important for overnight shifts.
+   */
+  const workDate = resolveWorkDate({
+    timestamp,
+    shiftStart: shift.start_time,
+    shiftEnd: shift.end_time,
+    timezone: shift.timezone,
+    isOvernight: shift.is_overnight,
+  });
+
+  /*
+   * Create the immutable attendance event.
+   */
+  const { data, error } = await supabaseAdmin
+    .from("time_logs")
+    .insert({
+      workspace_id: payload.workspace_id,
+
+      /*
+       * IMPORTANT:
+       * This is the authenticated application user.
+       */
+      user_id: authUserId,
+
+      /*
+       * FK target must be user_shifts.id.
+       */
+      user_shift_id: userShiftId,
+
+      event_type: payload.action_type,
+
+      /*
+       * Always store normalized UTC timestamp.
+       */
+      event_time_utc: timestamp.toISOString(),
+
+      /*
+       * Preserve the original client value for audit purposes.
+       */
+      client_timestamp: payload.timestamp,
+
+      /*
+       * Store the timezone of the shift that determined this
+       * attendance event.
+       */
+      timezone: shift.timezone,
+
+      /*
+       * Work date is determined from the shift timezone and
+       * overnight configuration.
+       */
+      work_date: workDate,
+
+      /*
+       * Unique log identifier.
+       */
+      log_no: crypto.randomUUID(),
+
+      metadata: {
+        device_info: payload.device_info,
+
+        /*
+         * Preserve the existing metadata structure.
+         */
+        location: JSON.stringify(payload.location),
+
+        location_status: payload.location_status,
+
+        location_message: payload.location_message,
+      } satisfies Json,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  console.log(
+    "TIMELOG CREATED",
+    JSON.stringify({
+      id: data.id,
+      user_id: authUserId,
+      user_shift_id: userShiftId,
+      workspace_id: payload.workspace_id,
+      event_type: payload.action_type,
+      event_time_utc: data.event_time_utc,
+      work_date: data.work_date,
+      timezone: data.timezone,
+    }),
+  );
+
+  return data;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Get Time Logs                                                              */
+/* -------------------------------------------------------------------------- */
+
+export async function getTimelogs(
+  supabaseAdmin: SupabaseClient<Database>,
+  params: {
+    workspace_id: string;
+    user_id?: string;
+    work_date?: string;
+  },
+) {
+  console.log("TIMELOG LIST", JSON.stringify(params));
+
+  let query = supabaseAdmin
+    .from("time_logs")
+    .select(
+      `
+      id,
+      event_type,
+      event_time_utc,
+      client_timestamp,
+      timezone,
+      work_date,
+      metadata,
+      user_shift_id,
+      user_id,
+      users (
+        display_name,
+        email
+      )
+    `,
+    )
+    .eq("workspace_id", params.workspace_id)
+    .order("event_time_utc", {
+      ascending: false,
+    });
+
+  if (params.user_id) {
+    query = query.eq("user_id", params.user_id);
+  }
+
+  if (params.work_date) {
+    query = query.eq("work_date", params.work_date);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+===== attendance.routes.ts =====
+import type { RouteContext } from "./types.ts";
+
+import { createTimeLog } from "../services/timelogs.ts";
+
+import { getCurrentAttendanceState } from "../services/attendance/state.ts";
+import { validateAttendanceAction } from "../services/attendance/validation.ts";
+
+export async function handleAttendanceRoutes(ctx: RouteContext) {
+  switch (ctx.body.action) {
+    case "TIMELOG_CREATE": {
+      console.log(
+        "TIMELOG REQUEST:",
+        JSON.stringify({
+          action: ctx.body.action,
+          workspace_id: ctx.body.workspace_id,
+          action_type: ctx.body.action_type,
+          shift_id: ctx.body.shift_id ?? null,
+          timestamp: ctx.body.timestamp ?? null,
+          authenticated_user_id: ctx.authUserId,
+        }),
+      );
+
+      const currentState = await getCurrentAttendanceState(ctx.supabaseAdmin, {
+        workspace_id: ctx.body.workspace_id,
+
+        /*
+         * IMPORTANT:
+         * Authentication identity comes from the Supabase session.
+         * Never use ctx.body.user_id for authentication.
+         */
+        authUserId: ctx.authUserId,
+        email: ctx.email ?? "",
+        authProvider: ctx.authProvider,
+
+        ...(ctx.body.shift_id
+          ? {
+              shift_id: ctx.body.shift_id,
+            }
+          : {}),
+
+        ...(ctx.body.timestamp
+          ? {
+              timestamp: ctx.body.timestamp,
+            }
+          : {}),
+      });
+
+      console.log("CURRENT STATE:", JSON.stringify(currentState));
+
+      const validation = validateAttendanceAction(
+        currentState,
+        ctx.body.action_type,
+      );
+
+      console.log("VALIDATION RESULT:", JSON.stringify(validation));
+
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: validation.message,
+        };
+      }
+
+      /*
+       * IMPORTANT:
+       *
+       * The authenticated user is the user creating the timelog.
+       * Do not trust a client-supplied user_id.
+       */
+      const log = await createTimeLog(ctx.supabaseAdmin, ctx.authUserId, {
+        workspace_id: ctx.body.workspace_id,
+        action_type: ctx.body.action_type,
+        device_info: ctx.body.device_info,
+        location: ctx.body.location,
+        location_status: ctx.body.location_status,
+        location_message: ctx.body.location_message,
+        timestamp: ctx.body.timestamp,
+
+        ...(ctx.body.shift_id
+          ? {
+              shift_id: ctx.body.shift_id,
+            }
+          : {}),
+      });
+
+      return {
+        success: true,
+        message: "Timelog created successfully",
+        log_id: log.id,
+      };
+    }
+
+    case "ATTENDANCE_STATE_GET": {
+      console.log(
+        "ATTENDANCE STATE REQUEST:",
+        JSON.stringify({
+          action: ctx.body.action,
+          workspace_id: ctx.body.workspace_id,
+          shift_id: ctx.body.shift_id ?? null,
+          date: ctx.body.date ?? null,
+          timestamp: ctx.body.timestamp ?? null,
+
+          /*
+           * Server-side identity only.
+           */
+          authenticated_user_id: ctx.authUserId,
+          authenticated_email: ctx.email ?? null,
+          authenticated_provider: ctx.authProvider ?? null,
+        }),
+      );
+
+      return await getCurrentAttendanceState(ctx.supabaseAdmin, {
+        workspace_id: ctx.body.workspace_id,
+
+        /*
+         * IMPORTANT:
+         * Use authenticated identity from RouteContext.
+         */
+        authUserId: ctx.authUserId,
+        email: ctx.email ?? "",
+        authProvider: ctx.authProvider,
+
+        ...(ctx.body.shift_id
+          ? {
+              shift_id: ctx.body.shift_id,
+            }
+          : {}),
+
+        ...(ctx.body.date
+          ? {
+              date: ctx.body.date,
+            }
+          : {}),
+
+        ...(ctx.body.timestamp
+          ? {
+              timestamp: ctx.body.timestamp,
+            }
+          : {}),
+      });
+    }
+
+    default:
+      return null;
+  }
+}
+
+===== routes/types.ts =====
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@shared/types/database.ts";
+
+import type { ApiRequest } from "@shared/types/api/api.request.ts";
+
+export type RouteContext = {
+  req: Request;
+  body: ApiRequest;
+  supabaseAdmin: SupabaseClient<Database>;
+
+  authUserId: string;
+  email: string | null;
+  authProvider: string | null;
+};

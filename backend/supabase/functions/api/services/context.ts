@@ -3,6 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@shared/types/database.ts";
 
 import { getUserContext } from "./users.ts";
+import { resolveUserShift } from "./user_shift_resolver.ts";
+
+import { resolveWorkWindow } from "../services/attendance/workwindow.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Platform Owner                                                             */
@@ -13,19 +16,6 @@ const platformOwnerEmail = Deno.env
   ?.trim()
   .toLowerCase();
 
-/**
- * Returns the application context for the Platform Owner.
- *
- * The Platform Owner exists only in Supabase Auth.
- *
- * They intentionally do NOT require:
- * - public.users record
- * - workspace
- * - employee record
- * - department
- * - position
- * - shift
- */
 export function getPlatformOwnerContext(
   authUserId: string,
   authEmail: string | null,
@@ -60,14 +50,6 @@ export function getPlatformOwnerContext(
 
       hire_date: null,
 
-      /*
-       * Keep OWNER so the existing frontend permission
-       * system recognizes the highest authority level.
-       *
-       * The actual Platform Owner distinction is:
-       *
-       * meta.platform_owner === true
-       */
       role: "OWNER" as const,
 
       employment_status: "ACTIVE" as const,
@@ -115,13 +97,6 @@ export async function getApplicationContext(
   /* Platform Owner                                                           */
   /* ------------------------------------------------------------------------ */
 
-  /*
-   * IMPORTANT:
-   *
-   * This check MUST happen before getUserContext().
-   *
-   * The Platform Owner intentionally does not exist in public.users.
-   */
   if (
     platformOwnerEmail &&
     authEmail &&
@@ -134,17 +109,6 @@ export async function getApplicationContext(
   /* Normal Workspace User                                                    */
   /* ------------------------------------------------------------------------ */
 
-  /*
-   * The authenticated Supabase Auth account is linked to WorkPulse
-   * through the shared UUID:
-   *
-   *     auth.users.id = public.users.id
-   *
-   * Google authentication does NOT create a separate WorkPulse user.
-   *
-   * If the authenticated Auth account already exists in public.users,
-   * that existing employee record is used.
-   */
   const userContext = await getUserContext(
     supabaseAdmin,
     authUserId,
@@ -152,16 +116,10 @@ export async function getApplicationContext(
     authProvider,
   );
 
-  /*
-   * Every normal WorkPulse user must belong to a workspace.
-   */
   if (!userContext.workspace_id) {
     throw new Error("User workspace_id is missing");
   }
 
-  /*
-   * Every normal WorkPulse user must have a public.users record.
-   */
   if (!userContext.user_id) {
     throw new Error("User WorkPulse record is missing.");
   }
@@ -239,5 +197,207 @@ export async function getApplicationContext(
     },
 
     workspace,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Attendance Context                                                         */
+/* -------------------------------------------------------------------------- */
+
+export type ResolveAttendanceContextOptions = {
+  supabaseAdmin: SupabaseClient<Database>;
+
+  workspaceId: string;
+
+  userId: string;
+
+  timestamp: Date;
+
+  requestedShiftId?: string | null;
+
+  requestedWorkDate?: string | null;
+};
+
+export type AttendanceContext = {
+  workDate: string;
+
+  timezone: string;
+
+  shift: NonNullable<Awaited<ReturnType<typeof resolveUserShift>>>["shift"];
+
+  userShiftId: string;
+
+  assignmentId: string;
+
+  assignmentSource: string;
+
+  startsAt: Date;
+
+  endsAt: Date;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function getUtcDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getLocalCalendarDate(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  return [values.year, values.month, values.day].join("-");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Resolve Attendance Context                                                 */
+/* -------------------------------------------------------------------------- */
+
+export async function resolveAttendanceContext(
+  options: ResolveAttendanceContextOptions,
+): Promise<AttendanceContext | null> {
+  const {
+    supabaseAdmin,
+    workspaceId,
+    userId,
+    timestamp,
+    requestedShiftId,
+    requestedWorkDate,
+  } = options;
+
+  if (!workspaceId) {
+    throw new Error("Workspace ID is required.");
+  }
+
+  if (!userId) {
+    throw new Error("User ID is required.");
+  }
+
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Invalid attendance timestamp.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Initial assignment lookup                                                */
+  /* ------------------------------------------------------------------------ */
+
+  const initialLookupDate = requestedWorkDate ?? getUtcDate(timestamp);
+
+  let resolved = await resolveUserShift(supabaseAdmin, {
+    workspace_id: workspaceId,
+    user_id: userId,
+    date: initialLookupDate,
+  });
+
+  if (!resolved) {
+    return null;
+  }
+
+  if (!resolved.shift) {
+    throw new Error("Resolved user shift does not contain a shift.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Determine effective shift timezone                                       */
+  /* ------------------------------------------------------------------------ */
+
+  const firstShift = resolved.shift;
+
+  const timezone = firstShift.timezone;
+
+  /* ------------------------------------------------------------------------ */
+  /* Resolve local calendar date                                              */
+  /* ------------------------------------------------------------------------ */
+
+  const localCalendarDate = getLocalCalendarDate(timestamp, timezone);
+
+  if (!requestedWorkDate && localCalendarDate !== initialLookupDate) {
+    const localResolved = await resolveUserShift(supabaseAdmin, {
+      workspace_id: workspaceId,
+      user_id: userId,
+      date: localCalendarDate,
+    });
+
+    if (localResolved) {
+      resolved = localResolved;
+    }
+  }
+
+  const shift = resolved.shift;
+
+  if (!shift) {
+    throw new Error("Resolved user shift does not contain a shift.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Validate requested shift                                                 */
+  /* ------------------------------------------------------------------------ */
+
+  if (requestedShiftId && requestedShiftId !== shift.id) {
+    throw new Error(
+      "The requested shift does not match the user's effective shift.",
+    );
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Permanent user_shift reference                                           */
+  /* ------------------------------------------------------------------------ */
+
+  const userShiftId = resolved.user_shift_id;
+
+  if (!userShiftId) {
+    throw new Error(
+      "Resolved shift does not have a matching user shift assignment.",
+    );
+  }
+
+  const assignmentId = resolved.assignment_id;
+
+  if (!assignmentId) {
+    throw new Error("Resolved shift does not have an assignment ID.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Resolve actual work window                                               */
+  /* ------------------------------------------------------------------------ */
+
+  const window = resolveWorkWindow({
+    timestamp,
+    shiftStart: shift.start_time,
+    shiftEnd: shift.end_time,
+    isOvernight: shift.is_overnight,
+    timezone: shift.timezone,
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* Return authoritative attendance context                                  */
+  /* ------------------------------------------------------------------------ */
+
+  return {
+    workDate: window.workDate,
+
+    timezone: shift.timezone,
+
+    shift,
+
+    userShiftId,
+
+    assignmentId,
+
+    assignmentSource: resolved.source,
+
+    startsAt: window.startsAt,
+
+    endsAt: window.endsAt,
   };
 }
