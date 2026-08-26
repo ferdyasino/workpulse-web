@@ -44,9 +44,9 @@ function formatTime(value: string | null): string {
   }
 
   return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   }).format(date);
 }
 

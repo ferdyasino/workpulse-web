@@ -6,6 +6,7 @@ import type { UserApiRequest } from "./api.user.ts";
 import type { UserShiftOverrideApiRequest } from "./api.user-shift-override.ts";
 import type { UserShiftApiRequest } from "./api.user-shift.ts";
 import type { WorkspaceApiRequest } from "./api.workspace.ts";
+import type { AttendanceReportRequest } from "./api.report.ts";
 
 import type {
   AttendanceStateRequest,
@@ -29,6 +30,7 @@ export type ApiRequest =
   | UserApiRequest
   | UserShiftApiRequest
   | UserShiftOverrideApiRequest
+  | AttendanceReportRequest
   | ({
       action: "TIMELOG_CREATE";
       workspace_id: string;
