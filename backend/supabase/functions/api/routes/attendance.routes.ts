@@ -8,15 +8,24 @@ import { validateAttendanceAction } from "../services/attendance/validation.ts";
 export async function handleAttendanceRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
     case "TIMELOG_CREATE": {
-      console.log("TIMELOG REQUEST:", JSON.stringify(ctx.body));
+      console.log(
+        "TIMELOG REQUEST:",
+        JSON.stringify({
+          action: ctx.body.action,
+          workspace_id: ctx.body.workspace_id,
+          action_type: ctx.body.action_type,
+          shift_id: ctx.body.shift_id ?? null,
+          timestamp: ctx.body.timestamp ?? null,
+          authenticated_user_id: ctx.authUserId,
+        }),
+      );
 
       const currentState = await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
         /*
-         * IMPORTANT:
-         * These values come from the authenticated Supabase session,
-         * not from the request body.
+         * Authentication identity comes from the server-side
+         * authenticated Supabase session.
          */
         authUserId: ctx.authUserId,
         email: ctx.email ?? "",
@@ -52,34 +61,32 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
       }
 
       /*
-       * IMPORTANT:
-       * The authenticated user should be the user creating the timelog.
+       * The authenticated user is the person creating the event.
        *
-       * Do not trust ctx.body.user_id for authentication identity.
+       * createTimeLog() resolves the Auth identity to the application's
+       * users.id before inserting the log.
        */
-      const log = await createTimeLog(ctx.supabaseAdmin, {
-        workspace_id: ctx.body.workspace_id,
+      const log = await createTimeLog(
+        ctx.supabaseAdmin,
+        ctx.authUserId,
+        {
+          workspace_id: ctx.body.workspace_id,
+          action_type: ctx.body.action_type,
+          device_info: ctx.body.device_info,
+          location: ctx.body.location,
+          location_status: ctx.body.location_status,
+          location_message: ctx.body.location_message,
+          timestamp: ctx.body.timestamp,
 
-        user_id: ctx.authUserId,
-
-        action_type: ctx.body.action_type,
-
-        device_info: ctx.body.device_info,
-
-        location: ctx.body.location,
-
-        location_status: ctx.body.location_status,
-
-        location_message: ctx.body.location_message,
-
-        timestamp: ctx.body.timestamp,
-
-        ...(ctx.body.shift_id
-          ? {
-              shift_id: ctx.body.shift_id,
-            }
-          : {}),
-      });
+          ...(ctx.body.shift_id
+            ? {
+                shift_id: ctx.body.shift_id,
+              }
+            : {}),
+        },
+        ctx.email,
+        ctx.authProvider,
+      );
 
       return {
         success: true,
@@ -90,27 +97,22 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
 
     case "ATTENDANCE_STATE_GET": {
       console.log(
-        "CURRENT STATE REQUEST:",
+        "ATTENDANCE STATE REQUEST:",
         JSON.stringify({
-          ...ctx.body,
-
-          /*
-           * Do not log or trust a client-supplied authUserId.
-           * The real identity is ctx.authUserId.
-           */
+          action: ctx.body.action,
+          workspace_id: ctx.body.workspace_id,
+          shift_id: ctx.body.shift_id ?? null,
+          date: ctx.body.date ?? null,
+          timestamp: ctx.body.timestamp ?? null,
           authenticated_user_id: ctx.authUserId,
-          authenticated_email: ctx.email,
-          authenticated_provider: ctx.authProvider,
+          authenticated_email: ctx.email ?? null,
+          authenticated_provider: ctx.authProvider ?? null,
         }),
       );
 
       return await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        /*
-         * IMPORTANT:
-         * Use the authenticated identity from RouteContext.
-         */
         authUserId: ctx.authUserId,
         email: ctx.email ?? "",
         authProvider: ctx.authProvider,

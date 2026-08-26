@@ -70,19 +70,30 @@ export type AttendanceState = {
   current_session: AttendanceSession | null;
 };
 
+/* -------------------------------------------------------------------------- */
+/* Attendance State Requests                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Client-facing attendance state request.
+ *
+ * Authentication identity is intentionally NOT included here.
+ * The server obtains the authenticated user from the Supabase session.
+ */
 export type AttendanceStateRequest = {
   workspace_id: string;
 
-  email: string;
-
-  authUserId: string;
-
-  authProvider?: string | null;
-
+  /**
+   * Optional shift filter/override.
+   *
+   * For normal employee attendance, the server should resolve
+   * the effective shift from the user's assignments.
+   */
   shift_id?: string;
 
   /**
    * Optional resolved work date override.
+   *
    * Normally omitted and calculated from timestamp + shift timezone.
    */
   date?: string;
@@ -94,10 +105,36 @@ export type AttendanceStateRequest = {
   timestamp?: string;
 };
 
+/**
+ * Server-side attendance state request.
+ *
+ * This extends the client request with authentication information
+ * obtained from the authenticated Supabase session.
+ *
+ * IMPORTANT:
+ * These fields must never come from the client request body.
+ */
+export type AttendanceStateContext = AttendanceStateRequest & {
+  authUserId: string;
+
+  email: string;
+
+  authProvider?: string | null;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Timelog Requests                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Client-facing time-log creation request.
+ *
+ * IMPORTANT:
+ * user_id is intentionally omitted.
+ * The authenticated application user is determined by the server.
+ */
 export type SubmitTimeLogRequest = {
   workspace_id: string;
-
-  user_id: string;
 
   action_type: TimeLogEvent;
 
@@ -114,5 +151,11 @@ export type SubmitTimeLogRequest = {
    */
   timestamp: string;
 
+  /**
+   * Optional shift identifier.
+   *
+   * The server must validate this against the user's
+   * effective shift before creating the timelog.
+   */
   shift_id?: string;
 };
