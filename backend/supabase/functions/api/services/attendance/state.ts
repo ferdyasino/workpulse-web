@@ -5,18 +5,22 @@ import type { Database } from "@shared/types/database.ts";
 import type {
   AttendanceSession,
   AttendanceState,
-  AttendanceStateRequest,
+  AttendanceStateContext,
 } from "@shared/types/models/attendance.types.ts";
 
 import { getUserContext } from "../users.ts";
-import { resolveUserShift } from "../user_shift_resolver.ts";
 
 import {
   buildAttendanceSessions,
   getCurrentAttendanceSession,
+  getLatestAttendanceSession,
 } from "./sessions.ts";
 
-import { resolveWorkDate } from "./workdate.ts";
+import { resolveAttendanceContext } from "../context.ts";
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
 function createEmptyState(
   workDate: string,
@@ -31,34 +35,82 @@ function createEmptyState(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Attendance State                                                           */
+/* -------------------------------------------------------------------------- */
+
 export function buildAttendanceState(
   workDate: string,
   shift: AttendanceState["shift"],
   sessions: AttendanceSession[],
   currentSession: AttendanceSession | null,
 ): AttendanceState {
-  if (!currentSession || !currentSession.time_in) {
+  const latestSession = getLatestAttendanceSession(sessions);
+
+  if (!latestSession || !latestSession.time_in) {
     return createEmptyState(workDate, shift);
   }
 
-  let status: AttendanceState["status"];
-
-  if (currentSession.time_out) {
-    status = "CLOCKED_OUT";
-  } else {
-    const activeBreak = currentSession.breaks.at(-1);
-
-    if (activeBreak && !activeBreak.out) {
-      status = "BREAK";
-    } else if (currentSession.lunch.in && !currentSession.lunch.out) {
-      status = "LUNCH";
-    } else {
-      status = "WORKING";
-    }
+  /*
+   * A completed latest session means the employee is clocked out.
+   */
+  if (latestSession.time_out) {
+    return {
+      status: "CLOCKED_OUT",
+      work_date: workDate,
+      shift,
+      sessions,
+      current_session: latestSession,
+    };
   }
 
+  /*
+   * No active session means the latest event cannot currently
+   * be represented as working.
+   */
+  if (!currentSession) {
+    return {
+      status: "OFF",
+      work_date: workDate,
+      shift,
+      sessions,
+      current_session: null,
+    };
+  }
+
+  /*
+   * Active break takes priority.
+   */
+  const activeBreak = currentSession.breaks.at(-1);
+
+  if (activeBreak && !activeBreak.out) {
+    return {
+      status: "BREAK",
+      work_date: workDate,
+      shift,
+      sessions,
+      current_session: currentSession,
+    };
+  }
+
+  /*
+   * Then lunch.
+   */
+  if (currentSession.lunch.in && !currentSession.lunch.out) {
+    return {
+      status: "LUNCH",
+      work_date: workDate,
+      shift,
+      sessions,
+      current_session: currentSession,
+    };
+  }
+
+  /*
+   * Otherwise actively working.
+   */
   return {
-    status,
+    status: "WORKING",
     work_date: workDate,
     shift,
     sessions,
@@ -66,17 +118,34 @@ export function buildAttendanceState(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Get Current Attendance State                                               */
+/* -------------------------------------------------------------------------- */
+
 export async function getCurrentAttendanceState(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: AttendanceStateRequest,
+  payload: AttendanceStateContext,
 ): Promise<AttendanceState> {
-  const { workspace_id, email } = payload;
+  const {
+    workspace_id,
+    authUserId,
+    email,
+    authProvider,
+    date,
+    timestamp,
+    shift_id,
+  } = payload;
 
+  /*
+   * ------------------------------------------------------------------------
+   * Resolve authenticated application user
+   * ------------------------------------------------------------------------
+   */
   const context = await getUserContext(
     supabaseAdmin,
-    payload.authUserId,
+    authUserId,
     email,
-    payload.authProvider ?? null,
+    authProvider ?? null,
   );
 
   if (context.workspace_id !== workspace_id) {
@@ -89,53 +158,65 @@ export async function getCurrentAttendanceState(
     throw new Error("User context does not contain a user ID.");
   }
 
-  const now = payload.timestamp ? new Date(payload.timestamp) : new Date();
+  /*
+   * Timestamp represents an absolute instant.
+   */
+  const now = timestamp ? new Date(timestamp) : new Date();
+
+  if (Number.isNaN(now.getTime())) {
+    throw new Error("Invalid attendance timestamp.");
+  }
 
   /*
-   * Date used only for selecting assignment/override.
+   * ------------------------------------------------------------------------
+   * Resolve ONE authoritative attendance context
+   * ------------------------------------------------------------------------
    */
-  const lookupDate = payload.date ?? now.toISOString().slice(0, 10);
+  const attendanceContext = await resolveAttendanceContext({
+    supabaseAdmin,
 
-  const resolved = await resolveUserShift(supabaseAdmin, {
-    workspace_id,
-    user_id: userId,
-    date: lookupDate,
+    workspaceId: workspace_id,
+
+    userId,
+
+    timestamp: now,
+
+    requestedShiftId: shift_id ?? null,
+
+    requestedWorkDate: date ?? null,
   });
 
-  if (!resolved) {
-    return createEmptyState(lookupDate);
+  /*
+   * No assignment means employee has no attendance context.
+   *
+   * If an explicit date was requested, preserve that date.
+   * Otherwise use the UTC date as a safe fallback for an empty state.
+   */
+  if (!attendanceContext) {
+    const fallbackDate = date ?? now.toISOString().slice(0, 10);
+
+    return createEmptyState(fallbackDate);
   }
 
-  const shift = resolved.shift;
+  const {
+    workDate,
+    shift,
+    userShiftId,
+    assignmentId,
+    assignmentSource,
+    startsAt,
+    endsAt,
+  } = attendanceContext;
 
   /*
-   * IMPORTANT:
-   * assignment_id may be:
-   * - user_shifts.id
-   * - user_shift_overrides.id
+   * ------------------------------------------------------------------------
+   * Retrieve attendance events
+   * ------------------------------------------------------------------------
    *
-   * user_shift_id is always the FK target for time_logs.
+   * user_shift_id references the permanent user_shifts row.
+   *
+   * work_date comes from the authoritative attendance context.
    */
-  const userShiftId = resolved.user_shift_id;
-
-  if (!userShiftId) {
-    throw new Error(
-      "Resolved override does not have a matching user shift assignment.",
-    );
-  }
-
-  const timezone = shift.timezone;
-
-  const workDate =
-    payload.date ??
-    resolveWorkDate({
-      timestamp: now,
-      shiftStart: shift.start_time,
-      shiftEnd: shift.end_time,
-      isOvernight: shift.is_overnight,
-      timezone,
-    });
-
   const { data: logs, error: logsError } = await supabaseAdmin
     .from("time_logs")
     .select("*")
@@ -143,32 +224,51 @@ export async function getCurrentAttendanceState(
     .eq("user_id", userId)
     .eq("user_shift_id", userShiftId)
     .eq("work_date", workDate)
-    .order("event_time_utc");
+    .order("event_time_utc", {
+      ascending: true,
+    });
 
   if (logsError) {
     throw logsError;
   }
 
+  /*
+   * Convert immutable events into logical sessions.
+   */
   const sessions = logs.length > 0 ? buildAttendanceSessions(logs) : [];
 
+  /*
+   * Active session is used by validation.
+   */
   const currentSession = getCurrentAttendanceSession(sessions);
 
+  /*
+   * Build client-facing state.
+   */
   const state = buildAttendanceState(workDate, shift, sessions, currentSession);
 
   console.log(
     "ATTENDANCE STATE",
     JSON.stringify({
       email,
+
       timestamp: now.toISOString(),
 
-      resolver: {
-        source: resolved.source,
-        assignment_id: resolved.assignment_id,
+      context: {
+        work_date: workDate,
+
+        timezone: attendanceContext.timezone,
+
+        starts_at: startsAt.toISOString(),
+
+        ends_at: endsAt.toISOString(),
+
+        assignment_source: assignmentSource,
+
+        assignment_id: assignmentId,
+
         user_shift_id: userShiftId,
       },
-
-      lookupDate,
-      workDate,
 
       shift: {
         id: shift.id,
@@ -176,6 +276,7 @@ export async function getCurrentAttendanceState(
         timezone: shift.timezone,
         start_time: shift.start_time,
         end_time: shift.end_time,
+        is_overnight: shift.is_overnight,
       },
 
       logs: logs.length,

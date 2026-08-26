@@ -4,75 +4,173 @@ import type { Json, Database } from "@shared/types/database.ts";
 
 import type { SubmitTimeLogRequest } from "@shared/types/models/attendance.types.ts";
 
-import { resolveWorkDate } from "./attendance/workdate.ts";
-import { resolveUserShift } from "./user_shift_resolver.ts";
+import { resolveAttendanceContext } from "./context.ts";
+import { getUserContext } from "./users.ts";
+
+/* -------------------------------------------------------------------------- */
+/* Create Time Log                                                            */
+/* -------------------------------------------------------------------------- */
 
 export async function createTimeLog(
   supabaseAdmin: SupabaseClient<Database>,
+  authUserId: string,
   payload: SubmitTimeLogRequest,
+  authEmail: string | null = null,
+  authProvider: string | null = null,
 ) {
   console.log(
     "TIMELOG CREATE",
     JSON.stringify({
-      user_id: payload.user_id,
+      authenticated_user_id: authUserId,
+
       workspace_id: payload.workspace_id,
+
       action_type: payload.action_type,
+
+      shift_id: payload.shift_id ?? null,
     }),
   );
 
+  if (!authUserId) {
+    throw new Error("Authenticated user ID is required.");
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * Resolve authenticated application user
+   * ------------------------------------------------------------------------
+   */
+  const context = await getUserContext(
+    supabaseAdmin,
+    authUserId,
+    authEmail ?? "",
+    authProvider,
+  );
+
+  if (context.workspace_id !== payload.workspace_id) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  const userId = context.user_id;
+
+  if (!userId) {
+    throw new Error("User context does not contain a user ID.");
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * Parse timestamp
+   * ------------------------------------------------------------------------
+   */
   const timestamp = new Date(payload.timestamp);
 
   if (Number.isNaN(timestamp.getTime())) {
     throw new Error("Invalid timestamp.");
   }
 
-  const today = timestamp.toISOString().slice(0, 10);
+  /*
+   * ------------------------------------------------------------------------
+   * Resolve ONE authoritative attendance context
+   * ------------------------------------------------------------------------
+   *
+   * This is intentionally the same resolver used by
+   * ATTENDANCE_STATE_GET.
+   */
+  const attendanceContext = await resolveAttendanceContext({
+    supabaseAdmin,
 
-  const assignment = await resolveUserShift(supabaseAdmin, {
-    workspace_id: payload.workspace_id,
-    user_id: payload.user_id,
-    date: today,
+    workspaceId: payload.workspace_id,
+
+    userId,
+
+    timestamp,
+
+    requestedShiftId: payload.shift_id ?? null,
   });
 
-  if (!assignment) {
+  if (!attendanceContext) {
     throw new Error("No active user shift found.");
   }
 
-  const shift = assignment.shift;
+  const {
+    workDate,
+    timezone,
+    shift,
+    userShiftId,
+    assignmentId,
+    assignmentSource,
+    startsAt,
+    endsAt,
+  } = attendanceContext;
 
-  const workDate = resolveWorkDate({
-    timestamp,
-    shiftStart: shift.start_time,
-    shiftEnd: shift.end_time,
-    timezone: shift.timezone,
-    isOvernight: shift.is_overnight,
-  });
-
+  /*
+   * ------------------------------------------------------------------------
+   * Immutable attendance event
+   * ------------------------------------------------------------------------
+   */
   const { data, error } = await supabaseAdmin
     .from("time_logs")
     .insert({
       workspace_id: payload.workspace_id,
-      user_id: payload.user_id,
-      user_shift_id: assignment.assignment_id,
+
+      /*
+       * Application user ID.
+       */
+      user_id: userId,
+
+      /*
+       * Permanent user_shifts FK.
+       */
+      user_shift_id: userShiftId,
+
       event_type: payload.action_type,
 
-      // Always store normalized UTC timestamp
+      /*
+       * Normalize timestamp to UTC.
+       */
       event_time_utc: timestamp.toISOString(),
 
-      // Keep original client timestamp for audit/display
+      /*
+       * Preserve original client timestamp.
+       */
       client_timestamp: payload.timestamp,
 
-      // Controlled by resolved shift timezone
-      timezone: shift.timezone,
+      /*
+       * Store the timezone used by the effective shift.
+       */
+      timezone,
 
+      /*
+       * Authoritative shift-aware work date.
+       */
       work_date: workDate,
+
+      /*
+       * Unique event identifier.
+       */
       log_no: crypto.randomUUID(),
 
       metadata: {
         device_info: payload.device_info,
+
         location: JSON.stringify(payload.location),
+
         location_status: payload.location_status,
+
         location_message: payload.location_message,
+
+        /*
+         * Attendance resolution audit data.
+         */
+        assignment_id: assignmentId,
+
+        assignment_source: assignmentSource,
+
+        shift_id: shift.id,
+
+        shift_start: startsAt.toISOString(),
+
+        shift_end: endsAt.toISOString(),
       } satisfies Json,
     })
     .select()
@@ -82,8 +180,41 @@ export async function createTimeLog(
     throw error;
   }
 
+  console.log(
+    "TIMELOG CREATED",
+    JSON.stringify({
+      id: data.id,
+
+      authenticated_user_id: authUserId,
+
+      user_id: userId,
+
+      user_shift_id: userShiftId,
+
+      workspace_id: payload.workspace_id,
+
+      event_type: payload.action_type,
+
+      event_time_utc: data.event_time_utc,
+
+      work_date: data.work_date,
+
+      timezone: data.timezone,
+
+      shift_id: shift.id,
+
+      assignment_id: assignmentId,
+
+      assignment_source: assignmentSource,
+    }),
+  );
+
   return data;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Get Time Logs                                                              */
+/* -------------------------------------------------------------------------- */
 
 export async function getTimelogs(
   supabaseAdmin: SupabaseClient<Database>,

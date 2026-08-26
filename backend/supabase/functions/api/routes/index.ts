@@ -18,6 +18,8 @@ import { handleUserRoutes } from "./user.routes.ts";
 import { handleUserShiftRoutes } from "./user-shift.routes.ts";
 import { handleUserShiftOverrideRoutes } from "./user-shift-override.routes.ts";
 
+import { handleReportRoutes } from "./report.routes.ts";
+
 import { handleAttendanceRoutes } from "./attendance.routes.ts";
 import { handleTimelogRoutes } from "./timelog.routes.ts";
 
@@ -36,17 +38,22 @@ export async function handleRequest(
     "AUTH CONTEXT:",
     JSON.stringify({
       authUserId: authUser.id,
+
       email: authUser.email ?? null,
+
       provider: authProvider,
     }),
   );
 
   const ctx = {
     req,
+
     body,
+
     supabaseAdmin,
 
     authUserId: authUser.id,
+
     email: authUser.email ?? null,
 
     authProvider:
@@ -109,11 +116,29 @@ export async function handleRequest(
     return userShiftOverrideResult;
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Reports                                                                   */
+  /* ------------------------------------------------------------------------ */
+
+  const reportResult = await handleReportRoutes(ctx);
+
+  if (reportResult !== null) {
+    return reportResult;
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Attendance                                                                */
+  /* ------------------------------------------------------------------------ */
+
   const attendanceResult = await handleAttendanceRoutes(ctx);
 
   if (attendanceResult !== null) {
     return attendanceResult;
   }
+
+  /* ------------------------------------------------------------------------ */
+  /* Timelog                                                                    */
+  /* ------------------------------------------------------------------------ */
 
   const timelogResult = await handleTimelogRoutes(ctx);
 

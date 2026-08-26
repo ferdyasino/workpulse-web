@@ -6,6 +6,7 @@ import type { UserApiRequest } from "./api.user.ts";
 import type { UserShiftOverrideApiRequest } from "./api.user-shift-override.ts";
 import type { UserShiftApiRequest } from "./api.user-shift.ts";
 import type { WorkspaceApiRequest } from "./api.workspace.ts";
+import type { AttendanceReportRequest } from "./api.report.ts";
 
 import type {
   AttendanceStateRequest,
@@ -15,10 +16,12 @@ import type {
 export type ApiRequest =
   | {
       action: "AUTH_ME";
+      workspace_id: string;
     }
   | WorkspaceApiRequest
   | {
       action: "USER_CONTEXT_GET";
+      workspace_id: string;
     }
   | DepartmentApiRequest
   | PositionApiRequest
@@ -27,15 +30,17 @@ export type ApiRequest =
   | UserApiRequest
   | UserShiftApiRequest
   | UserShiftOverrideApiRequest
+  | AttendanceReportRequest
   | ({
       action: "TIMELOG_CREATE";
+      workspace_id: string;
     } & SubmitTimeLogRequest)
   | {
       action: "TIMELOG_LIST";
       workspace_id: string;
-      user_id?: string;
       work_date?: string;
     }
   | ({
       action: "ATTENDANCE_STATE_GET";
+      workspace_id: string;
     } & AttendanceStateRequest);

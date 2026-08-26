@@ -3,23 +3,44 @@ import type { RouteContext } from "./types.ts";
 import { createTimeLog } from "../services/timelogs.ts";
 
 import { getCurrentAttendanceState } from "../services/attendance/state.ts";
+
 import { validateAttendanceAction } from "../services/attendance/validation.ts";
 
 export async function handleAttendanceRoutes(ctx: RouteContext) {
   switch (ctx.body.action) {
-    case "TIMELOG_CREATE": {
-      console.log("TIMELOG REQUEST:", JSON.stringify(ctx.body));
+    /* ---------------------------------------------------------------------- */
+    /* Create Time Log                                                        */
+    /* ---------------------------------------------------------------------- */
 
+    case "TIMELOG_CREATE": {
+      console.log(
+        "TIMELOG REQUEST:",
+        JSON.stringify({
+          action: ctx.body.action,
+
+          workspace_id: ctx.body.workspace_id,
+
+          action_type: ctx.body.action_type,
+
+          shift_id: ctx.body.shift_id ?? null,
+
+          timestamp: ctx.body.timestamp ?? null,
+
+          authenticated_user_id: ctx.authUserId,
+        }),
+      );
+
+      /*
+       * Resolve the current attendance state using the exact same
+       * attendance resolution pipeline that TIMELOG_CREATE itself uses.
+       */
       const currentState = await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        /*
-         * IMPORTANT:
-         * These values come from the authenticated Supabase session,
-         * not from the request body.
-         */
         authUserId: ctx.authUserId,
+
         email: ctx.email ?? "",
+
         authProvider: ctx.authProvider,
 
         ...(ctx.body.shift_id
@@ -52,67 +73,82 @@ export async function handleAttendanceRoutes(ctx: RouteContext) {
       }
 
       /*
-       * IMPORTANT:
-       * The authenticated user should be the user creating the timelog.
-       *
-       * Do not trust ctx.body.user_id for authentication identity.
+       * The authenticated user is the person creating the event.
        */
-      const log = await createTimeLog(ctx.supabaseAdmin, {
-        workspace_id: ctx.body.workspace_id,
+      const log = await createTimeLog(
+        ctx.supabaseAdmin,
 
-        user_id: ctx.authUserId,
+        ctx.authUserId,
 
-        action_type: ctx.body.action_type,
+        {
+          workspace_id: ctx.body.workspace_id,
 
-        device_info: ctx.body.device_info,
+          action_type: ctx.body.action_type,
 
-        location: ctx.body.location,
+          device_info: ctx.body.device_info,
 
-        location_status: ctx.body.location_status,
+          location: ctx.body.location,
 
-        location_message: ctx.body.location_message,
+          location_status: ctx.body.location_status,
 
-        timestamp: ctx.body.timestamp,
+          location_message: ctx.body.location_message,
 
-        ...(ctx.body.shift_id
-          ? {
-              shift_id: ctx.body.shift_id,
-            }
-          : {}),
-      });
+          timestamp: ctx.body.timestamp,
+
+          ...(ctx.body.shift_id
+            ? {
+                shift_id: ctx.body.shift_id,
+              }
+            : {}),
+        },
+
+        ctx.email,
+
+        ctx.authProvider,
+      );
 
       return {
         success: true,
+
         message: "Timelog created successfully",
+
         log_id: log.id,
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* Attendance State                                                       */
+    /* ---------------------------------------------------------------------- */
+
     case "ATTENDANCE_STATE_GET": {
       console.log(
-        "CURRENT STATE REQUEST:",
+        "ATTENDANCE STATE REQUEST:",
         JSON.stringify({
-          ...ctx.body,
+          action: ctx.body.action,
 
-          /*
-           * Do not log or trust a client-supplied authUserId.
-           * The real identity is ctx.authUserId.
-           */
+          workspace_id: ctx.body.workspace_id,
+
+          shift_id: ctx.body.shift_id ?? null,
+
+          date: ctx.body.date ?? null,
+
+          timestamp: ctx.body.timestamp ?? null,
+
           authenticated_user_id: ctx.authUserId,
-          authenticated_email: ctx.email,
-          authenticated_provider: ctx.authProvider,
+
+          authenticated_email: ctx.email ?? null,
+
+          authenticated_provider: ctx.authProvider ?? null,
         }),
       );
 
       return await getCurrentAttendanceState(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
-        /*
-         * IMPORTANT:
-         * Use the authenticated identity from RouteContext.
-         */
         authUserId: ctx.authUserId,
+
         email: ctx.email ?? "",
+
         authProvider: ctx.authProvider,
 
         ...(ctx.body.shift_id

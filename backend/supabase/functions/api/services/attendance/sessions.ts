@@ -55,6 +55,11 @@ export function buildAttendanceSessions(
           break;
         }
 
+        if (current.time_out) {
+          console.warn("BREAK_START after TIME_OUT.", log.id);
+          break;
+        }
+
         const activeBreak = current.breaks.at(-1);
 
         if (activeBreak && !activeBreak.out) {
@@ -94,6 +99,11 @@ export function buildAttendanceSessions(
           break;
         }
 
+        if (current.time_out) {
+          console.warn("LUNCH_START after TIME_OUT.", log.id);
+          break;
+        }
+
         if (current.lunch.in && !current.lunch.out) {
           console.warn("LUNCH_START while already at lunch.", log.id);
           break;
@@ -129,6 +139,11 @@ export function buildAttendanceSessions(
           break;
         }
 
+        if (current.time_out) {
+          console.warn("TIME_OUT while session is already closed.", log.id);
+          break;
+        }
+
         current.time_out = log.event_time_utc;
 
         current = null;
@@ -145,6 +160,22 @@ export function buildAttendanceSessions(
   return sessions;
 }
 
+/**
+ * Returns the latest session, whether it is completed or active.
+ *
+ * This is useful for displaying the employee's latest attendance state.
+ */
+export function getLatestAttendanceSession(
+  sessions: AttendanceSession[],
+): AttendanceSession | null {
+  return sessions.at(-1) ?? null;
+}
+
+/**
+ * Returns only an active session.
+ *
+ * A session is active when it has TIME_IN but no TIME_OUT.
+ */
 export function getCurrentAttendanceSession(
   sessions: AttendanceSession[],
 ): AttendanceSession | null {
@@ -154,7 +185,7 @@ export function getCurrentAttendanceSession(
     return null;
   }
 
-  if (session.time_out) {
+  if (!session.time_in || session.time_out) {
     return null;
   }
 
