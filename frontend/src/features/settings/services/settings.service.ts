@@ -10,7 +10,11 @@ export type SettingsGetRequest = {
   workspace_id: string;
 };
 
-type SettingsGetResponse = Settings;
+type SettingsGetResponse = {
+  success: boolean;
+  message?: string;
+  settings: Settings | null;
+};
 
 /* -------------------------------------------------------------------------- */
 /* UPDATE SETTINGS                                                            */
@@ -20,7 +24,11 @@ export type SettingsUpdateRequest = UpdateSettingsRequest & {
   workspace_id: string;
 };
 
-type SettingsUpdateResponse = Settings;
+type SettingsUpdateResponse = {
+  success: boolean;
+  message?: string;
+  settings: Settings;
+};
 
 /* -------------------------------------------------------------------------- */
 /* GET                                                                        */
@@ -37,7 +45,15 @@ export async function getSettings(payload: SettingsGetRequest): Promise<Settings
     ...payload,
   });
 
-  return response;
+  if (!response.success) {
+    throw new Error(response.message ?? "Failed to load settings");
+  }
+
+  if (!response.settings) {
+    throw new Error("Settings were not returned.");
+  }
+
+  return response.settings;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -55,5 +71,13 @@ export async function updateSettings(payload: SettingsUpdateRequest): Promise<Se
     ...payload,
   });
 
-  return response;
+  if (!response.success) {
+    throw new Error(response.message ?? "Failed to update settings");
+  }
+
+  if (!response.settings) {
+    throw new Error("Updated settings were not returned.");
+  }
+
+  return response.settings;
 }

@@ -21,13 +21,16 @@
     "types": ["node"],
 
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./shared/*"],
+      "@workpulse/shared": ["../shared/index.ts"],
+      "@workpulse/shared/*": ["../shared/*"]
     }
   },
 
   "include": [
     "src/**/*.ts",
     "shared/**/*.ts",
+    "../shared/**/*.ts",
     "supabase/functions/api/routes/user-shift-override.routes.ts"
   ],
 

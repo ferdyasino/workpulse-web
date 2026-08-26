@@ -9,7 +9,7 @@ import Typography from "@mui/material/Typography";
 import {
   CURRENCY_OPTIONS,
   LOCALE_OPTIONS,
-  TIMEZONE_OPTIONS,
+  TIMEZONES,
 } from "@/features/settings/constants/settings.options";
 
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
@@ -26,9 +26,9 @@ export default function SettingsPage() {
       return;
     }
 
-    setTimezone(settings.timezone);
-    setLocale(settings.locale);
-    setCurrency(settings.currency);
+    setTimezone(settings.timezone ?? "");
+    setLocale(settings.locale ?? "");
+    setCurrency(settings.currency ?? "");
   }, [settings]);
 
   async function handleSave() {
@@ -57,9 +57,9 @@ export default function SettingsPage() {
         onChange={(event) => setTimezone(event.target.value)}
         margin="normal"
       >
-        {TIMEZONE_OPTIONS.map((timezone) => (
-          <MenuItem key={timezone} value={timezone}>
-            {timezone}
+        {TIMEZONES.map((timezone) => (
+          <MenuItem key={timezone.id} value={timezone.id}>
+            {timezone.label}
           </MenuItem>
         ))}
       </TextField>
