@@ -5,6 +5,8 @@ import type { Database, Tables } from "@shared/types/database.ts";
 import type {
   AttendanceReportRequest,
   AttendanceReportRow,
+  BreakReportRow,
+  WeeklyReportRow,
 } from "@shared/types/api/api.report.ts";
 
 import {
@@ -17,16 +19,13 @@ import {
 /* -------------------------------------------------------------------------- */
 
 type UserRow = Tables<"users">;
-
 type ShiftRow = Tables<"shifts">;
-
 type UserShiftRow = Tables<"user_shifts">;
-
 type TimeLogRow = Tables<"time_logs">;
-
 type DepartmentRow = Tables<"departments">;
-
 type PositionRow = Tables<"positions">;
+
+type AttendanceSession = ReturnType<typeof buildAttendanceSessions>[number];
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                 */
@@ -83,6 +82,25 @@ function getDateRange(dateFrom: string, dateTo: string): string[] {
   return dates;
 }
 
+/**
+ * Monday of the week containing the supplied date.
+ */
+function getWeekStart(dateString: string): string {
+  const date = new Date(`${dateString}T00:00:00Z`);
+
+  const day = date.getUTCDay();
+
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+
+  date.setUTCDate(date.getUTCDate() + mondayOffset);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getWeekEnd(weekStart: string): string {
+  return addDays(weekStart, 6);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Time Helpers                                                               */
 /* -------------------------------------------------------------------------- */
@@ -107,30 +125,65 @@ function getMinutesBetween(start: string | null, end: string | null): number {
   return Math.floor((endTime - startTime) / 60000);
 }
 
-function getBreakMinutes(
-  session: ReturnType<typeof buildAttendanceSessions>[number],
-): number {
-  let minutes = 0;
+/* -------------------------------------------------------------------------- */
+/* Break Helpers                                                              */
+/* -------------------------------------------------------------------------- */
+
+function getBreakPeriods(session: AttendanceSession): {
+  type: "BREAK" | "LUNCH";
+  break_in: string | null;
+  break_out: string | null;
+  break_minutes: number;
+}[] {
+  const periods: {
+    type: "BREAK" | "LUNCH";
+    break_in: string | null;
+    break_out: string | null;
+    break_minutes: number;
+  }[] = [];
+
+  let breakNumber = 0;
 
   for (const breakPeriod of session.breaks) {
-    minutes += getMinutesBetween(breakPeriod.in, breakPeriod.out);
+    breakNumber += 1;
+
+    periods.push({
+      type: "BREAK",
+
+      break_in: breakPeriod.in,
+
+      break_out: breakPeriod.out,
+
+      break_minutes: getMinutesBetween(breakPeriod.in, breakPeriod.out),
+    });
   }
 
-  minutes += getMinutesBetween(session.lunch.in, session.lunch.out);
+  if (session.lunch.in || session.lunch.out) {
+    periods.push({
+      type: "LUNCH",
 
-  return minutes;
+      break_in: session.lunch.in,
+
+      break_out: session.lunch.out,
+
+      break_minutes: getMinutesBetween(session.lunch.in, session.lunch.out),
+    });
+  }
+
+  return periods;
+}
+
+function getBreakMinutes(session: AttendanceSession): number {
+  return getBreakPeriods(session).reduce(
+    (total, period) => total + period.break_minutes,
+    0,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* Shift Time Helpers                                                         */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Convert a local calendar date + local HH:mm:ss into a UTC Date.
- *
- * Uses Intl to determine the timezone offset rather than assuming the
- * server timezone.
- */
 function localDateTimeToUtc(
   date: string,
   time: string,
@@ -150,10 +203,6 @@ function localDateTimeToUtc(
     throw new Error(`Invalid shift time: ${time}`);
   }
 
-  /*
-   * Start with the desired local clock value interpreted as UTC.
-   * Then determine the timezone offset at that instant.
-   */
   const wallClockUtc = Date.UTC(
     Number(date.slice(0, 4)),
     Number(date.slice(5, 7)) - 1,
@@ -168,12 +217,19 @@ function localDateTimeToUtc(
   for (let attempt = 0; attempt < 3; attempt++) {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
+
       year: "numeric",
+
       month: "2-digit",
+
       day: "2-digit",
+
       hour: "2-digit",
+
       minute: "2-digit",
+
       second: "2-digit",
+
       hourCycle: "h23",
     }).formatToParts(candidate);
 
@@ -202,10 +258,6 @@ function localDateTimeToUtc(
   return candidate;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Shift Window                                                               */
-/* -------------------------------------------------------------------------- */
-
 function getShiftWindow(
   workDate: string,
   shift: ShiftRow,
@@ -219,11 +271,7 @@ function getShiftWindow(
     shift.timezone,
   );
 
-  let endDate = workDate;
-
-  if (shift.is_overnight) {
-    endDate = addDays(workDate, 1);
-  }
+  const endDate = shift.is_overnight ? addDays(workDate, 1) : workDate;
 
   const endsAt = localDateTimeToUtc(endDate, shift.end_time, shift.timezone);
 
@@ -238,10 +286,12 @@ function getShiftWindow(
 /* -------------------------------------------------------------------------- */
 
 function calculateMetrics(
-  session: ReturnType<typeof buildAttendanceSessions>[number] | null,
+  session: AttendanceSession | null,
   shift: ShiftRow | null,
 ): {
   worked_minutes: number;
+  break_minutes: number;
+  scheduled_minutes: number;
   late_minutes: number;
   undertime_minutes: number;
   overtime_minutes: number;
@@ -250,42 +300,56 @@ function calculateMetrics(
   if (!session || !session.time_in) {
     return {
       worked_minutes: 0,
+
+      break_minutes: 0,
+
+      scheduled_minutes: shift
+        ? Math.max(
+            0,
+            getShiftWindow(
+              extractWorkDate(session?.time_in ?? "", shift.timezone),
+              shift,
+            ).endsAt.getTime(),
+          )
+        : 0,
+
       late_minutes: 0,
+
       undertime_minutes: 0,
+
       overtime_minutes: 0,
+
       attendance_status: "ABSENT",
     };
   }
 
-  const workedElapsedMinutes = getMinutesBetween(
-    session.time_in,
-    session.time_out,
-  );
+  const elapsedMinutes = getMinutesBetween(session.time_in, session.time_out);
 
   const breakMinutes = getBreakMinutes(session);
 
-  /*
-   * Actual worked time excludes completed break/lunch periods.
-   */
-  const workedMinutes = Math.max(0, workedElapsedMinutes - breakMinutes);
+  const workedMinutes = Math.max(0, elapsedMinutes - breakMinutes);
 
   if (!shift) {
     return {
       worked_minutes: workedMinutes,
+
+      break_minutes: breakMinutes,
+
+      scheduled_minutes: 0,
+
       late_minutes: 0,
+
       undertime_minutes: 0,
+
       overtime_minutes: 0,
+
       attendance_status: session.time_out ? "PRESENT" : "INCOMPLETE",
     };
   }
 
-  /*
-   * Shift schedule.
-   */
-  const shiftWindow = getShiftWindow(
-    extractWorkDate(session.time_in, shift.timezone),
-    shift,
-  );
+  const workDate = extractWorkDate(session.time_in, shift.timezone);
+
+  const shiftWindow = getShiftWindow(workDate, shift);
 
   const scheduledMinutes = Math.max(
     0,
@@ -294,11 +358,6 @@ function calculateMetrics(
     ) - shift.break_minutes,
   );
 
-  /*
-   * Late:
-   *
-   * TIME_IN after shift start + grace.
-   */
   const timeIn = new Date(session.time_in);
 
   const graceMinutes = Math.max(0, shift.grace_minutes ?? 0);
@@ -310,11 +369,6 @@ function calculateMetrics(
       ? Math.floor((timeIn.getTime() - shiftWindow.startsAt.getTime()) / 60000)
       : 0;
 
-  /*
-   * Undertime:
-   *
-   * A completed TIME_OUT before scheduled end.
-   */
   let undertimeMinutes = 0;
 
   let overtimeMinutes = 0;
@@ -350,6 +404,10 @@ function calculateMetrics(
   return {
     worked_minutes: workedMinutes,
 
+    break_minutes: breakMinutes,
+
+    scheduled_minutes: scheduledMinutes,
+
     late_minutes: lateMinutes,
 
     undertime_minutes: undertimeMinutes,
@@ -373,8 +431,11 @@ function extractWorkDate(timestamp: string, timezone: string): string {
 
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
+
     year: "numeric",
+
     month: "2-digit",
+
     day: "2-digit",
   }).formatToParts(date);
 
@@ -419,13 +480,17 @@ function findUserShiftForDate(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Report                                                                     */
+/* Report Result                                                              */
 /* -------------------------------------------------------------------------- */
 
 export async function getAttendanceReport(
   supabaseAdmin: SupabaseClient<Database>,
   request: Omit<AttendanceReportRequest, "action">,
-): Promise<AttendanceReportRow[]> {
+): Promise<{
+  rows: AttendanceReportRow[];
+  break_rows: BreakReportRow[];
+  weekly_rows: WeeklyReportRow[];
+}> {
   const { workspace_id, date_from, date_to, user_id, department_id, timezone } =
     request;
 
@@ -462,7 +527,11 @@ export async function getAttendanceReport(
   }
 
   if (!users || users.length === 0) {
-    return [];
+    return {
+      rows: [],
+      break_rows: [],
+      weekly_rows: [],
+    };
   }
 
   /* ------------------------------------------------------------------------ */
@@ -524,7 +593,7 @@ export async function getAttendanceReport(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* User Shift Assignments                                                   */
+  /* User Shifts                                                              */
   /* ------------------------------------------------------------------------ */
 
   const userIds = users.map((user) => user.id);
@@ -551,13 +620,13 @@ export async function getAttendanceReport(
   const shiftsById = new Map<string, ShiftRow>();
 
   if (shiftIds.length > 0) {
-    const { data: shifts, error: shiftsError } = await supabaseAdmin
+    const { data: shifts, error } = await supabaseAdmin
       .from("shifts")
       .select("*")
       .in("id", shiftIds);
 
-    if (shiftsError) {
-      throw shiftsError;
+    if (error) {
+      throw error;
     }
 
     for (const shift of shifts ?? []) {
@@ -603,10 +672,12 @@ export async function getAttendanceReport(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Generate Report Rows                                                      */
+  /* Daily Report                                                              */
   /* ------------------------------------------------------------------------ */
 
   const rows: AttendanceReportRow[] = [];
+
+  const breakRows: BreakReportRow[] = [];
 
   for (const user of users) {
     const assignments = (userShifts ?? []).filter(
@@ -618,10 +689,6 @@ export async function getAttendanceReport(
 
       const logsForDate = logsByUserAndDate.get(`${user.id}:${workDate}`) ?? [];
 
-      /*
-       * Do not manufacture attendance records for employees with no
-       * assignment and no logs.
-       */
       if (!assignment && logsForDate.length === 0) {
         continue;
       }
@@ -650,6 +717,10 @@ export async function getAttendanceReport(
       const rowTimezone =
         timezone ?? shift?.timezone ?? logsForDate[0]?.timezone ?? "UTC";
 
+      /* -------------------------------------------------------------------- */
+      /* Daily row                                                             */
+      /* -------------------------------------------------------------------- */
+
       rows.push({
         user_id: user.id,
 
@@ -669,7 +740,11 @@ export async function getAttendanceReport(
 
         time_out: latestSession?.time_out ?? null,
 
+        break_minutes: metrics.break_minutes,
+
         worked_minutes: metrics.worked_minutes,
+
+        scheduled_minutes: metrics.scheduled_minutes,
 
         late_minutes: metrics.late_minutes,
 
@@ -681,8 +756,122 @@ export async function getAttendanceReport(
 
         timezone: rowTimezone,
       });
+
+      /* -------------------------------------------------------------------- */
+      /* Break rows                                                            */
+      /* -------------------------------------------------------------------- */
+
+      if (latestSession) {
+        const periods = getBreakPeriods(latestSession);
+
+        let breakNumber = 0;
+
+        for (const period of periods) {
+          if (period.type === "BREAK") {
+            breakNumber += 1;
+          }
+
+          breakRows.push({
+            user_id: user.id,
+
+            employee_no: user.employee_no,
+
+            employee_name: user.display_name,
+
+            department: department?.name ?? null,
+
+            work_date: workDate,
+
+            break_number: period.type === "LUNCH" ? 0 : breakNumber,
+
+            break_type: period.type,
+
+            break_in: period.break_in,
+
+            break_out: period.break_out,
+
+            break_minutes: period.break_minutes,
+
+            timezone: rowTimezone,
+          });
+        }
+      }
     }
   }
+
+  /* ------------------------------------------------------------------------ */
+  /* Weekly Aggregation                                                       */
+  /* ------------------------------------------------------------------------ */
+
+  const weeklyMap = new Map<string, WeeklyReportRow>();
+
+  for (const row of rows) {
+    const weekStart = getWeekStart(row.work_date);
+
+    const weekEnd = getWeekEnd(weekStart);
+
+    const key = `${row.user_id}:${weekStart}`;
+
+    const existing = weeklyMap.get(key);
+
+    if (!existing) {
+      weeklyMap.set(key, {
+        user_id: row.user_id,
+
+        employee_no: row.employee_no,
+
+        employee_name: row.employee_name,
+
+        department: row.department,
+
+        week_start: weekStart,
+
+        week_end: weekEnd,
+
+        days_present: row.time_in ? 1 : 0,
+
+        days_absent: row.attendance_status === "ABSENT" ? 1 : 0,
+
+        total_scheduled_minutes: row.scheduled_minutes,
+
+        total_worked_minutes: row.worked_minutes,
+
+        total_break_minutes: row.break_minutes,
+
+        total_late_minutes: row.late_minutes,
+
+        total_undertime_minutes: row.undertime_minutes,
+
+        total_overtime_minutes: row.overtime_minutes,
+
+        timezone: row.timezone,
+      });
+
+      continue;
+    }
+
+    if (row.time_in) {
+      existing.days_present += 1;
+    }
+
+    if (row.attendance_status === "ABSENT") {
+      existing.days_absent += 1;
+    }
+
+    existing.total_scheduled_minutes += row.scheduled_minutes;
+
+    existing.total_worked_minutes += row.worked_minutes;
+
+    existing.total_break_minutes += row.break_minutes;
+
+    existing.total_late_minutes += row.late_minutes;
+
+    existing.total_undertime_minutes += row.undertime_minutes;
+
+    existing.total_overtime_minutes += row.overtime_minutes;
+  }
+
+  const weeklyRows = Array.from(weeklyMap.values());
 
   /* ------------------------------------------------------------------------ */
   /* Sort                                                                      */
@@ -698,5 +887,37 @@ export async function getAttendanceReport(
     return a.employee_name.localeCompare(b.employee_name);
   });
 
-  return rows;
+  breakRows.sort((a, b) => {
+    const dateCompare = a.work_date.localeCompare(b.work_date);
+
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    const nameCompare = a.employee_name.localeCompare(b.employee_name);
+
+    if (nameCompare !== 0) {
+      return nameCompare;
+    }
+
+    return a.break_number - b.break_number;
+  });
+
+  weeklyRows.sort((a, b) => {
+    const dateCompare = a.week_start.localeCompare(b.week_start);
+
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    return a.employee_name.localeCompare(b.employee_name);
+  });
+
+  return {
+    rows,
+
+    break_rows: breakRows,
+
+    weekly_rows: weeklyRows,
+  };
 }

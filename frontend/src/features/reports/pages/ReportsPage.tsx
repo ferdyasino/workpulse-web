@@ -7,6 +7,8 @@ import {
   MenuItem,
   Paper,
   Select,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -23,14 +25,17 @@ import { useSettingsContext } from "@/features/settings/context/SettingsContext"
 import { useAttendanceReport } from "../hooks/useAttendanceReport";
 
 /* -------------------------------------------------------------------------- */
-/* Date / Time Helpers                                                        */
+/* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
 function getTodayInTimezone(timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
+
     year: "numeric",
+
     month: "2-digit",
+
     day: "2-digit",
   }).format(new Date());
 }
@@ -41,6 +46,7 @@ function formatMinutes(minutes: number): string {
   }
 
   const hours = Math.floor(minutes / 60);
+
   const remainingMinutes = minutes % 60;
 
   return `${String(hours).padStart(2, "0")}:${String(remainingMinutes).padStart(2, "0")}`;
@@ -59,8 +65,11 @@ function formatTime(value: string | null, timezone: string): string {
 
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
+
     hour: "numeric",
+
     minute: "2-digit",
+
     hour12: true,
   }).format(date);
 }
@@ -78,7 +87,9 @@ function formatDate(value: string): string {
 
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
+
     day: "2-digit",
+
     year: "numeric",
   }).format(date);
 }
@@ -89,21 +100,21 @@ function formatDate(value: string): string {
 
 export default function ReportsPage() {
   const { users } = useUsers();
+
   const { settings, loading: settingsLoading } = useSettingsContext();
 
-  /*
-   * Workspace settings are authoritative.
-   *
-   * Keep a safe fallback while settings are loading so Intl.DateTimeFormat
-   * always receives a valid timezone.
-   */
-  const timezone = settings?.timezone || "Asia/Manila";
+  const timezone = settings?.timezone ?? "Asia/Manila";
 
   const [date, setDate] = useState("");
+
+  const [dateTo, setDateTo] = useState("");
+
   const [userId, setUserId] = useState("");
 
+  const [tab, setTab] = useState(0);
+
   /* ------------------------------------------------------------------------ */
-  /* Initialize report date using workspace timezone                          */
+  /* Initialize dates                                                         */
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
@@ -111,23 +122,24 @@ export default function ReportsPage() {
       return;
     }
 
-    setDate((current) => {
-      if (current) {
-        return current;
-      }
+    const today = getTodayInTimezone(settings.timezone);
 
-      return getTodayInTimezone(settings.timezone);
-    });
+    setDate((current) => current || today);
+
+    setDateTo((current) => current || today);
   }, [settings?.timezone]);
 
   /* ------------------------------------------------------------------------ */
-  /* Attendance Report                                                        */
+  /* Report                                                                    */
   /* ------------------------------------------------------------------------ */
 
-  const { rows, loading, error, refresh } = useAttendanceReport({
+  const { rows, breakRows, weeklyRows, loading, error, refresh } = useAttendanceReport({
     date_from: date,
-    date_to: date,
+
+    date_to: tab === 2 ? dateTo : date,
+
     timezone,
+
     ...(userId
       ? {
           user_id: userId,
@@ -136,16 +148,20 @@ export default function ReportsPage() {
   });
 
   /* ------------------------------------------------------------------------ */
-  /* Selected Date Label                                                      */
+  /* Labels                                                                    */
   /* ------------------------------------------------------------------------ */
 
   const selectedDateLabel = useMemo(() => {
-    if (!date) {
+    return date ? formatDate(date) : "—";
+  }, [date]);
+
+  const selectedRangeLabel = useMemo(() => {
+    if (!date || !dateTo) {
       return "—";
     }
 
-    return formatDate(date);
-  }, [date]);
+    return `${formatDate(date)} – ${formatDate(dateTo)}`;
+  }, [date, dateTo]);
 
   /* ------------------------------------------------------------------------ */
   /* Settings Loading                                                         */
@@ -157,12 +173,21 @@ export default function ReportsPage() {
         elevation={0}
         sx={{
           width: "100%",
+
           minWidth: 0,
+
           borderRadius: 2,
+
           p: 4,
         }}
       >
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+            mb: 1,
+          }}
+        >
           Attendance Reports
         </Typography>
 
@@ -182,22 +207,28 @@ export default function ReportsPage() {
       elevation={0}
       sx={{
         width: "100%",
+
         minWidth: 0,
+
         borderRadius: 2,
+
         overflow: "hidden",
       }}
     >
       {/* ------------------------------------------------------------------ */}
-      {/* Report Header / Filters                                             */}
+      {/* Header                                                             */}
       {/* ------------------------------------------------------------------ */}
 
       <Box
         sx={{
           px: 4,
+
           pt: 4,
-          pb: 3,
-          backgroundColor: "background.paper",
+
+          pb: 0,
+
           borderBottom: "1px solid",
+
           borderColor: "divider",
         }}
       >
@@ -205,6 +236,7 @@ export default function ReportsPage() {
           variant="h5"
           sx={{
             fontWeight: 700,
+
             mb: 1,
           }}
         >
@@ -218,23 +250,28 @@ export default function ReportsPage() {
             mb: 3,
           }}
         >
-          Daily attendance report per agent.
+          Attendance, breaks, daily worked hours, and weekly hours per agent.
         </Typography>
+
+        {/* -------------------------------------------------------------- */}
+        {/* Filters                                                         */}
+        {/* -------------------------------------------------------------- */}
 
         <Box
           sx={{
             display: "flex",
+
             flexWrap: "wrap",
+
             gap: 2,
+
             alignItems: "center",
+
+            mb: 3,
           }}
         >
-          {/* -------------------------------------------------------------- */}
-          {/* Date                                                             */}
-          {/* -------------------------------------------------------------- */}
-
           <TextField
-            label="Date"
+            label={tab === 2 ? "Week From" : "Date"}
             type="date"
             value={date}
             onChange={(event) => {
@@ -250,9 +287,24 @@ export default function ReportsPage() {
             }}
           />
 
-          {/* -------------------------------------------------------------- */}
-          {/* Agent                                                            */}
-          {/* -------------------------------------------------------------- */}
+          {tab === 2 && (
+            <TextField
+              label="Week To"
+              type="date"
+              value={dateTo}
+              onChange={(event) => {
+                setDateTo(event.target.value);
+              }}
+              slotProps={{
+                inputLabel: {
+                  shrink: true,
+                },
+              }}
+              sx={{
+                minWidth: 190,
+              }}
+            />
+          )}
 
           <FormControl
             sx={{
@@ -281,44 +333,49 @@ export default function ReportsPage() {
         </Box>
 
         {/* -------------------------------------------------------------- */}
-        {/* Active Timezone                                                 */}
+        {/* Tabs                                                            */}
         {/* -------------------------------------------------------------- */}
 
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{
-            display: "block",
-            mt: 2,
+        <Tabs
+          value={tab}
+          onChange={(_event, value) => {
+            setTab(value);
           }}
         >
-          Report timezone: {timezone}
-        </Typography>
+          <Tab label="Daily Attendance" />
+
+          <Tab label="Breaks" />
+
+          <Tab label="Weekly Hours" />
+        </Tabs>
       </Box>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Report Content                                                      */}
+      {/* Content                                                            */}
       {/* ------------------------------------------------------------------ */}
 
       <Box
         sx={{
           p: 4,
+
           width: "100%",
+
           minWidth: 0,
+
           overflow: "hidden",
         }}
       >
-        {/* ---------------------------------------------------------------- */}
-        {/* Error                                                             */}
-        {/* ---------------------------------------------------------------- */}
-
         {error && (
           <Box
             sx={{
               mb: 2,
+
               p: 2,
+
               borderRadius: 1,
+
               backgroundColor: "error.lighter",
+
               color: "error.main",
             }}
           >
@@ -326,193 +383,615 @@ export default function ReportsPage() {
           </Box>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Report Title                                                      */}
-        {/* ---------------------------------------------------------------- */}
+        {/* ================================================================== */}
+        {/* DAILY ATTENDANCE                                                    */}
+        {/* ================================================================== */}
 
-        <Typography
-          variant="subtitle1"
-          sx={{
-            fontWeight: 600,
-            mb: 2,
-          }}
-        >
-          Daily Report — {selectedDateLabel}
-        </Typography>
+        {tab === 0 && (
+          <>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 600,
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Table                                                             */}
-        {/* ---------------------------------------------------------------- */}
+                mb: 2,
+              }}
+            >
+              Daily Report — {selectedDateLabel}
+            </Typography>
 
-        <TableContainer
-          sx={{
-            width: "100%",
-            overflowX: "auto",
-            border: "1px solid",
-            borderColor: "divider",
-            borderRadius: 1,
-          }}
-        >
-          <Table
-            size="small"
-            sx={{
-              minWidth: 900,
-            }}
-          >
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 700 }}>Agent</TableCell>
+            <TableContainer
+              sx={{
+                width: "100%",
 
-                <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                overflowX: "auto",
 
-                <TableCell sx={{ fontWeight: 700 }}>Time In</TableCell>
+                border: "1px solid",
 
-                <TableCell sx={{ fontWeight: 700 }}>Time Out</TableCell>
+                borderColor: "divider",
 
-                <TableCell align="right" sx={{ fontWeight: 700 }}>
-                  Break
-                </TableCell>
-
-                <TableCell align="right" sx={{ fontWeight: 700 }}>
-                  Worked Hours
-                </TableCell>
-
-                <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-              </TableRow>
-            </TableHead>
-
-            <TableBody>
-              {/* ---------------------------------------------------------- */}
-              {/* Loading                                                       */}
-              {/* ---------------------------------------------------------- */}
-
-              {loading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    align="center"
-                    sx={{
-                      py: 5,
-                    }}
-                  >
-                    <Typography variant="body2" color="text.secondary">
-                      Loading attendance report...
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : rows.length === 0 ? (
-                /* -------------------------------------------------------- */
-                /* Empty                                                       */
-                /* -------------------------------------------------------- */
-
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    align="center"
-                    sx={{
-                      py: 5,
-                    }}
-                  >
-                    <Typography variant="body2" color="text.secondary">
-                      No attendance records found for {selectedDateLabel}.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                /* -------------------------------------------------------- */
-                /* Rows                                                        */
-                /* -------------------------------------------------------- */
-
-                rows.map((row) => (
-                  <TableRow key={`${row.user_id}-${row.work_date}`} hover>
-                    {/* -------------------------------------------------- */}
-                    {/* Agent                                                  */}
-                    {/* -------------------------------------------------- */}
-
-                    <TableCell>
-                      <Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: 600,
-                          }}
-                        >
-                          {row.employee_name}
-                        </Typography>
-
-                        <Typography variant="caption" color="text.secondary">
-                          {row.employee_no}
-                        </Typography>
-                      </Box>
+                borderRadius: 1,
+              }}
+            >
+              <Table
+                size="small"
+                sx={{
+                  minWidth: 1100,
+                }}
+              >
+                <TableHead>
+                  <TableRow>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Agent
                     </TableCell>
 
-                    {/* -------------------------------------------------- */}
-                    {/* Work Date                                              */}
-                    {/* -------------------------------------------------- */}
-
-                    <TableCell>{formatDate(row.work_date)}</TableCell>
-
-                    {/* -------------------------------------------------- */}
-                    {/* Time In                                                */}
-                    {/* -------------------------------------------------- */}
-
-                    <TableCell>{formatTime(row.time_in, timezone)}</TableCell>
-
-                    {/* -------------------------------------------------- */}
-                    {/* Time Out                                               */}
-                    {/* -------------------------------------------------- */}
-
-                    <TableCell>{formatTime(row.time_out, timezone)}</TableCell>
-
-                    {/* -------------------------------------------------- */}
-                    {/* Break                                                  */}
-                    {/* -------------------------------------------------- */}
-
-                    <TableCell align="right">
-                      {formatMinutes(
-                        Math.max(
-                          0,
-                          row.worked_minutes - row.undertime_minutes - row.overtime_minutes,
-                        ),
-                      )}
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Date
                     </TableCell>
 
-                    {/* -------------------------------------------------- */}
-                    {/* Worked Hours                                           */}
-                    {/* -------------------------------------------------- */}
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Shift
+                    </TableCell>
 
-                    <TableCell align="right">
-                      <Typography
-                        variant="body2"
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Time In
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Time Out
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Break
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Scheduled
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Worked
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Late
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      OT
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Status
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={11}
+                        align="center"
                         sx={{
-                          fontWeight: 600,
+                          py: 5,
                         }}
                       >
-                        {formatMinutes(row.worked_minutes)}
-                      </Typography>
+                        Loading attendance report...
+                      </TableCell>
+                    </TableRow>
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={11}
+                        align="center"
+                        sx={{
+                          py: 5,
+                        }}
+                      >
+                        No attendance records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((row) => (
+                      <TableRow key={`${row.user_id}-${row.work_date}`} hover>
+                        <TableCell>
+                          <Box>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 600,
+                              }}
+                            >
+                              {row.employee_name}
+                            </Typography>
+
+                            <Typography variant="caption" color="text.secondary">
+                              {row.employee_no}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell>{formatDate(row.work_date)}</TableCell>
+
+                        <TableCell>{row.shift_name ?? "—"}</TableCell>
+
+                        <TableCell>{formatTime(row.time_in, timezone)}</TableCell>
+
+                        <TableCell>{formatTime(row.time_out, timezone)}</TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.break_minutes)}</TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.scheduled_minutes)}</TableCell>
+
+                        <TableCell align="right">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 600,
+                            }}
+                          >
+                            {formatMinutes(row.worked_minutes)}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.late_minutes)}</TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.overtime_minutes)}</TableCell>
+
+                        <TableCell>{row.attendance_status}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+
+        {/* ================================================================== */}
+        {/* BREAK REPORT                                                       */}
+        {/* ================================================================== */}
+
+        {tab === 1 && (
+          <>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 600,
+
+                mb: 2,
+              }}
+            >
+              Break Report — {selectedDateLabel}
+            </Typography>
+
+            <TableContainer
+              sx={{
+                width: "100%",
+
+                overflowX: "auto",
+
+                border: "1px solid",
+
+                borderColor: "divider",
+
+                borderRadius: 1,
+              }}
+            >
+              <Table
+                size="small"
+                sx={{
+                  minWidth: 900,
+                }}
+              >
+                <TableHead>
+                  <TableRow>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Agent
                     </TableCell>
 
-                    {/* -------------------------------------------------- */}
-                    {/* Status                                                 */}
-                    {/* -------------------------------------------------- */}
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Date
+                    </TableCell>
 
-                    <TableCell>{row.attendance_status}</TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Type
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Break #
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Break In
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Break Out
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Duration
+                    </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                </TableHead>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Refresh                                                           */}
-        {/* ---------------------------------------------------------------- */}
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        align="center"
+                        sx={{
+                          py: 5,
+                        }}
+                      >
+                        Loading break report...
+                      </TableCell>
+                    </TableRow>
+                  ) : breakRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        align="center"
+                        sx={{
+                          py: 5,
+                        }}
+                      >
+                        No break records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    breakRows.map((row, index) => (
+                      <TableRow
+                        key={`${row.user_id}-${row.work_date}-${row.break_type}-${row.break_number}-${index}`}
+                        hover
+                      >
+                        <TableCell>
+                          <Box>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 600,
+                              }}
+                            >
+                              {row.employee_name}
+                            </Typography>
 
-        {!loading && rows.length > 0 && (
+                            <Typography variant="caption" color="text.secondary">
+                              {row.employee_no}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell>{formatDate(row.work_date)}</TableCell>
+
+                        <TableCell>{row.break_type}</TableCell>
+
+                        <TableCell>{row.break_type === "LUNCH" ? "—" : row.break_number}</TableCell>
+
+                        <TableCell>{formatTime(row.break_in, timezone)}</TableCell>
+
+                        <TableCell>{formatTime(row.break_out, timezone)}</TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.break_minutes)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+
+        {/* ================================================================== */}
+        {/* WEEKLY HOURS                                                        */}
+        {/* ================================================================== */}
+
+        {tab === 2 && (
+          <>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 600,
+
+                mb: 2,
+              }}
+            >
+              Weekly Hours — {selectedRangeLabel}
+            </Typography>
+
+            <TableContainer
+              sx={{
+                width: "100%",
+
+                overflowX: "auto",
+
+                border: "1px solid",
+
+                borderColor: "divider",
+
+                borderRadius: 1,
+              }}
+            >
+              <Table
+                size="small"
+                sx={{
+                  minWidth: 1100,
+                }}
+              >
+                <TableHead>
+                  <TableRow>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Agent
+                    </TableCell>
+
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Week
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Present
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Absent
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Scheduled
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Worked Hours
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Break
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Late
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Undertime
+                    </TableCell>
+
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
+                      Overtime
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        align="center"
+                        sx={{
+                          py: 5,
+                        }}
+                      >
+                        Loading weekly report...
+                      </TableCell>
+                    </TableRow>
+                  ) : weeklyRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        align="center"
+                        sx={{
+                          py: 5,
+                        }}
+                      >
+                        No weekly records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    weeklyRows.map((row) => (
+                      <TableRow key={`${row.user_id}-${row.week_start}`} hover>
+                        <TableCell>
+                          <Box>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 600,
+                              }}
+                            >
+                              {row.employee_name}
+                            </Typography>
+
+                            <Typography variant="caption" color="text.secondary">
+                              {row.employee_no}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+
+                        <TableCell>
+                          {formatDate(row.week_start)} – {formatDate(row.week_end)}
+                        </TableCell>
+
+                        <TableCell align="right">{row.days_present}</TableCell>
+
+                        <TableCell align="right">{row.days_absent}</TableCell>
+
+                        <TableCell align="right">
+                          {formatMinutes(row.total_scheduled_minutes)}
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                            }}
+                          >
+                            {formatMinutes(row.total_worked_minutes)}
+                          </Typography>
+                        </TableCell>
+
+                        <TableCell align="right">
+                          {formatMinutes(row.total_break_minutes)}
+                        </TableCell>
+
+                        <TableCell align="right">{formatMinutes(row.total_late_minutes)}</TableCell>
+
+                        <TableCell align="right">
+                          {formatMinutes(row.total_undertime_minutes)}
+                        </TableCell>
+
+                        <TableCell align="right">
+                          {formatMinutes(row.total_overtime_minutes)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Refresh                                                            */}
+        {/* ------------------------------------------------------------------ */}
+
+        {!loading && (
           <Box
             sx={{
               mt: 2,
+
               display: "flex",
+
               justifyContent: "flex-end",
             }}
           >
@@ -524,10 +1003,15 @@ export default function ReportsPage() {
               }}
               sx={{
                 border: 0,
+
                 background: "none",
+
                 cursor: "pointer",
+
                 color: "primary.main",
+
                 font: "inherit",
+
                 p: 0,
               }}
             >
