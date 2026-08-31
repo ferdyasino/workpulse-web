@@ -1,0 +1,29 @@
+{
+  "name": "workpulse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkPulse Attendance and Payroll System",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "supabase:list": "cd backend && npx supabase projects list",
+    "supabase:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv",
+    "supabase:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl",
+    "functions:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase functions deploy api",
+    "functions:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase functions deploy api",
+    "functions:list:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase functions list",
+    "functions:list:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase functions list",
+    "secrets:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase secrets list",
+    "secrets:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase secrets list",
+    "secrets:set:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase secrets set",
+    "secrets:set:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase secrets set",
+    "db:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase db push",
+    "db:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase db push",
+    "db:diff": "cd backend && npx supabase db diff",
+    "migration:list": "cd backend && npx supabase migration list"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
