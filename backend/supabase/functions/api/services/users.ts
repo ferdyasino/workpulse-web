@@ -111,6 +111,66 @@ async function ensureUniqueEmail(
   }
 }
 
+/**
+ * Validate an optional authentication password.
+ *
+ * Supabase Auth performs its own password validation as well, but validating
+ * here gives the API a predictable error before making the Auth request.
+ */
+function validatePassword(password?: string | null): void {
+  if (password === undefined || password === null) {
+    return;
+  }
+
+  if (!password) {
+    throw new Error("Password cannot be empty.");
+  }
+
+  if (password.length < 6) {
+    throw new Error("Password must be at least 6 characters long.");
+  }
+
+  if (password.length > 72) {
+    throw new Error("Password must not exceed 72 characters.");
+  }
+}
+
+/**
+ * Determine whether a password is required for the selected login provider.
+ */
+function requiresPassword(loginProvider?: string | null): boolean {
+  const provider = loginProvider?.trim().toUpperCase();
+
+  return provider === "EMAIL" || provider === "BOTH";
+}
+
+/**
+ * Never log a password or any authentication secret.
+ */
+function getSafeCreateLogPayload(
+  payload: CreateUserPayload & {
+    password?: string;
+  },
+) {
+  return {
+    workspace_id: payload.workspace_id,
+    employee_no: payload.employee_no,
+    first_name: payload.first_name,
+    middle_name: payload.middle_name ?? null,
+    last_name: payload.last_name,
+    display_name: payload.display_name,
+    email: payload.email,
+    department_id: payload.department_id ?? null,
+    position_id: payload.position_id ?? null,
+    role: payload.role ?? "EMPLOYEE",
+    employment_status: payload.employment_status ?? "ACTIVE",
+    employment_type: payload.employment_type ?? "FULL_TIME",
+    auth_enabled: payload.auth_enabled ?? false,
+    login_provider: payload.login_provider ?? "EMAIL",
+    has_password: Boolean(payload.password),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Authentication / User Context                                              */
 /* -------------------------------------------------------------------------- */
@@ -168,10 +228,8 @@ export async function getUserContext(
    */
 
   /*
-   * If authentication came from Google, synchronize the provider
-   * information into public.users.
-   *
-   * We only update when the provider is actually known.
+   * If authentication came from Google or email/password, synchronize
+   * the provider information into public.users.
    */
   if (authProvider) {
     const normalizedProvider = authProvider.trim().toUpperCase();
@@ -192,12 +250,14 @@ export async function getUserContext(
       user.login_provider !== loginProvider &&
       user.login_provider !== "BOTH"
     ) {
+      const now = new Date().toISOString();
+
       const { error: providerUpdateError } = await supabaseAdmin
         .from("users")
         .update({
           login_provider: loginProvider,
-          last_login_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          last_login_at: now,
+          updated_at: now,
         })
         .eq("id", user.id);
 
@@ -206,13 +266,15 @@ export async function getUserContext(
       }
 
       user.login_provider = loginProvider;
-      user.last_login_at = new Date().toISOString();
+      user.last_login_at = now;
     } else {
+      const now = new Date().toISOString();
+
       const { error: loginUpdateError } = await supabaseAdmin
         .from("users")
         .update({
-          last_login_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          last_login_at: now,
+          updated_at: now,
         })
         .eq("id", user.id);
 
@@ -220,18 +282,20 @@ export async function getUserContext(
         throw loginUpdateError;
       }
 
-      user.last_login_at = new Date().toISOString();
+      user.last_login_at = now;
     }
   } else {
     /*
      * Even when the provider is unavailable, record the successful
      * application login time.
      */
+    const now = new Date().toISOString();
+
     const { error: loginUpdateError } = await supabaseAdmin
       .from("users")
       .update({
-        last_login_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        last_login_at: now,
+        updated_at: now,
       })
       .eq("id", user.id);
 
@@ -239,7 +303,7 @@ export async function getUserContext(
       throw loginUpdateError;
     }
 
-    user.last_login_at = new Date().toISOString();
+    user.last_login_at = now;
   }
 
   /*
@@ -440,16 +504,29 @@ export async function getUser(
 
 export async function createUser(
   supabaseAdmin: SupabaseClient<Database>,
-  payload: CreateUserPayload,
+  payload: CreateUserPayload & {
+    password?: string;
+  },
 ) {
   const email = payload.email.trim().toLowerCase();
 
+  const loginProvider = payload.login_provider?.trim().toUpperCase() ?? "EMAIL";
+
+  validatePassword(payload.password);
+
+  if (
+    (payload.auth_enabled ?? false) &&
+    requiresPassword(loginProvider) &&
+    !payload.password
+  ) {
+    throw new Error(
+      "A password is required when email/password authentication is enabled.",
+    );
+  }
+
   console.log(
     "CREATE USER PAYLOAD:",
-    JSON.stringify({
-      ...payload,
-      email,
-    }),
+    JSON.stringify(getSafeCreateLogPayload(payload)),
   );
 
   await ensureUniqueEmail(supabaseAdmin, payload.workspace_id, email);
@@ -463,6 +540,13 @@ export async function createUser(
   const { data: authData, error: authError } =
     await supabaseAdmin.auth.admin.createUser({
       email,
+
+      ...(payload.password
+        ? {
+            password: payload.password,
+          }
+        : {}),
+
       email_confirm: true,
 
       user_metadata: {
@@ -534,7 +618,20 @@ export async function createUser(
     updated_at: now,
   };
 
-  console.log("CREATE USER INSERT:", JSON.stringify(insertData));
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT add password to insertData.
+   *
+   * Passwords are managed exclusively by Supabase Auth.
+   */
+
+  console.log(
+    "CREATE USER INSERT:",
+    JSON.stringify({
+      ...insertData,
+    }),
+  );
 
   try {
     const { data, error } = await supabaseAdmin
@@ -594,6 +691,7 @@ export async function updateUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UpdateUserPayload & {
     workspace_id: string;
+    password?: string;
   },
 ) {
   if (payload.email !== undefined) {
@@ -603,6 +701,36 @@ export async function updateUser(
       payload.email.trim().toLowerCase(),
       payload.id,
     );
+  }
+
+  /*
+   * Password is an Auth-only field.
+   *
+   * It must never be included in public.users updateData.
+   */
+  if (payload.password !== undefined) {
+    validatePassword(payload.password);
+
+    if (!payload.password) {
+      throw new Error("Password cannot be empty.");
+    }
+
+    const { error: passwordError } =
+      await supabaseAdmin.auth.admin.updateUserById(payload.id, {
+        password: payload.password,
+      });
+
+    if (passwordError) {
+      console.error(
+        "USER PASSWORD UPDATE ERROR:",
+        JSON.stringify({
+          code: passwordError.status,
+          message: passwordError.message,
+        }),
+      );
+
+      throw passwordError;
+    }
   }
 
   const updateData: Database["public"]["Tables"]["users"]["Update"] = {
@@ -650,6 +778,7 @@ export async function updateUser(
       id: payload.id,
       workspace_id: payload.workspace_id,
       updateData,
+      password_changed: payload.password !== undefined,
     }),
   );
 

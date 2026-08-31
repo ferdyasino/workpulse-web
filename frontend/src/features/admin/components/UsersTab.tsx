@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -17,6 +17,7 @@ import Typography from "@mui/material/Typography";
 import { useSnackbar } from "@/components/ui";
 import ConfirmDialog from "@/components/ui/dialogs/ConfirmDialog";
 import TableAction from "@/components/ui/TableAction/TableAction";
+import { DEFAULT_EMPLOYEE_NUMBER_FORMAT } from "@/utils/employeeNo";
 
 import type { User, UserListItem } from "../services/users.service";
 
@@ -39,7 +40,6 @@ export default function UsersTab() {
     setIncludeDeleted,
 
     getUser,
-
     createUser,
     updateUser,
 
@@ -60,6 +60,21 @@ export default function UsersTab() {
   const [saving, setSaving] = useState(false);
   const [loadingUser, setLoadingUser] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  /**
+   * Employee Nos. currently loaded in the Users table.
+   *
+   * This is only used by the frontend Auto-generate function.
+   *
+   * The backend/database remains the final authority for uniqueness.
+   */
+  const existingEmployeeNumbers = useMemo(
+    () =>
+      users
+        .map((user) => user.employee_no)
+        .filter((employeeNo): employeeNo is string => Boolean(employeeNo)),
+    [users],
+  );
 
   const handleSave = async (values: UserFormValues) => {
     const nameParts = values.display_name.trim().split(/\s+/);
@@ -350,6 +365,8 @@ export default function UsersTab() {
         user={editingUser}
         onClose={handleDialogClose}
         onSubmit={handleSave}
+        existingEmployeeNumbers={existingEmployeeNumbers}
+        employeeNumberFormat={DEFAULT_EMPLOYEE_NUMBER_FORMAT}
       />
 
       <ConfirmDialog

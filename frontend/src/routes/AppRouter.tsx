@@ -2,12 +2,18 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AdminPage from "@/features/admin/pages/AdminPage";
 import LoginPage from "@/features/auth/pages/LoginPage";
+import ForgotPasswordPage from "@/features/auth/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import DashboardPage from "@/features/dashboard/pages/DashboardPage";
 import ReportsPage from "@/features/reports/pages/ReportsPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
 import { WorkspacePage } from "@/features/workspace";
 
-import { canAccessAdmin, canViewReports } from "@/features/auth/utils/permissions";
+import {
+  canAccessAdmin,
+  canViewReports,
+  canAccessSettings,
+} from "@/features/auth/utils/permissions";
 
 import AppLayout from "@/layouts/AppLayout";
 
@@ -38,15 +44,19 @@ export default function AppRouter() {
     <BrowserRouter>
       <Routes>
         {/* ------------------------------------------------------------------ */}
-        {/* Public                                                              */}
+        {/* Public                                                             */}
         {/* ------------------------------------------------------------------ */}
 
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<LoginPage />} />
 
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+
         {/* ------------------------------------------------------------------ */}
-        {/* Dashboard                                                           */}
+        {/* Dashboard                                                          */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
@@ -59,7 +69,7 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Admin                                                               */}
+        {/* Admin                                                              */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
@@ -74,7 +84,7 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Workspace Management                                                */}
+        {/* Workspace Management                                               */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
@@ -89,7 +99,7 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Reports                                                             */}
+        {/* Reports                                                            */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
@@ -104,20 +114,22 @@ export default function AppRouter() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Settings                                                            */}
+        {/* Settings                                                           */}
         {/* ------------------------------------------------------------------ */}
 
         <Route
           path="/settings"
           element={
             <ProtectedLayout>
-              <SettingsPage />
+              <PermissionRoute permission={canAccessSettings}>
+                <SettingsPage />
+              </PermissionRoute>
             </ProtectedLayout>
           }
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Unknown route                                                       */}
+        {/* Unknown route                                                      */}
         {/* ------------------------------------------------------------------ */}
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

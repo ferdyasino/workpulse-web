@@ -23,7 +23,12 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { Clock } from "@/components/ui";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { isPlatformOwner, canManageWorkspace } from "@/features/auth/utils/permissions";
+import {
+  canAccessSettings,
+  canViewReports,
+  isPlatformOwner,
+  canManageWorkspace,
+} from "@/features/auth/utils/permissions";
 
 import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
@@ -42,18 +47,38 @@ export default function Header({ title, showClock = false }: HeaderProps) {
   const theme = useTheme();
 
   const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
+
   const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
 
   const { signOut, user } = useAuth();
+
   const { workspace, workspaces, setWorkspace } = useWorkspace();
+
   const { settings, loading } = useSettingsContext();
 
   const open = Boolean(anchorEl);
 
+  /* ------------------------------------------------------------------------ */
+  /* Permissions                                                              */
+  /* ------------------------------------------------------------------------ */
+
   const platformOwner = isPlatformOwner(user);
+
   const workspaceManager = canManageWorkspace(user, workspace);
 
+  const reportsAccess = canViewReports(user);
+
+  const settingsAccess = canAccessSettings(user);
+
+  /* ------------------------------------------------------------------------ */
+  /* Workspaces                                                               */
+  /* ------------------------------------------------------------------------ */
+
   const activeWorkspaces = workspaces.filter((item) => item.status === "ACTIVE");
+
+  /* ------------------------------------------------------------------------ */
+  /* Page Title                                                               */
+  /* ------------------------------------------------------------------------ */
 
   const pageTitle = useMemo(() => {
     if (title) {
@@ -87,6 +112,10 @@ export default function Header({ title, showClock = false }: HeaderProps) {
     }
   }, [location.pathname, title]);
 
+  /* ------------------------------------------------------------------------ */
+  /* Menu                                                                     */
+  /* ------------------------------------------------------------------------ */
+
   function closeMenu() {
     setAnchorEl(null);
   }
@@ -114,23 +143,24 @@ export default function Header({ title, showClock = false }: HeaderProps) {
     }
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Responsive Controls                                                      */
+  /* ------------------------------------------------------------------------ */
+
   const showDesktopControls = isDesktop;
   const showMenuButton = !isDesktop;
 
-  /*
-   * Clock:
-   *
-   * Desktop:
-   *   Visible in the center of the header.
-   *
-   * Tablet:
-   *   Visible in the center of the header.
-   *
-   * Phone:
-   *   Hidden from the header and shown inside the menu.
-   */
-  const showHeaderClock = !isPhone && showClock && !loading && settings;
-  const showMenuClock = isPhone && showClock && !loading && settings;
+  /* ------------------------------------------------------------------------ */
+  /* Clock                                                                    */
+  /* ------------------------------------------------------------------------ */
+
+  const showHeaderClock = !isPhone && showClock && !loading && settings !== null;
+
+  const showMenuClock = isPhone && showClock && !loading && settings !== null;
+
+  /* ------------------------------------------------------------------------ */
+  /* Render                                                                   */
+  /* ------------------------------------------------------------------------ */
 
   return (
     <Box
@@ -156,9 +186,9 @@ export default function Header({ title, showClock = false }: HeaderProps) {
         borderBottom: "1px solid rgba(255,255,255,0.12)",
       }}
     >
-      {/* =========================================================
-          TITLE — LEFT
-          ========================================================= */}
+      {/* ================================================================== */}
+      {/* TITLE — LEFT                                                        */}
+      {/* ================================================================== */}
 
       <Box
         sx={{
@@ -186,12 +216,9 @@ export default function Header({ title, showClock = false }: HeaderProps) {
         </Typography>
       </Box>
 
-      {/* =========================================================
-          CLOCK — EXACT CENTER
-          
-          Absolutely positioned so its position is independent
-          of title/workspace/menu widths.
-          ========================================================= */}
+      {/* ================================================================== */}
+      {/* CLOCK — EXACT CENTER                                                 */}
+      {/* ================================================================== */}
 
       <Box
         sx={{
@@ -210,15 +237,8 @@ export default function Header({ title, showClock = false }: HeaderProps) {
           alignItems: "center",
           justifyContent: "center",
 
-          /*
-           * Prevent the clock from intercepting clicks.
-           */
           pointerEvents: "none",
 
-          /*
-           * Protect the clock from becoming wider than the
-           * available header area on smaller tablets.
-           */
           maxWidth: {
             sm: "40%",
             md: "45%",
@@ -228,14 +248,14 @@ export default function Header({ title, showClock = false }: HeaderProps) {
           minWidth: 0,
         }}
       >
-        {showHeaderClock && (
+        {showHeaderClock && settings && (
           <Clock variant="header" timezone={settings.timezone} locale={settings.locale} />
         )}
       </Box>
 
-      {/* =========================================================
-          RIGHT SIDE
-          ========================================================= */}
+      {/* ================================================================== */}
+      {/* RIGHT SIDE                                                          */}
+      {/* ================================================================== */}
 
       <Box
         sx={{
@@ -249,10 +269,10 @@ export default function Header({ title, showClock = false }: HeaderProps) {
           ml: "auto",
         }}
       >
-        {/* =======================================================
-            DESKTOP
-            Workspace + Online + Settings
-            ======================================================= */}
+        {/* ================================================================= */}
+        {/* DESKTOP                                                            */}
+        {/* Workspace + Online + Settings                                     */}
+        {/* ================================================================= */}
 
         {showDesktopControls && (
           <>
@@ -294,22 +314,36 @@ export default function Header({ title, showClock = false }: HeaderProps) {
               Online
             </Typography>
 
-            <IconButton
-              onClick={(event) => setAnchorEl(event.currentTarget)}
-              aria-label="Settings"
-              sx={{
-                ml: 0.5,
-              }}
-            >
-              <SettingsIcon />
-            </IconButton>
+            {settingsAccess && (
+              <IconButton
+                onClick={(event) => setAnchorEl(event.currentTarget)}
+                aria-label="Settings"
+                sx={{
+                  ml: 0.5,
+                }}
+              >
+                <SettingsIcon />
+              </IconButton>
+            )}
+
+            {!settingsAccess && (
+              <IconButton
+                onClick={(event) => setAnchorEl(event.currentTarget)}
+                aria-label="More options"
+                sx={{
+                  ml: 0.5,
+                }}
+              >
+                <MoreVertIcon />
+              </IconButton>
+            )}
           </>
         )}
 
-        {/* =======================================================
-            TABLET / PHONE
-            Three-dot menu
-            ======================================================= */}
+        {/* ================================================================= */}
+        {/* TABLET / PHONE                                                     */}
+        {/* Three-dot menu                                                     */}
+        {/* ================================================================= */}
 
         {showMenuButton && (
           <IconButton
@@ -326,9 +360,9 @@ export default function Header({ title, showClock = false }: HeaderProps) {
           </IconButton>
         )}
 
-        {/* =======================================================
-            MENU
-            ======================================================= */}
+        {/* ================================================================= */}
+        {/* MENU                                                               */}
+        {/* ================================================================= */}
 
         <Menu
           anchorEl={anchorEl}
@@ -347,25 +381,14 @@ export default function Header({ title, showClock = false }: HeaderProps) {
               sx: {
                 mt: 1,
 
-                /*
-                 * Paper provides the rounded outer boundary.
-                 */
                 borderRadius: 2,
 
-                /*
-                 * Keep content clipped inside rounded corners.
-                 */
                 overflow: "hidden",
               },
             },
 
             list: {
               sx: {
-                /*
-                 * MenuList is the scrolling container.
-                 * This keeps the scrollbar inside the rounded
-                 * Paper rather than crossing its edges.
-                 */
                 maxHeight: "calc(100vh - 88px)",
 
                 overflowY: "auto",
@@ -380,11 +403,11 @@ export default function Header({ title, showClock = false }: HeaderProps) {
             },
           }}
         >
-          {/* =====================================================
-              PHONE — CLOCK
-              ===================================================== */}
+          {/* ============================================================= */}
+          {/* PHONE — CLOCK                                                  */}
+          {/* ============================================================= */}
 
-          {showMenuClock && (
+          {showMenuClock && settings && (
             <>
               <Box
                 sx={{
@@ -403,9 +426,9 @@ export default function Header({ title, showClock = false }: HeaderProps) {
             </>
           )}
 
-          {/* =====================================================
-              TABLET / PHONE — CURRENT WORKSPACE + STATUS
-              ===================================================== */}
+          {/* ============================================================= */}
+          {/* TABLET / PHONE — CURRENT WORKSPACE + STATUS                    */}
+          {/* ============================================================= */}
 
           {!isDesktop && (
             <>
@@ -454,9 +477,9 @@ export default function Header({ title, showClock = false }: HeaderProps) {
             </>
           )}
 
-          {/* =====================================================
-              PLATFORM OWNER — SWITCH WORKSPACE
-              ===================================================== */}
+          {/* ============================================================= */}
+          {/* PLATFORM OWNER — SWITCH WORKSPACE                              */}
+          {/* ============================================================= */}
 
           {platformOwner && (
             <>
@@ -492,59 +515,99 @@ export default function Header({ title, showClock = false }: HeaderProps) {
             </>
           )}
 
-          {/* =====================================================
-              NAVIGATION
-              ===================================================== */}
+          {/* ============================================================= */}
+          {/* NAVIGATION                                                       */}
+          {/* ============================================================= */}
 
           <MenuItem
             selected={location.pathname === "/dashboard"}
             onClick={() => handleNavigate("/dashboard")}
           >
-            <DashboardIcon sx={{ mr: 1 }} />
+            <DashboardIcon
+              sx={{
+                mr: 1,
+              }}
+            />
             Dashboard
           </MenuItem>
+
+          {/* ============================================================= */}
+          {/* MANAGEMENT                                                       */}
+          {/* ============================================================= */}
 
           {workspaceManager && (
             <MenuItem
               selected={location.pathname === "/admin"}
               onClick={() => handleNavigate("/admin")}
             >
-              <AdminPanelSettingsIcon sx={{ mr: 1 }} />
+              <AdminPanelSettingsIcon
+                sx={{
+                  mr: 1,
+                }}
+              />
               Management
             </MenuItem>
           )}
+
+          {/* ============================================================= */}
+          {/* WORKSPACES                                                      */}
+          {/* ============================================================= */}
 
           {platformOwner && (
             <MenuItem
               selected={location.pathname === "/workspace"}
               onClick={() => handleNavigate("/workspace")}
             >
-              <BusinessIcon sx={{ mr: 1 }} />
+              <BusinessIcon
+                sx={{
+                  mr: 1,
+                }}
+              />
               Workspaces
             </MenuItem>
           )}
 
-          <MenuItem
-            selected={location.pathname === "/reports"}
-            onClick={() => handleNavigate("/reports")}
-          >
-            <AssessmentIcon sx={{ mr: 1 }} />
-            Reports
-          </MenuItem>
+          {/* ============================================================= */}
+          {/* REPORTS                                                         */}
+          {/* ============================================================= */}
 
-          <MenuItem
-            selected={location.pathname === "/settings"}
-            onClick={() => handleNavigate("/settings")}
-          >
-            <SettingsIcon sx={{ mr: 1 }} />
-            Settings
-          </MenuItem>
+          {reportsAccess && (
+            <MenuItem
+              selected={location.pathname === "/reports"}
+              onClick={() => handleNavigate("/reports")}
+            >
+              <AssessmentIcon
+                sx={{
+                  mr: 1,
+                }}
+              />
+              Reports
+            </MenuItem>
+          )}
+
+          {/* ============================================================= */}
+          {/* SETTINGS                                                        */}
+          {/* ============================================================= */}
+
+          {settingsAccess && (
+            <MenuItem
+              selected={location.pathname === "/settings"}
+              onClick={() => handleNavigate("/settings")}
+            >
+              <SettingsIcon
+                sx={{
+                  mr: 1,
+                }}
+              />
+              Settings
+            </MenuItem>
+          )}
 
           <Divider />
 
-          {/* =====================================================
-              LOGOUT
-              ===================================================== */}
+          {/* ============================================================= */}
+          {/* LOGOUT                                                          */}
+          {/* ============================================================= */}
 
           <MenuItem
             sx={{

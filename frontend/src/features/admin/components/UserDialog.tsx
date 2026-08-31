@@ -8,6 +8,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
@@ -29,10 +30,32 @@ import {
   type EmployeeNumberFormat,
 } from "@/utils/employeeNo";
 
+export type UserAuthMethod = "GOOGLE" | "PASSWORD";
+
 export type UserFormValues = {
   employee_no: string;
   display_name: string;
   email: string;
+
+  /**
+   * Authentication method used by the employee.
+   *
+   * GOOGLE:
+   *   The employee authenticates through Google OAuth.
+   *
+   * PASSWORD:
+   *   The employee authenticates using Supabase email/password auth.
+   */
+  auth_method: UserAuthMethod;
+
+  /**
+   * Only supplied when auth_method === "PASSWORD".
+   *
+   * This value must never be stored in public.users.
+   * The backend must pass it to Supabase Auth.
+   */
+  password?: string;
+
   role?: UserRole;
   employment_status?: EmploymentStatus;
   employment_type?: EmploymentType;
@@ -75,6 +98,7 @@ type DialogValues = {
   employeeNo: string;
   displayName: string;
   email: string;
+  authMethod: UserAuthMethod;
   role: UserRole | "";
   employmentStatus: EmploymentStatus | "";
   employmentType: EmploymentType | "";
@@ -101,6 +125,7 @@ export default function UserDialog({
     employeeNo: "",
     displayName: "",
     email: "",
+    authMethod: "GOOGLE",
     role: "",
     employmentStatus: "",
     employmentType: "",
@@ -113,6 +138,12 @@ export default function UserDialog({
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+
+  const [authMethod, setAuthMethod] = useState<UserAuthMethod>("GOOGLE");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
   const [role, setRole] = useState<UserRole | "">("");
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus | "">("");
   const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
@@ -130,11 +161,14 @@ export default function UserDialog({
     employeeNo !== initialValuesRef.current.employeeNo ||
     displayName !== initialValuesRef.current.displayName ||
     email !== initialValuesRef.current.email ||
+    authMethod !== initialValuesRef.current.authMethod ||
     role !== initialValuesRef.current.role ||
     employmentStatus !== initialValuesRef.current.employmentStatus ||
     employmentType !== initialValuesRef.current.employmentType ||
     departmentId !== initialValuesRef.current.departmentId ||
-    positionId !== initialValuesRef.current.positionId;
+    positionId !== initialValuesRef.current.positionId ||
+    password.length > 0 ||
+    confirmPassword.length > 0;
 
   useEffect(() => {
     if (!open) {
@@ -161,10 +195,21 @@ export default function UserDialog({
     }
 
     if (user) {
+      /**
+       * The database/application User model uses `login_provider`
+       * as the canonical authentication provider field.
+       *
+       * The dialog intentionally maps that backend value into the
+       * UI-specific `UserAuthMethod`.
+       */
+      const existingAuthMethod: UserAuthMethod =
+        user.login_provider.toLowerCase() === "google" ? "GOOGLE" : "PASSWORD";
+
       const values: DialogValues = {
         employeeNo: user.employee_no ?? "",
         displayName: user.display_name ?? "",
         email: user.email ?? "",
+        authMethod: existingAuthMethod,
         role: user.role ?? "",
         employmentStatus: user.employment_status ?? "",
         employmentType: user.employment_type ?? "",
@@ -177,6 +222,12 @@ export default function UserDialog({
 
       setDisplayName(values.displayName);
       setEmail(values.email);
+
+      setAuthMethod(values.authMethod);
+      setPassword("");
+      setConfirmPassword("");
+      setPasswordError("");
+
       setRole(values.role);
       setEmploymentStatus(values.employmentStatus);
       setEmploymentType(values.employmentType);
@@ -189,6 +240,7 @@ export default function UserDialog({
         employeeNo: "",
         displayName: "",
         email: "",
+        authMethod: "GOOGLE",
         role: "",
         employmentStatus: "",
         employmentType: "",
@@ -201,6 +253,12 @@ export default function UserDialog({
 
       setDisplayName(values.displayName);
       setEmail(values.email);
+
+      setAuthMethod(values.authMethod);
+      setPassword("");
+      setConfirmPassword("");
+      setPasswordError("");
+
       setRole(values.role);
       setEmploymentStatus(values.employmentStatus);
       setEmploymentType(values.employmentType);
@@ -275,7 +333,7 @@ export default function UserDialog({
 
     let nextSequence = highestSequence + 1;
 
-    /*
+    /**
      * Safety check against the currently loaded Employee Nos.
      *
      * Normally MAX + 1 is already available, but this additionally protects
@@ -289,11 +347,22 @@ export default function UserDialog({
 
     while (existingSet.has(normalizeEmployeeNumber(generatedEmployeeNo))) {
       nextSequence += 1;
+
       generatedEmployeeNo = formatEmployeeNumber(nextSequence, format);
     }
 
     setEmployeeNo(generatedEmployeeNo);
     setEmployeeNoError("");
+  };
+
+  const handleAuthMethodChange = (value: UserAuthMethod) => {
+    setAuthMethod(value);
+
+    if (value === "GOOGLE") {
+      setPassword("");
+      setConfirmPassword("");
+      setPasswordError("");
+    }
   };
 
   const handleSubmit = async () => {
@@ -303,20 +372,58 @@ export default function UserDialog({
 
     const normalizedEmployeeNo = normalizeEmployeeNumber(employeeNo);
 
-    const validation = validateEmployeeNumber(normalizedEmployeeNo);
+    const employeeValidation = validateEmployeeNumber(normalizedEmployeeNo);
 
-    if (!validation.valid) {
-      setEmployeeNoError(validation.error ?? "Invalid Employee No.");
+    if (!employeeValidation.valid) {
+      setEmployeeNoError(employeeValidation.error ?? "Invalid Employee No.");
       return;
     }
+
+    /**
+     * Password validation applies only to PASSWORD authentication.
+     *
+     * On edit, an empty password means:
+     * "keep the existing password".
+     */
+    if (authMethod === "PASSWORD") {
+      const isCreatingPasswordAccount = !isEdit;
+
+      if (isCreatingPasswordAccount && !password) {
+        setPasswordError("Password is required.");
+        return;
+      }
+
+      if (password && password.length < 8) {
+        setPasswordError("Password must be at least 8 characters.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setPasswordError("Passwords do not match.");
+        return;
+      }
+    }
+
+    setPasswordError("");
 
     await onSubmit({
       employee_no: normalizedEmployeeNo,
       display_name: displayName.trim(),
       email: email.trim(),
+      auth_method: authMethod,
+
+      /**
+       * Do not send an empty password during edit.
+       *
+       * The backend can interpret an omitted password as:
+       * "do not change the existing password."
+       */
+      ...(authMethod === "PASSWORD" && password ? { password } : {}),
+
       ...(role ? { role } : {}),
       ...(employmentStatus ? { employment_status: employmentStatus } : {}),
       ...(employmentType ? { employment_type: employmentType } : {}),
+
       department_id: departmentId || null,
       position_id: positionId || null,
     });
@@ -331,6 +438,12 @@ export default function UserDialog({
     setEmployeeNoError("");
     setDisplayName("");
     setEmail("");
+
+    setAuthMethod("GOOGLE");
+    setPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+
     setRole("");
     setEmploymentStatus("");
     setEmploymentType("");
@@ -400,7 +513,7 @@ export default function UserDialog({
           ) : (
             <Stack spacing={2} sx={{ pt: 1 }}>
               {/* ---------------------------------------------------------------- */}
-              {/* Employee No.                                                      */}
+              {/* Employee No.                                                     */}
               {/* ---------------------------------------------------------------- */}
 
               <Stack spacing={0.75}>
@@ -438,7 +551,7 @@ export default function UserDialog({
               </Stack>
 
               {/* ---------------------------------------------------------------- */}
-              {/* Display Name                                                      */}
+              {/* Display Name                                                     */}
               {/* ---------------------------------------------------------------- */}
 
               <TextField
@@ -451,7 +564,7 @@ export default function UserDialog({
               />
 
               {/* ---------------------------------------------------------------- */}
-              {/* Email                                                              */}
+              {/* Email                                                             */}
               {/* ---------------------------------------------------------------- */}
 
               <TextField
@@ -464,7 +577,77 @@ export default function UserDialog({
               />
 
               {/* ---------------------------------------------------------------- */}
-              {/* Role                                                               */}
+              {/* Authentication Method                                            */}
+              {/* ---------------------------------------------------------------- */}
+
+              <FormControl fullWidth>
+                <InputLabel id="user-auth-method-label">Authentication Method</InputLabel>
+
+                <Select
+                  labelId="user-auth-method-label"
+                  value={authMethod}
+                  label="Authentication Method"
+                  onChange={(event) => handleAuthMethodChange(event.target.value as UserAuthMethod)}
+                >
+                  <MenuItem value="GOOGLE">Google</MenuItem>
+
+                  <MenuItem value="PASSWORD">Email &amp; Password</MenuItem>
+                </Select>
+
+                <FormHelperText>
+                  {authMethod === "GOOGLE"
+                    ? "User signs in using Google OAuth."
+                    : "User signs in using their WorkPulse email and password."}
+                </FormHelperText>
+              </FormControl>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Password                                                          */}
+              {/* ---------------------------------------------------------------- */}
+
+              {authMethod === "PASSWORD" && (
+                <Stack spacing={2}>
+                  <TextField
+                    label={isEdit ? "New Password" : "Password"}
+                    type="password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setPasswordError("");
+                    }}
+                    required={!isEdit}
+                    fullWidth
+                    error={Boolean(passwordError)}
+                    autoComplete="new-password"
+                    helperText={
+                      isEdit ? "Leave blank to keep the current password." : "Minimum 8 characters."
+                    }
+                  />
+
+                  <TextField
+                    label="Confirm Password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      setPasswordError("");
+                    }}
+                    required={!isEdit && authMethod === "PASSWORD"}
+                    fullWidth
+                    error={Boolean(passwordError)}
+                    autoComplete="new-password"
+                    helperText={
+                      passwordError ||
+                      (isEdit
+                        ? "Only required when changing the password."
+                        : "Enter the password again.")
+                    }
+                  />
+                </Stack>
+              )}
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Role                                                              */}
               {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
@@ -493,7 +676,7 @@ export default function UserDialog({
               </FormControl>
 
               {/* ---------------------------------------------------------------- */}
-              {/* Employment Status                                                 */}
+              {/* Employment Status                                                */}
               {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
@@ -524,7 +707,7 @@ export default function UserDialog({
               </FormControl>
 
               {/* ---------------------------------------------------------------- */}
-              {/* Employment Type                                                   */}
+              {/* Employment Type                                                  */}
               {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth>
@@ -551,7 +734,7 @@ export default function UserDialog({
               </FormControl>
 
               {/* ---------------------------------------------------------------- */}
-              {/* Department                                                         */}
+              {/* Department                                                        */}
               {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={departmentsLoading}>
@@ -576,7 +759,7 @@ export default function UserDialog({
               </FormControl>
 
               {/* ---------------------------------------------------------------- */}
-              {/* Position                                                           */}
+              {/* Position                                                          */}
               {/* ---------------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={positionsLoading}>

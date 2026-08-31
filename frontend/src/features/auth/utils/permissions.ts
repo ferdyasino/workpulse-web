@@ -26,22 +26,25 @@ export function isPlatformOwner(user?: User | null): boolean {
     return false;
   }
 
-  return Boolean(env.platformOwnerEmail) && user.email === env.platformOwnerEmail;
+  return (
+    Boolean(env.platformOwnerEmail) &&
+    user.email.toLowerCase() === env.platformOwnerEmail.toLowerCase()
+  );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Workspace Ownership                                                        */
+/* Workspace Ownership                                                       */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Checks if user owns the current workspace.
+ * Checks if the user owns the current workspace.
  */
 export function isWorkspaceOwner(user?: User | null, workspace?: Workspace | null): boolean {
   if (!user?.email || !workspace?.owner_email) {
     return false;
   }
 
-  return user.email === workspace.owner_email;
+  return user.email.toLowerCase() === workspace.owner_email.toLowerCase();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -60,19 +63,14 @@ export function hasRole(user?: User | null, roles: UserRole[] = []): boolean {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Platform Administration                                                   */
+/* Platform Administration                                                    */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Platform administration access.
  *
- * This is intentionally restricted to the Platform Owner.
- *
- * Examples:
- * - Manage workspaces
- * - Manage platform-level configuration
- * - Manage workspace ownership
- * - Assign workspace administrators
+ * Allowed:
+ * - Platform Owner
  */
 export function canManagePlatform(user?: User | null): boolean {
   return isPlatformOwner(user);
@@ -135,7 +133,7 @@ export function canManageWorkspace(user?: User | null, workspace?: Workspace | n
     return false;
   }
 
-  // Platform owner has access to every workspace.
+  // Platform Owner has access to every workspace.
   if (isPlatformOwner(user)) {
     return true;
   }
@@ -155,8 +153,6 @@ export function canManageWorkspace(user?: User | null, workspace?: Workspace | n
 
 /**
  * User CRUD access.
- *
- * This controls ordinary workspace user management.
  *
  * Allowed:
  * - Platform Owner
@@ -283,8 +279,53 @@ export function canAccessSupervisorFeatures(user?: User | null): boolean {
  * - ADMIN
  * - HR
  * - SUPERVISOR
+ * - EMPLOYEE
+ *
+ * IMPORTANT:
+ *
+ * EMPLOYEE access here means the employee may enter the Reports page.
+ * It does NOT grant access to other employees' records.
+ *
+ * Employee report scope MUST be enforced by the Reports page/query/API:
+ *
+ * EMPLOYEE -> current user's own records only
+ *
+ * OWNER / ADMIN / HR / SUPERVISOR / Platform Owner
+ * -> appropriate workspace/report scope
  */
 export function canViewReports(user?: User | null): boolean {
+  if (!user) {
+    return false;
+  }
+
+  if (isPlatformOwner(user)) {
+    return true;
+  }
+
+  return hasRole(user, ["OWNER", "ADMIN", "HR", "SUPERVISOR", "EMPLOYEE"]);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Settings                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Settings access.
+ *
+ * Allowed:
+ * - Platform Owner
+ * - OWNER
+ * - ADMIN
+ * - HR
+ * - SUPERVISOR
+ *
+ * EMPLOYEE:
+ * - Settings hidden from navigation
+ * - Direct /settings access denied
+ *
+ * This prevents Settings from being merely hidden in the UI.
+ */
+export function canAccessSettings(user?: User | null): boolean {
   if (!user) {
     return false;
   }
