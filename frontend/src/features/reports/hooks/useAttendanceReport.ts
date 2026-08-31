@@ -6,6 +6,9 @@ import {
   getAttendanceReport,
   type AttendanceReportRequest,
   type AttendanceReportRow,
+  type BreakReportRow,
+  type WeeklyReportRow,
+  type ReportType,
 } from "../services/reports.service";
 
 export function useAttendanceReport(params: {
@@ -14,32 +17,29 @@ export function useAttendanceReport(params: {
   user_id?: string;
   department_id?: string;
   timezone?: string;
+  report_type?: ReportType;
 }) {
   const { workspace } = useWorkspace();
 
   const workspaceId = workspace?.id ?? null;
 
   const [rows, setRows] = useState<AttendanceReportRow[]>([]);
+  const [breakRows, setBreakRows] = useState<BreakReportRow[]>([]);
+  const [weeklyRows, setWeeklyRows] = useState<WeeklyReportRow[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadReport = useCallback(async () => {
-    /*
-     * Do not call the API until we have a workspace and valid dates.
-     *
-     * This prevents:
-     *
-     * date_from: ""
-     * date_to: ""
-     *
-     * from reaching the Edge Function.
-     */
     if (
       !workspaceId ||
       !/^\d{4}-\d{2}-\d{2}$/.test(params.date_from) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(params.date_to)
+      !/^\d{4}-\d{2}-\d{2}$/.test(params.date_to) ||
+      params.date_from > params.date_to
     ) {
       setRows([]);
+      setBreakRows([]);
+      setWeeklyRows([]);
       setLoading(false);
       return;
     }
@@ -70,12 +70,24 @@ export function useAttendanceReport(params: {
               timezone: params.timezone,
             }
           : {}),
+
+        ...(params.report_type
+          ? {
+              report_type: params.report_type,
+            }
+          : {}),
       };
 
       const data = await getAttendanceReport(payload);
 
-      setRows(data);
+      setRows(data.rows ?? []);
+      setBreakRows(data.break_rows ?? []);
+      setWeeklyRows(data.weekly_rows ?? []);
     } catch (err) {
+      setRows([]);
+      setBreakRows([]);
+      setWeeklyRows([]);
+
       setError(err instanceof Error ? err.message : "Failed to load attendance report");
     } finally {
       setLoading(false);
@@ -87,6 +99,7 @@ export function useAttendanceReport(params: {
     params.user_id,
     params.department_id,
     params.timezone,
+    params.report_type,
   ]);
 
   useEffect(() => {
@@ -95,6 +108,8 @@ export function useAttendanceReport(params: {
 
   return {
     rows,
+    breakRows,
+    weeklyRows,
     loading,
     error,
     refresh: loadReport,
