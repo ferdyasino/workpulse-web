@@ -31,20 +31,26 @@ import type { ReportType } from "../services/reports.service";
 /* -------------------------------------------------------------------------- */
 
 function getTodayInTimezone(timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 }
 
-function formatMinutes(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes <= 0) {
+function formatMinutes(minutes: number | null | undefined): string {
+  const value = Number(minutes ?? 0);
+
+  if (!Number.isFinite(value) || value <= 0) {
     return "00:00";
   }
 
-  const normalizedMinutes = Math.floor(minutes);
+  const normalizedMinutes = Math.floor(value);
 
   const hours = Math.floor(normalizedMinutes / 60);
   const remainingMinutes = normalizedMinutes % 60;
@@ -94,14 +100,13 @@ function formatDate(value: string): string {
 }
 
 /**
- * Shift start/end returned by the backend are expected to be local
- * wall-clock values such as:
+ * Shift start/end returned by the backend are local wall-clock values such as:
  *
  *   "08:00"
  *   "16:00"
  *
- * This formatter intentionally does NOT apply timezone conversion because
- * these are shift schedule times, not UTC attendance event timestamps.
+ * These are intentionally NOT timezone converted because they represent
+ * the configured shift schedule rather than UTC attendance timestamps.
  */
 function formatShiftTime(value: string | null): string {
   if (!value) {
@@ -154,6 +159,193 @@ function getShiftSchedule(row: ReportRowWithShiftTimes): string | null {
   return `${start} – ${end}`;
 }
 
+/**
+ * Return the Monday of the week containing the supplied date.
+ *
+ * This is only used by the "This Week" convenience action.
+ * The actual Range Hours report does NOT depend on this.
+ */
+function getMonday(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const day = date.getDay();
+
+  // Sunday = 0, Monday = 1
+  const difference = day === 0 ? -6 : 1 - day;
+
+  date.setDate(date.getDate() + difference);
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * Return the Sunday of the week containing the supplied date.
+ *
+ * This is only used by the "This Week" convenience action.
+ */
+function getSunday(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const day = date.getDay();
+
+  // Sunday = 0
+  const difference = day === 0 ? 0 : 7 - day;
+
+  date.setDate(date.getDate() + difference);
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Range Hours                                                                */
+/* -------------------------------------------------------------------------- */
+
+type RangeHoursRow = {
+  user_id: string;
+  employee_name: string;
+  employee_no: string;
+
+  range_start: string;
+  range_end: string;
+
+  days_present: number;
+  days_absent: number;
+
+  total_scheduled_minutes: number;
+  total_worked_minutes: number;
+  total_break_minutes: number;
+  total_late_minutes: number;
+  total_undertime_minutes: number;
+  total_overtime_minutes: number;
+};
+
+/**
+ * Range Hours is intentionally derived from DAILY rows.
+ *
+ * This prevents the frontend from depending on a legacy WEEKLY aggregation
+ * that may automatically expand the selected range to seven days.
+ *
+ * Important:
+ *
+ *   - Only rows returned by the selected date_from/date_to range are counted.
+ *   - ABSENT is counted only when the backend actually returns an ABSENT row.
+ *   - Days with no scheduled/work hours and no timelogs do not become absent.
+ */
+function buildRangeHoursRows(
+  rows: Array<{
+    user_id: string;
+    employee_name: string;
+    employee_no: string;
+    work_date: string;
+
+    scheduled_minutes?: number | null;
+    worked_minutes?: number | null;
+    break_minutes?: number | null;
+    late_minutes?: number | null;
+    undertime_minutes?: number | null;
+    overtime_minutes?: number | null;
+
+    attendance_status?: string | null;
+  }>,
+  dateFrom: string,
+  dateTo: string,
+): RangeHoursRow[] {
+  if (!dateFrom || !dateTo || !rows.length) {
+    return [];
+  }
+
+  const grouped = new Map<string, RangeHoursRow>();
+
+  for (const row of rows) {
+    const userId = row.user_id;
+
+    const existing = grouped.get(userId);
+
+    const status = String(row.attendance_status ?? "").toUpperCase();
+
+    const scheduledMinutes = Number(row.scheduled_minutes ?? 0);
+    const workedMinutes = Number(row.worked_minutes ?? 0);
+    const breakMinutes = Number(row.break_minutes ?? 0);
+    const lateMinutes = Number(row.late_minutes ?? 0);
+    const undertimeMinutes = Number(row.undertime_minutes ?? 0);
+    const overtimeMinutes = Number(row.overtime_minutes ?? 0);
+
+    /*
+     * Attendance status rules:
+     *
+     * Any actual attendance is considered a present day.
+     *
+     * IN_PROGRESS / INCOMPLETE / PRESENT / LATE / UNDERTIME /
+     * LATE_UNDERTIME / OVERTIME / LATE_OVERTIME
+     *
+     * are all attendance days rather than absent days.
+     */
+    const hasAttendance =
+      status !== "ABSENT" &&
+      (Boolean(row.work_date) || workedMinutes > 0 || lateMinutes > 0 || overtimeMinutes > 0);
+
+    const isAbsent = status === "ABSENT";
+
+    if (!existing) {
+      grouped.set(userId, {
+        user_id: userId,
+        employee_name: row.employee_name,
+        employee_no: row.employee_no,
+
+        range_start: dateFrom,
+        range_end: dateTo,
+
+        days_present: hasAttendance ? 1 : 0,
+        days_absent: isAbsent ? 1 : 0,
+
+        total_scheduled_minutes: Math.max(0, scheduledMinutes),
+        total_worked_minutes: Math.max(0, workedMinutes),
+        total_break_minutes: Math.max(0, breakMinutes),
+        total_late_minutes: Math.max(0, lateMinutes),
+        total_undertime_minutes: Math.max(0, undertimeMinutes),
+        total_overtime_minutes: Math.max(0, overtimeMinutes),
+      });
+
+      continue;
+    }
+
+    if (hasAttendance) {
+      existing.days_present += 1;
+    }
+
+    if (isAbsent) {
+      existing.days_absent += 1;
+    }
+
+    existing.total_scheduled_minutes += Math.max(0, scheduledMinutes);
+    existing.total_worked_minutes += Math.max(0, workedMinutes);
+    existing.total_break_minutes += Math.max(0, breakMinutes);
+    existing.total_late_minutes += Math.max(0, lateMinutes);
+    existing.total_undertime_minutes += Math.max(0, undertimeMinutes);
+    existing.total_overtime_minutes += Math.max(0, overtimeMinutes);
+  }
+
+  return Array.from(grouped.values()).sort((a, b) =>
+    a.employee_name.localeCompare(b.employee_name),
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -167,13 +359,21 @@ export default function ReportsPage() {
 
   const [date, setDate] = useState("");
   const [dateTo, setDateTo] = useState("");
+
   const [userId, setUserId] = useState("");
+
   const [tab, setTab] = useState(0);
 
   /* ------------------------------------------------------------------------ */
   /* Report type                                                              */
   /* ------------------------------------------------------------------------ */
 
+  /**
+   * The backend can continue returning WEEKLY for compatibility.
+   *
+   * The UI no longer relies on weeklyRows for the Range Hours display.
+   * Range Hours are calculated from the daily rows below.
+   */
   const reportType: ReportType = useMemo(() => {
     switch (tab) {
       case 1:
@@ -207,7 +407,7 @@ export default function ReportsPage() {
   /* Report                                                                    */
   /* ------------------------------------------------------------------------ */
 
-  const { rows, breakRows, weeklyRows, loading, error, refresh } = useAttendanceReport({
+  const { rows, breakRows, loading, error, refresh } = useAttendanceReport({
     date_from: date,
     date_to: tab === 2 ? dateTo : date,
     timezone,
@@ -219,6 +419,18 @@ export default function ReportsPage() {
         }
       : {}),
   });
+
+  /* ------------------------------------------------------------------------ */
+  /* Range Hours                                                              */
+  /* ------------------------------------------------------------------------ */
+
+  const rangeRows = useMemo(() => {
+    if (tab !== 2) {
+      return [];
+    }
+
+    return buildRangeHoursRows(rows, date, dateTo);
+  }, [rows, date, dateTo, tab]);
 
   /* ------------------------------------------------------------------------ */
   /* Labels                                                                    */
@@ -312,7 +524,7 @@ export default function ReportsPage() {
             mb: 3,
           }}
         >
-          Attendance, breaks, daily worked hours, and weekly hours per agent.
+          Attendance, breaks, daily worked hours, and range hours per agent.
         </Typography>
 
         {/* -------------------------------------------------------------- */}
@@ -329,25 +541,32 @@ export default function ReportsPage() {
           }}
         >
           <TextField
-            label={tab === 2 ? "Week From" : "Date"}
+            label={tab === 2 ? "Date From" : "Date"}
             type="date"
             value={date}
             onChange={(event) => {
               setDate(event.target.value);
+
+              if (tab === 2 && dateTo && event.target.value > dateTo) {
+                setDateTo(event.target.value);
+              }
             }}
             slotProps={{
               inputLabel: {
                 shrink: true,
               },
+              htmlInput: {
+                max: getTodayInTimezone(timezone),
+              },
             }}
             sx={{
-              minWidth: 190,
+              minWidth: 180,
             }}
           />
 
           {tab === 2 && (
             <TextField
-              label="Week To"
+              label="Date To"
               type="date"
               value={dateTo}
               onChange={(event) => {
@@ -357,9 +576,13 @@ export default function ReportsPage() {
                 inputLabel: {
                   shrink: true,
                 },
+                htmlInput: {
+                  min: date,
+                  max: getTodayInTimezone(timezone),
+                },
               }}
               sx={{
-                minWidth: 190,
+                minWidth: 180,
               }}
             />
           )}
@@ -388,6 +611,37 @@ export default function ReportsPage() {
               ))}
             </Select>
           </FormControl>
+
+          {tab === 2 && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => {
+                if (!date) {
+                  return;
+                }
+
+                setDate(getMonday(date));
+                setDateTo(getSunday(date));
+              }}
+              sx={{
+                minHeight: 40,
+                px: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                backgroundColor: "transparent",
+                color: "text.primary",
+                cursor: "pointer",
+                font: "inherit",
+                "&:hover": {
+                  backgroundColor: "action.hover",
+                },
+              }}
+            >
+              This Week
+            </Box>
+          )}
         </Box>
 
         {/* -------------------------------------------------------------- */}
@@ -401,8 +655,10 @@ export default function ReportsPage() {
           }}
         >
           <Tab label="Daily Attendance" />
+
           <Tab label="Breaks" />
-          <Tab label="Weekly Hours" />
+
+          <Tab label="Range Hours" />
         </Tabs>
       </Box>
 
@@ -556,10 +812,6 @@ export default function ReportsPage() {
                           </TableCell>
 
                           <TableCell>{formatDate(row.work_date)}</TableCell>
-
-                          {/* ------------------------------------------------ */}
-                          {/* Shift name + shift schedule                    */}
-                          {/* ------------------------------------------------ */}
 
                           <TableCell>
                             <Box
@@ -726,6 +978,7 @@ export default function ReportsPage() {
 
                         if (existing) {
                           existing.rows.push(row);
+
                           existing.total_minutes += row.break_minutes ?? 0;
                         } else {
                           grouped.set(key, {
@@ -832,7 +1085,7 @@ export default function ReportsPage() {
         )}
 
         {/* ================================================================== */}
-        {/* WEEKLY HOURS                                                       */}
+        {/* RANGE HOURS                                                        */}
         {/* ================================================================== */}
 
         {tab === 2 && (
@@ -844,7 +1097,7 @@ export default function ReportsPage() {
                 mb: 2,
               }}
             >
-              Weekly Hours — {selectedRangeLabel}
+              Range Hours — {selectedRangeLabel}
             </Typography>
 
             <TableContainer
@@ -866,7 +1119,7 @@ export default function ReportsPage() {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>Agent</TableCell>
 
-                    <TableCell sx={{ fontWeight: 700 }}>Week</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Range</TableCell>
 
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
                       Present
@@ -912,10 +1165,10 @@ export default function ReportsPage() {
                           py: 5,
                         }}
                       >
-                        Loading weekly report...
+                        Loading range report...
                       </TableCell>
                     </TableRow>
-                  ) : weeklyRows.length === 0 ? (
+                  ) : rangeRows.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={10}
@@ -924,12 +1177,12 @@ export default function ReportsPage() {
                           py: 5,
                         }}
                       >
-                        No weekly records found.
+                        No range records found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    weeklyRows.map((row) => (
-                      <TableRow key={`${row.user_id}-${row.week_start}`} hover>
+                    rangeRows.map((row) => (
+                      <TableRow key={row.user_id} hover>
                         <TableCell>
                           <Box>
                             <Typography
@@ -948,7 +1201,7 @@ export default function ReportsPage() {
                         </TableCell>
 
                         <TableCell>
-                          {formatDate(row.week_start)} – {formatDate(row.week_end)}
+                          {formatDate(row.range_start)} – {formatDate(row.range_end)}
                         </TableCell>
 
                         <TableCell align="right">{row.days_present}</TableCell>

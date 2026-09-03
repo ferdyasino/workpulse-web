@@ -9,22 +9,6 @@ export async function handleReportRoutes(ctx: RouteContext) {
     /* ---------------------------------------------------------------------- */
 
     case "REPORT_ATTENDANCE": {
-      console.log(
-        "ATTENDANCE REPORT REQUEST:",
-        JSON.stringify({
-          action: ctx.body.action,
-          workspace_id: ctx.body.workspace_id,
-          date_from: ctx.body.date_from,
-          date_to: ctx.body.date_to,
-          user_id: ctx.body.user_id ?? null,
-          department_id: ctx.body.department_id ?? null,
-          timezone: ctx.body.timezone ?? null,
-          report_type: ctx.body.report_type ?? "DAILY",
-          authenticated_user_id: ctx.authUserId,
-          authenticated_email: ctx.email ?? null,
-        }),
-      );
-
       const report = await getAttendanceReport(ctx.supabaseAdmin, {
         workspace_id: ctx.body.workspace_id,
 
