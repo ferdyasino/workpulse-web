@@ -27,6 +27,17 @@ type PositionRow = Tables<"positions">;
 
 type AttendanceSession = ReturnType<typeof buildAttendanceSessions>[number];
 
+/**
+ * The frontend already supports these fields.
+ *
+ * Keep them as an extended report type here so this file remains compatible
+ * even if shared/api.report.ts has not yet been updated.
+ */
+type AttendanceReportRowWithShiftTimes = AttendanceReportRow & {
+  shift_start_time: string | null;
+  shift_end_time: string | null;
+};
+
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -111,7 +122,6 @@ function getMinutesBetween(start: string | null, end: string | null): number {
   }
 
   const startTime = new Date(start).getTime();
-
   const endTime = new Date(end).getTime();
 
   if (Number.isNaN(startTime) || Number.isNaN(endTime)) {
@@ -123,6 +133,16 @@ function getMinutesBetween(start: string | null, end: string | null): number {
   }
 
   return Math.floor((endTime - startTime) / 60000);
+}
+
+function getMinutesBetweenDates(start: Date, end: Date): number {
+  const difference = end.getTime() - start.getTime();
+
+  if (difference <= 0) {
+    return 0;
+  }
+
+  return Math.floor(difference / 60000);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -149,11 +169,8 @@ function getBreakPeriods(session: AttendanceSession): {
 
     periods.push({
       type: "BREAK",
-
       break_in: breakPeriod.in,
-
       break_out: breakPeriod.out,
-
       break_minutes: getMinutesBetween(breakPeriod.in, breakPeriod.out),
     });
   }
@@ -161,11 +178,8 @@ function getBreakPeriods(session: AttendanceSession): {
   if (session.lunch.in || session.lunch.out) {
     periods.push({
       type: "LUNCH",
-
       break_in: session.lunch.in,
-
       break_out: session.lunch.out,
-
       break_minutes: getMinutesBetween(session.lunch.in, session.lunch.out),
     });
   }
@@ -217,19 +231,12 @@ function localDateTimeToUtc(
   for (let attempt = 0; attempt < 3; attempt++) {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
-
       year: "numeric",
-
       month: "2-digit",
-
       day: "2-digit",
-
       hour: "2-digit",
-
       minute: "2-digit",
-
       second: "2-digit",
-
       hourCycle: "h23",
     }).formatToParts(candidate);
 
@@ -281,6 +288,64 @@ function getShiftWindow(
   };
 }
 
+/**
+ * Scheduled work is based on the shift's configured attendance span.
+ *
+ * Rules:
+ *
+ * - Exact 8-hour shift = 8 scheduled hours.
+ * - Longer shifts subtract the configured break allowance.
+ * - Break is tracked separately and does not reduce an intact 8-hour Agent
+ *   shift.
+ *
+ * Examples:
+ *
+ * 08:00–16:00 + 30m break => 08:00 scheduled
+ * 10:00–18:00 + 30m break => 08:00 scheduled
+ * 12:00–20:00 + 30m break => 08:00 scheduled
+ * 08:00–17:00 + 30m break => 08:30 scheduled
+ * 09:00–18:00 + 30m break => 08:30 scheduled
+ * 10:00–20:00 + 30m break => 09:30 scheduled
+ * 09:00–18:00 + 60m break => 08:00 scheduled
+ */
+function getScheduledMinutes(
+  shift: ShiftRow,
+  shiftWindow: {
+    startsAt: Date;
+    endsAt: Date;
+  },
+): number {
+  const shiftSpanMinutes = getMinutesBetweenDates(
+    shiftWindow.startsAt,
+    shiftWindow.endsAt,
+  );
+
+  const breakAllowance = Math.max(0, shift.break_minutes ?? 0);
+
+  /**
+   * An intact 8-hour shift remains 8 scheduled hours.
+   *
+   * This specifically prevents:
+   *
+   * 08:00–16:00 - 30m = 07:30
+   *
+   * which is incorrect for Agent shifts.
+   */
+  if (shiftSpanMinutes === 480) {
+    return 480;
+  }
+
+  /**
+   * For shifts longer than 8 hours, configured break allowance is
+   * part of the scheduled attendance span calculation.
+   */
+  if (shiftSpanMinutes > 480 && breakAllowance > 0) {
+    return Math.max(0, shiftSpanMinutes - breakAllowance);
+  }
+
+  return shiftSpanMinutes;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Attendance Metrics                                                         */
 /* -------------------------------------------------------------------------- */
@@ -288,6 +353,7 @@ function getShiftWindow(
 function calculateMetrics(
   session: AttendanceSession | null,
   shift: ShiftRow | null,
+  workDate: string,
 ): {
   worked_minutes: number;
   break_minutes: number;
@@ -297,122 +363,214 @@ function calculateMetrics(
   overtime_minutes: number;
   attendance_status: string;
 } {
-  if (!session || !session.time_in) {
-    return {
-      worked_minutes: 0,
-
-      break_minutes: 0,
-
-      scheduled_minutes: shift
-        ? Math.max(
-            0,
-            getShiftWindow(
-              extractWorkDate(session?.time_in ?? "", shift.timezone),
-              shift,
-            ).endsAt.getTime(),
-          )
-        : 0,
-
-      late_minutes: 0,
-
-      undertime_minutes: 0,
-
-      overtime_minutes: 0,
-
-      attendance_status: "ABSENT",
-    };
-  }
-
-  const elapsedMinutes = getMinutesBetween(session.time_in, session.time_out);
-
-  const breakMinutes = getBreakMinutes(session);
-
-  const workedMinutes = Math.max(0, elapsedMinutes - breakMinutes);
-
+  /**
+   * No shift means there is no scheduled attendance target.
+   */
   if (!shift) {
+    if (!session || !session.time_in) {
+      return {
+        worked_minutes: 0,
+        break_minutes: 0,
+        scheduled_minutes: 0,
+        late_minutes: 0,
+        undertime_minutes: 0,
+        overtime_minutes: 0,
+        attendance_status: "ABSENT",
+      };
+    }
+
+    const breakMinutes = getBreakMinutes(session);
+
+    const workedMinutes = Math.max(
+      0,
+      getMinutesBetween(session.time_in, session.time_out) - breakMinutes,
+    );
+
     return {
       worked_minutes: workedMinutes,
-
       break_minutes: breakMinutes,
-
       scheduled_minutes: 0,
-
       late_minutes: 0,
-
       undertime_minutes: 0,
-
       overtime_minutes: 0,
-
       attendance_status: session.time_out ? "PRESENT" : "INCOMPLETE",
     };
   }
 
-  const workDate = extractWorkDate(session.time_in, shift.timezone);
-
   const shiftWindow = getShiftWindow(workDate, shift);
 
-  const scheduledMinutes = Math.max(
-    0,
-    Math.floor(
-      (shiftWindow.endsAt.getTime() - shiftWindow.startsAt.getTime()) / 60000,
-    ) - shift.break_minutes,
-  );
+  const scheduledMinutes = getScheduledMinutes(shift, shiftWindow);
+
+  /**
+   * No IN:
+   *
+   * The employee is absent for the scheduled date.
+   */
+  if (!session || !session.time_in) {
+    return {
+      worked_minutes: 0,
+      break_minutes: 0,
+      scheduled_minutes: scheduledMinutes,
+      late_minutes: 0,
+      undertime_minutes: 0,
+      overtime_minutes: 0,
+      attendance_status: "ABSENT",
+    };
+  }
+
+  const breakMinutes = getBreakMinutes(session);
+
+  /**
+   * Actual worked time:
+   *
+   * elapsed attendance - actual breaks/lunch.
+   *
+   * Breaks are therefore actual attendance metrics and are NOT
+   * automatically deducted from an intact 8-hour scheduled value.
+   */
+  const elapsedMinutes = getMinutesBetween(session.time_in, session.time_out);
+
+  let workedMinutes = Math.max(0, elapsedMinutes - breakMinutes);
 
   const timeIn = new Date(session.time_in);
 
+  if (Number.isNaN(timeIn.getTime())) {
+    return {
+      worked_minutes: workedMinutes,
+      break_minutes: breakMinutes,
+      scheduled_minutes: scheduledMinutes,
+      late_minutes: 0,
+      undertime_minutes: 0,
+      overtime_minutes: 0,
+      attendance_status: session.time_out ? "PRESENT" : "INCOMPLETE",
+    };
+  }
+
   const graceMinutes = Math.max(0, shift.grace_minutes ?? 0);
 
-  const lateThreshold = shiftWindow.startsAt.getTime() + graceMinutes * 60000;
+  const shiftStartMs = shiftWindow.startsAt.getTime();
+  const shiftEndMs = shiftWindow.endsAt.getTime();
+  const timeInMs = timeIn.getTime();
+
+  /**
+   * Grace handling:
+   *
+   * If an employee clocks in within the configured grace period,
+   * the grace time does not reduce worked hours and does not create
+   * late/undertime.
+   *
+   * Example:
+   *
+   * Shift: 09:00
+   * Grace: 10m
+   * IN: 09:10
+   *
+   * Late = 0
+   * Worked receives the 10m grace credit.
+   */
+  const actualLateMinutes =
+    timeInMs > shiftStartMs ? Math.floor((timeInMs - shiftStartMs) / 60000) : 0;
 
   const lateMinutes =
-    timeIn.getTime() > lateThreshold
-      ? Math.floor((timeIn.getTime() - shiftWindow.startsAt.getTime()) / 60000)
-      : 0;
+    actualLateMinutes > graceMinutes ? actualLateMinutes - graceMinutes : 0;
+
+  /**
+   * Credit grace time back to worked time when the employee
+   * arrives within the grace window.
+   */
+  if (actualLateMinutes > 0 && actualLateMinutes <= graceMinutes) {
+    workedMinutes += actualLateMinutes;
+  }
 
   let undertimeMinutes = 0;
-
   let overtimeMinutes = 0;
 
+  /**
+   * Undertime is based on missing ATTENDANCE SPAN, not:
+   *
+   * scheduled_minutes - worked_minutes
+   *
+   * because worked_minutes already removes actual breaks/lunch.
+   */
   if (session.time_out) {
     const timeOut = new Date(session.time_out);
 
-    if (timeOut.getTime() < shiftWindow.endsAt.getTime()) {
-      undertimeMinutes = Math.floor(
-        (shiftWindow.endsAt.getTime() - timeOut.getTime()) / 60000,
-      );
-    }
+    if (!Number.isNaN(timeOut.getTime())) {
+      const timeOutMs = timeOut.getTime();
 
-    if (timeOut.getTime() > shiftWindow.endsAt.getTime()) {
-      overtimeMinutes = Math.floor(
-        (timeOut.getTime() - shiftWindow.endsAt.getTime()) / 60000,
-      );
+      /**
+       * Effective attendance start receives grace credit when
+       * the employee arrived within the grace period.
+       */
+      let effectiveAttendanceStartMs = timeInMs;
+
+      if (actualLateMinutes > 0 && actualLateMinutes <= graceMinutes) {
+        effectiveAttendanceStartMs = shiftStartMs;
+      }
+
+      /**
+       * Missing attendance span before shift end.
+       */
+      if (timeOutMs < shiftEndMs) {
+        undertimeMinutes = Math.floor(
+          (shiftEndMs - effectiveAttendanceStartMs) / 60000,
+        );
+
+        /**
+         * Do not allow undertime to become negative.
+         */
+        undertimeMinutes = Math.max(0, undertimeMinutes);
+      }
+
+      /**
+       * Overtime is actual time beyond scheduled shift end.
+       */
+      if (timeOutMs > shiftEndMs) {
+        overtimeMinutes = Math.floor((timeOutMs - shiftEndMs) / 60000);
+      }
     }
   }
 
+  /**
+   * Status priority:
+   *
+   * IN missing       -> ABSENT
+   * OUT missing      -> INCOMPLETE
+   * Late + OT        -> LATE_OVERTIME
+   * Late + undertime -> LATE_UNDERTIME
+   * OT               -> OVERTIME
+   * Late             -> LATE
+   * Undertime        -> UNDERTIME
+   * Otherwise        -> PRESENT
+   */
   let attendanceStatus = "PRESENT";
 
   if (!session.time_out) {
     attendanceStatus = "INCOMPLETE";
+  } else if (lateMinutes > 0 && overtimeMinutes > 0) {
+    attendanceStatus = "LATE_OVERTIME";
+  } else if (lateMinutes > 0 && undertimeMinutes > 0) {
+    attendanceStatus = "LATE_UNDERTIME";
+  } else if (overtimeMinutes > 0) {
+    attendanceStatus = "OVERTIME";
   } else if (lateMinutes > 0) {
     attendanceStatus = "LATE";
   } else if (undertimeMinutes > 0) {
     attendanceStatus = "UNDERTIME";
-  } else if (overtimeMinutes > 0) {
-    attendanceStatus = "OVERTIME";
   }
 
   return {
-    worked_minutes: workedMinutes,
+    worked_minutes: Math.max(0, Math.floor(workedMinutes)),
 
     break_minutes: breakMinutes,
 
     scheduled_minutes: scheduledMinutes,
 
-    late_minutes: lateMinutes,
+    late_minutes: Math.max(0, lateMinutes),
 
-    undertime_minutes: undertimeMinutes,
+    undertime_minutes: Math.max(0, undertimeMinutes),
 
-    overtime_minutes: overtimeMinutes,
+    overtime_minutes: Math.max(0, overtimeMinutes),
 
     attendance_status: attendanceStatus,
   };
@@ -422,29 +580,26 @@ function calculateMetrics(
 /* Work Date                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function extractWorkDate(timestamp: string, timezone: string): string {
-  const date = new Date(timestamp);
+// function extractWorkDate(timestamp: string, timezone: string): string {
+//   const date = new Date(timestamp);
 
-  if (Number.isNaN(date.getTime())) {
-    return timestamp.slice(0, 10);
-  }
+//   if (Number.isNaN(date.getTime())) {
+//     return timestamp.slice(0, 10);
+//   }
 
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
+//   const parts = new Intl.DateTimeFormat("en-US", {
+//     timeZone: timezone,
+//     year: "numeric",
+//     month: "2-digit",
+//     day: "2-digit",
+//   }).formatToParts(date);
 
-    year: "numeric",
+//   const values = Object.fromEntries(
+//     parts.map((part) => [part.type, part.value]),
+//   );
 
-    month: "2-digit",
-
-    day: "2-digit",
-  }).formatToParts(date);
-
-  const values = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-
-  return [values.year, values.month, values.day].join("-");
-}
+//   return [values.year, values.month, values.day].join("-");
+// }
 
 /* -------------------------------------------------------------------------- */
 /* User Assignment                                                            */
@@ -675,7 +830,7 @@ export async function getAttendanceReport(
   /* Daily Report                                                              */
   /* ------------------------------------------------------------------------ */
 
-  const rows: AttendanceReportRow[] = [];
+  const rows: AttendanceReportRowWithShiftTimes[] = [];
 
   const breakRows: BreakReportRow[] = [];
 
@@ -689,10 +844,20 @@ export async function getAttendanceReport(
 
       const logsForDate = logsByUserAndDate.get(`${user.id}:${workDate}`) ?? [];
 
+      /**
+       * No assignment and no attendance:
+       * nothing to report.
+       */
       if (!assignment && logsForDate.length === 0) {
         continue;
       }
 
+      /**
+       * Resolve the shift from the user's effective assignment.
+       *
+       * If attendance exists without an assignment, fall back to the
+       * user_shift_id attached to the attendance log.
+       */
       const shift = assignment
         ? (shiftsById.get(assignment.shift_id) ?? null)
         : logsForDate.length > 0
@@ -704,7 +869,7 @@ export async function getAttendanceReport(
 
       const latestSession = getLatestAttendanceSession(sessions);
 
-      const metrics = calculateMetrics(latestSession, shift);
+      const metrics = calculateMetrics(latestSession, shift, workDate);
 
       const department = user.department_id
         ? (departmentsById.get(user.department_id) ?? null)
@@ -733,6 +898,19 @@ export async function getAttendanceReport(
         position: position?.title ?? null,
 
         shift_name: shift?.name ?? null,
+
+        /**
+         * IMPORTANT:
+         *
+         * These are wall-clock schedule values from the shift definition.
+         *
+         * Do NOT convert them to UTC.
+         *
+         * The frontend intentionally displays these as local shift times.
+         */
+        shift_start_time: shift?.start_time ?? null,
+
+        shift_end_time: shift?.end_time ?? null,
 
         work_date: workDate,
 
