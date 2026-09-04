@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 
 import { useUsers } from "@/features/admin/hooks/useUsers";
+import { getStoredUser } from "@/features/auth/services/auth.service";
 import { useSettingsContext } from "@/features/settings/context/SettingsContext";
 
 import { useAttendanceReport } from "../hooks/useAttendanceReport";
@@ -351,6 +352,10 @@ function buildRangeHoursRows(
 /* -------------------------------------------------------------------------- */
 
 export default function ReportsPage() {
+  const currentUser = getStoredUser();
+
+  const isEmployee = currentUser?.role === "EMPLOYEE";
+
   const { users } = useUsers();
 
   const { settings, loading: settingsLoading } = useSettingsContext();
@@ -363,6 +368,26 @@ export default function ReportsPage() {
   const [userId, setUserId] = useState("");
 
   const [tab, setTab] = useState(0);
+
+  /* ------------------------------------------------------------------------ */
+  /* Employee Scope                                                           */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * Employees are always scoped to their own report.
+   *
+   * The backend is the authoritative security boundary and independently
+   * forces the authenticated employee's user_id.
+   *
+   * Clearing the local selector state also prevents a previously selected
+   * agent from remaining in the report request if the authenticated role
+   * changes.
+   */
+  useEffect(() => {
+    if (isEmployee) {
+      setUserId("");
+    }
+  }, [isEmployee]);
 
   /* ------------------------------------------------------------------------ */
   /* Report type                                                              */
@@ -413,7 +438,13 @@ export default function ReportsPage() {
     timezone,
     report_type: reportType,
 
-    ...(userId
+    /*
+     * Non-employees may select an agent.
+     *
+     * Employees intentionally do not send a user_id from the frontend.
+     * The backend determines and enforces their authenticated user_id.
+     */
+    ...(!isEmployee && userId
       ? {
           user_id: userId,
         }
@@ -587,30 +618,36 @@ export default function ReportsPage() {
             />
           )}
 
-          <FormControl
-            sx={{
-              minWidth: 220,
-            }}
-          >
-            <InputLabel id="report-agent-label">Agent</InputLabel>
+          {/* ------------------------------------------------------------ */}
+          {/* Agent selector                                                */}
+          {/* ------------------------------------------------------------ */}
 
-            <Select
-              labelId="report-agent-label"
-              value={userId}
-              label="Agent"
-              onChange={(event) => {
-                setUserId(event.target.value);
+          {!isEmployee && (
+            <FormControl
+              sx={{
+                minWidth: 220,
               }}
             >
-              <MenuItem value="">All Agents</MenuItem>
+              <InputLabel id="report-agent-label">Agent</InputLabel>
 
-              {users.map((user) => (
-                <MenuItem key={user.id} value={user.id}>
-                  {user.display_name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <Select
+                labelId="report-agent-label"
+                value={userId}
+                label="Agent"
+                onChange={(event) => {
+                  setUserId(event.target.value);
+                }}
+              >
+                <MenuItem value="">All Agents</MenuItem>
+
+                {users.map((user) => (
+                  <MenuItem key={user.id} value={user.id}>
+                    {user.display_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           {tab === 2 && (
             <Box
@@ -621,8 +658,11 @@ export default function ReportsPage() {
                   return;
                 }
 
-                setDate(getMonday(date));
-                setDateTo(getSunday(date));
+                const monday = getMonday(date);
+                const sunday = getSunday(date);
+
+                setDate(monday);
+                setDateTo(sunday);
               }}
               sx={{
                 minHeight: 40,
