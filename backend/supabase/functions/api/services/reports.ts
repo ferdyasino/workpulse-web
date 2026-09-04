@@ -267,7 +267,7 @@ function getShiftWindow(
 /* -------------------------------------------------------------------------- */
 
 function getScheduledMinutes(
-  shift: ShiftRow,
+  // shift: ShiftRow,
   shiftWindow: {
     startsAt: Date;
     endsAt: Date;
@@ -277,23 +277,6 @@ function getScheduledMinutes(
     shiftWindow.startsAt,
     shiftWindow.endsAt,
   );
-
-  const breakAllowance = Math.max(0, shift.break_minutes ?? 0);
-
-  /*
-   * Exact 8-hour shifts remain 8 scheduled hours.
-   */
-  if (shiftSpanMinutes === 480) {
-    return 480;
-  }
-
-  /*
-   * Longer shifts subtract the configured
-   * break allowance.
-   */
-  if (shiftSpanMinutes > 480 && breakAllowance > 0) {
-    return Math.max(0, shiftSpanMinutes - breakAllowance);
-  }
 
   return shiftSpanMinutes;
 }
@@ -351,7 +334,7 @@ function calculateMetrics(
 
   const shiftWindow = getShiftWindow(workDate, shift);
 
-  const scheduledMinutes = getScheduledMinutes(shift, shiftWindow);
+  const scheduledMinutes = getScheduledMinutes(shiftWindow);
 
   /*
    * No IN = absent.
