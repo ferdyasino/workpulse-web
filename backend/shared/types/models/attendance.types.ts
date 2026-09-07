@@ -62,6 +62,8 @@ export type AttendanceState = {
 
   /**
    * Resolved shift used to determine the attendance state.
+   *
+   * Platform Owner does not have a shift.
    */
   shift: AttendanceShift | null;
 
@@ -79,15 +81,20 @@ export type AttendanceState = {
  *
  * Authentication identity is intentionally NOT included here.
  * The server obtains the authenticated user from the Supabase session.
+ *
+ * workspace_id is nullable because the Platform Owner does not
+ * require a workspace.
  */
 export type AttendanceStateRequest = {
-  workspace_id: string;
+  workspace_id: string | null;
 
   /**
    * Optional shift filter/override.
    *
    * For normal employee attendance, the server should resolve
    * the effective shift from the user's assignments.
+   *
+   * Platform Owner does not require a shift.
    */
   shift_id?: string;
 
@@ -132,9 +139,12 @@ export type AttendanceStateContext = AttendanceStateRequest & {
  * IMPORTANT:
  * user_id is intentionally omitted.
  * The authenticated application user is determined by the server.
+ *
+ * workspace_id is nullable because the Platform Owner does not
+ * belong to a workspace.
  */
 export type SubmitTimeLogRequest = {
-  workspace_id: string;
+  workspace_id: string | null;
 
   action_type: TimeLogEvent;
 
@@ -156,6 +166,8 @@ export type SubmitTimeLogRequest = {
    *
    * The server must validate this against the user's
    * effective shift before creating the timelog.
+   *
+   * Platform Owner does not require a shift.
    */
   shift_id?: string;
 };

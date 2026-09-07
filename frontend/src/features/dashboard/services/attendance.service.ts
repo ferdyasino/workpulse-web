@@ -33,7 +33,7 @@ export type SubmitTimeLogResponse = {
 type SubmitTimeLogRequest = {
   action: "TIMELOG_CREATE";
 
-  workspace_id: string;
+  workspace_id: string | null;
 
   action_type: TimeLogAction;
 
@@ -55,7 +55,7 @@ type SubmitTimeLogRequest = {
 type AttendanceStateRequest = {
   action: "ATTENDANCE_STATE_GET";
 
-  workspace_id: string;
+  workspace_id: string | null;
 
   email: string;
 
@@ -63,16 +63,13 @@ type AttendanceStateRequest = {
 };
 
 export async function submitTimeLogAction(
-  workspaceId: string,
+  workspaceId: string | null,
   payload: SubmitTimeLogPayload,
 ): Promise<SubmitTimeLogResponse> {
-  if (!workspaceId) {
-    throw new Error("workspaceId is required");
-  }
-
   const { action, ...rest } = payload;
 
   console.group(`TIMELOG_CREATE → ${action}`);
+
   console.log("REQUEST:", {
     workspace_id: workspaceId,
     action_type: action,
@@ -90,25 +87,23 @@ export async function submitTimeLogAction(
   });
 
   console.log("RESPONSE:", response);
+
   console.groupEnd();
 
   return response;
 }
 
 export async function getCurrentAttendanceState(
-  workspaceId: string,
+  workspaceId: string | null,
   email: string,
   date?: string,
 ): Promise<AttendanceState> {
-  if (!workspaceId) {
-    throw new Error("workspaceId is required");
-  }
-
   if (!email) {
     throw new Error("email is required");
   }
 
   console.group("ATTENDANCE_STATE_GET");
+
   console.log("REQUEST:", {
     workspace_id: workspaceId,
     email,
@@ -126,6 +121,7 @@ export async function getCurrentAttendanceState(
   });
 
   console.log("STATE:", state);
+
   console.groupEnd();
 
   return state;

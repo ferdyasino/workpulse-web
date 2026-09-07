@@ -6,6 +6,8 @@ import { getCurrentAttendanceState, submitTimeLogAction } from "../services/atte
 
 import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 
+const platformOwnerEmail = import.meta.env.VITE_PLATFORM_OWNER_EMAIL?.trim().toLowerCase();
+
 export function useAttendance() {
   const { user } = useAuth();
 
@@ -17,22 +19,52 @@ export function useAttendance() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /*
+   * Platform Owner is identified exclusively by
+   * PLATFORM_OWNER_EMAIL.
+   *
+   * Workspace assignment does NOT determine ownership.
+   */
+  const isPlatformOwner =
+    Boolean(user?.email) &&
+    Boolean(platformOwnerEmail) &&
+    user!.email.trim().toLowerCase() === platformOwnerEmail;
+
   const refresh = useCallback(async () => {
-    if (!user?.workspace_id || !user.email) {
+    if (!user?.email) {
       setState(null);
       setIsLoading(false);
 
       return null;
     }
 
+    /*
+     * Send the user's actual workspace_id when available.
+     *
+     * Platform Owner may have:
+     *
+     * - a workspace_id
+     * - no workspace_id
+     *
+     * The backend identifies Platform Owner by email,
+     * not by workspace_id.
+     */
+    const workspaceId = user.workspace_id ?? null;
+
     try {
       setIsLoading(true);
 
-      console.group("ATTENDANCE REFRESH");
+      console.group(isPlatformOwner ? "PLATFORM OWNER ATTENDANCE REFRESH" : "ATTENDANCE REFRESH");
 
-      const attendance = await getCurrentAttendanceState(user.workspace_id, user.email);
+      const attendance = await getCurrentAttendanceState(workspaceId, user.email);
 
-      console.log("REFRESH RESULT:", attendance);
+      console.log("REQUEST:", {
+        workspace_id: workspaceId,
+        email: user.email,
+        is_platform_owner: isPlatformOwner,
+      });
+
+      console.log("ATTENDANCE RESULT:", attendance);
 
       console.log("SHIFT FROM STATE:", attendance.shift);
 
@@ -44,12 +76,21 @@ export function useAttendance() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.workspace_id, user?.email]);
+  }, [isPlatformOwner, user?.workspace_id, user?.email]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
-      if (!user?.workspace_id || !user.email || !user.user_id) {
+      if (!user?.email || !user.user_id) {
         throw new Error("Incomplete user context.");
+      }
+
+      /*
+       * Only non-Platform-Owner users require a workspace.
+       *
+       * Platform Owner can have a workspace or no workspace.
+       */
+      if (!isPlatformOwner && !user.workspace_id) {
+        throw new Error("User workspace_id is missing.");
       }
 
       if (submitting.current) {
@@ -65,7 +106,9 @@ export function useAttendance() {
       try {
         console.group(`ATTENDANCE ACTION → ${action}`);
 
-        const response = await submitTimeLogAction(user.workspace_id, {
+        const workspaceId = user.workspace_id ?? null;
+
+        const response = await submitTimeLogAction(workspaceId, {
           user_id: user.user_id,
 
           email: user.email,
@@ -81,6 +124,14 @@ export function useAttendance() {
           location_message: "Location tracking is temporarily disabled.",
 
           timestamp: new Date().toISOString(),
+        });
+
+        console.log("REQUEST:", {
+          workspace_id: workspaceId,
+          action_type: action,
+          user_id: user.user_id,
+          email: user.email,
+          is_platform_owner: isPlatformOwner,
         });
 
         console.log("ACTION RESPONSE:", response);
@@ -108,15 +159,30 @@ export function useAttendance() {
         setIsSubmitting(false);
       }
     },
-    [user, refresh],
+    [user, isPlatformOwner, refresh],
   );
 
+  /*
+   * Initial attendance-state load.
+   */
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  /*
+   * Refresh attendance state every 30 seconds.
+   *
+   * Platform Owner and normal employees are both supported.
+   *
+   * workspace_id is always the user's actual workspace_id,
+   * or null when the user has no workspace.
+   */
   useEffect(() => {
-    if (!user?.workspace_id || !user.email) {
+    if (!user?.email) {
+      return;
+    }
+
+    if (!isPlatformOwner && !user.workspace_id) {
       return;
     }
 
@@ -124,9 +190,15 @@ export function useAttendance() {
       void refresh();
     }, 30000);
 
-    return () => window.clearInterval(interval);
-  }, [user?.workspace_id, user?.email, refresh]);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isPlatformOwner, user?.workspace_id, user?.email, refresh]);
 
+  /*
+   * Refresh attendance state when the browser becomes
+   * visible again.
+   */
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -151,5 +223,7 @@ export function useAttendance() {
     refresh,
 
     logTime,
+
+    isPlatformOwner,
   };
 }

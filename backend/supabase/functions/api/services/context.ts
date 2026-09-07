@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@shared/types/database.ts";
+import type { Json, Database } from "@shared/types/database.ts";
 
 import { getUserContext } from "./users.ts";
 import { resolveUserShift } from "./user_shift_resolver.ts";
@@ -16,7 +16,8 @@ const platformOwnerEmail = Deno.env
   ?.trim()
   .toLowerCase();
 
-export function getPlatformOwnerContext(
+export async function getPlatformOwnerContext(
+  supabaseAdmin: SupabaseClient<Database>,
   authUserId: string,
   authEmail: string | null,
 ) {
@@ -28,48 +29,92 @@ export function getPlatformOwnerContext(
     throw new Error("User is not the Platform Owner.");
   }
 
+  /*
+   * Platform Owner must still have a public.users record because:
+   *
+   * time_logs.user_id -> public.users.id
+   *
+   * The workspace is optional.
+   */
+  const { data: user, error } = await supabaseAdmin
+    .from("users")
+    .select("*")
+    .eq("id", authUserId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!user) {
+    throw new Error("Platform Owner WorkPulse record is missing.");
+  }
+
+  /*
+   * The authenticated email must match the configured
+   * Platform Owner email.
+   */
+  if (user.email.trim().toLowerCase() !== platformOwnerEmail) {
+    throw new Error("Platform Owner email does not match.");
+  }
+
   return {
     user: {
       auth_user_id: authUserId,
 
-      user_id: null,
+      /*
+       * Supabase Auth user ID and public.users.id
+       * are the same UUID.
+       */
+      user_id: user.id,
 
-      email: authEmail,
+      email: user.email,
 
-      display_name: authEmail,
+      display_name: user.display_name,
 
-      avatar_url: null,
+      avatar_url: user.avatar_url,
 
-      employee_no: null,
+      employee_no: user.employee_no,
 
-      first_name: null,
+      first_name: user.first_name,
 
-      middle_name: null,
+      middle_name: user.middle_name,
 
-      last_name: null,
+      last_name: user.last_name,
 
-      hire_date: null,
+      hire_date: user.hire_date,
 
       role: "OWNER" as const,
 
-      employment_status: "ACTIVE" as const,
+      employment_status: user.employment_status,
 
-      employment_type: "FULL_TIME" as const,
+      employment_type: user.employment_type,
 
-      auth_enabled: true,
+      auth_enabled: user.auth_enabled,
 
-      login_provider: "GOOGLE" as const,
+      login_provider: user.login_provider,
 
-      invited_at: null,
+      invited_at: user.invited_at,
 
-      last_login_at: null,
+      last_login_at: user.last_login_at,
 
-      workspace_id: null,
+      /*
+       * IMPORTANT:
+       *
+       * Platform Owner workspace assignment is optional.
+       *
+       * Do not use workspace_id to determine whether this
+       * user is the Platform Owner.
+       */
+      workspace_id: user.workspace_id,
 
       department: null,
 
       position: null,
 
+      /*
+       * Platform Owner does not require a user shift.
+       */
       shift: null,
 
       shift_id: undefined,
@@ -79,8 +124,40 @@ export function getPlatformOwnerContext(
       },
     },
 
-    workspace: null,
+    /*
+     * Load the assigned workspace when the Platform Owner
+     * actually has one.
+     */
+    workspace: user.workspace_id
+      ? await getPlatformOwnerWorkspace(supabaseAdmin, user.workspace_id)
+      : null,
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Platform Owner Workspace                                                   */
+/* -------------------------------------------------------------------------- */
+
+async function getPlatformOwnerWorkspace(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspaceId: string,
+) {
+  const { data: workspace, error } = await supabaseAdmin
+    .from("workspaces")
+    .select("*")
+    .eq("id", workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!workspace) {
+    throw new Error("Platform Owner workspace not found.");
+  }
+
+  return workspace;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -102,7 +179,7 @@ export async function getApplicationContext(
     authEmail &&
     authEmail.trim().toLowerCase() === platformOwnerEmail
   ) {
-    return getPlatformOwnerContext(authUserId, authEmail);
+    return await getPlatformOwnerContext(supabaseAdmin, authUserId, authEmail);
   }
 
   /* ------------------------------------------------------------------------ */

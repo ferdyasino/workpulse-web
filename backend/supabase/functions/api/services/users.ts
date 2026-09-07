@@ -319,11 +319,19 @@ export async function getUserContext(
     );
   }
 
-  const assignment = await getCurrentUserShift(
-    supabaseAdmin,
-    user.workspace_id,
-    user.id,
-  );
+  /*
+   * A workspace-less user has no user_shift.
+   *
+   * This is required for the Platform Owner because:
+   *
+   * workspace_id  = NULL
+   * user_shift     = NULL
+   *
+   * Do not call getCurrentUserShift() with a null workspace_id.
+   */
+  const assignment = user.workspace_id
+    ? await getCurrentUserShift(supabaseAdmin, user.workspace_id, user.id)
+    : null;
 
   return {
     auth_user_id: user.id,

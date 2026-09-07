@@ -33,14 +33,14 @@ export type ApiRequest =
   | AttendanceReportRequest
   | ({
       action: "TIMELOG_CREATE";
-      workspace_id: string;
+      workspace_id: string | null;
     } & SubmitTimeLogRequest)
   | {
       action: "TIMELOG_LIST";
-      workspace_id: string;
+      workspace_id: string | null;
       work_date?: string;
     }
   | ({
       action: "ATTENDANCE_STATE_GET";
-      workspace_id: string;
+      workspace_id: string | null;
     } & AttendanceStateRequest);

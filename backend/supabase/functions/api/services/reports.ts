@@ -889,9 +889,10 @@ export async function getAttendanceReport(
        * If attendance exists without an assignment,
        * use the user_shift_id stored on the log.
        */
+
       const shift = assignment
         ? (shiftsById.get(assignment.shift_id) ?? null)
-        : logsForDate.length > 0
+        : logsForDate.length > 0 && logsForDate[0].user_shift_id
           ? (shiftsById.get(logsForDate[0].user_shift_id) ?? null)
           : null;
 
