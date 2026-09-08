@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useWorkspace } from "@/features/workspace/hooks/useWorkspace";
 
 import { getCurrentAttendanceState, submitTimeLogAction } from "../services/attendance.service";
 
@@ -8,6 +9,7 @@ import type { AttendanceState, TimeLogAction } from "../types/attendance.types";
 
 export function useAttendance() {
   const { user } = useAuth();
+  const { workspace } = useWorkspace();
 
   const submitting = useRef(false);
 
@@ -17,8 +19,17 @@ export function useAttendance() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /*
+   * The selected workspace is the source of truth for attendance.
+   *
+   * Do NOT use user.workspace_id here.
+   * Platform Owners can have multiple workspaces and therefore
+   * user.workspace_id may legitimately be null.
+   */
+  const workspaceId = workspace?.id;
+
   const refresh = useCallback(async () => {
-    if (!user?.workspace_id || !user.email) {
+    if (!user?.email || !workspaceId) {
       setState(null);
       setIsLoading(false);
 
@@ -30,7 +41,12 @@ export function useAttendance() {
 
       console.group("ATTENDANCE REFRESH");
 
-      const attendance = await getCurrentAttendanceState(user.workspace_id, user.email);
+      console.log("SELECTED WORKSPACE ID:", workspaceId);
+      console.log("USER ID:", user.user_id);
+      console.log("EMAIL:", user.email);
+      console.log("PLATFORM OWNER:", user.meta?.platform_owner);
+
+      const attendance = await getCurrentAttendanceState(workspaceId, user.email);
 
       console.log("REFRESH RESULT:", attendance);
 
@@ -44,12 +60,23 @@ export function useAttendance() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.workspace_id, user?.email]);
+  }, [workspaceId, user?.email, user?.user_id, user?.meta?.platform_owner]);
 
   const logTime = useCallback(
     async (action: TimeLogAction) => {
-      if (!user?.workspace_id || !user.email || !user.user_id) {
+      console.log("ATTENDANCE USER CONTEXT:", user);
+      console.log("USER ID:", user?.user_id);
+      console.log("USER WORKSPACE ID:", user?.workspace_id);
+      console.log("SELECTED WORKSPACE ID:", workspaceId);
+      console.log("EMAIL:", user?.email);
+      console.log("PLATFORM OWNER:", user?.meta?.platform_owner);
+
+      if (!user?.email || !user.user_id) {
         throw new Error("Incomplete user context.");
+      }
+
+      if (!workspaceId) {
+        throw new Error("No workspace is currently selected.");
       }
 
       if (submitting.current) {
@@ -65,7 +92,7 @@ export function useAttendance() {
       try {
         console.group(`ATTENDANCE ACTION → ${action}`);
 
-        const response = await submitTimeLogAction(user.workspace_id, {
+        const response = await submitTimeLogAction(workspaceId, {
           user_id: user.user_id,
 
           email: user.email,
@@ -108,7 +135,7 @@ export function useAttendance() {
         setIsSubmitting(false);
       }
     },
-    [user, refresh],
+    [user, workspaceId, refresh],
   );
 
   useEffect(() => {
@@ -116,7 +143,7 @@ export function useAttendance() {
   }, [refresh]);
 
   useEffect(() => {
-    if (!user?.workspace_id || !user.email) {
+    if (!user?.email || !workspaceId) {
       return;
     }
 
@@ -125,7 +152,7 @@ export function useAttendance() {
     }, 30000);
 
     return () => window.clearInterval(interval);
-  }, [user?.workspace_id, user?.email, refresh]);
+  }, [user?.email, workspaceId, refresh]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -143,13 +170,9 @@ export function useAttendance() {
 
   return {
     state,
-
     isLoading,
-
     isSubmitting,
-
     refresh,
-
     logTime,
   };
 }

@@ -33,7 +33,7 @@ export type SubmitTimeLogResponse = {
 type SubmitTimeLogRequest = {
   action: "TIMELOG_CREATE";
 
-  workspace_id: string;
+  workspace_id?: string;
 
   action_type: TimeLogAction;
 
@@ -55,7 +55,7 @@ type SubmitTimeLogRequest = {
 type AttendanceStateRequest = {
   action: "ATTENDANCE_STATE_GET";
 
-  workspace_id: string;
+  workspace_id?: string;
 
   email: string;
 
@@ -63,18 +63,15 @@ type AttendanceStateRequest = {
 };
 
 export async function submitTimeLogAction(
-  workspaceId: string,
+  workspaceId: string | undefined,
   payload: SubmitTimeLogPayload,
 ): Promise<SubmitTimeLogResponse> {
-  if (!workspaceId) {
-    throw new Error("workspaceId is required");
-  }
-
   const { action, ...rest } = payload;
 
   console.group(`TIMELOG_CREATE → ${action}`);
+
   console.log("REQUEST:", {
-    workspace_id: workspaceId,
+    ...(workspaceId ? { workspace_id: workspaceId } : {}),
     action_type: action,
     ...rest,
   });
@@ -82,7 +79,7 @@ export async function submitTimeLogAction(
   const response = await invokeFunction<SubmitTimeLogResponse, SubmitTimeLogRequest>("api", {
     action: "TIMELOG_CREATE",
 
-    workspace_id: workspaceId,
+    ...(workspaceId ? { workspace_id: workspaceId } : {}),
 
     action_type: action,
 
@@ -96,21 +93,18 @@ export async function submitTimeLogAction(
 }
 
 export async function getCurrentAttendanceState(
-  workspaceId: string,
+  workspaceId: string | undefined,
   email: string,
   date?: string,
 ): Promise<AttendanceState> {
-  if (!workspaceId) {
-    throw new Error("workspaceId is required");
-  }
-
   if (!email) {
     throw new Error("email is required");
   }
 
   console.group("ATTENDANCE_STATE_GET");
+
   console.log("REQUEST:", {
-    workspace_id: workspaceId,
+    ...(workspaceId ? { workspace_id: workspaceId } : {}),
     email,
     date,
   });
@@ -118,7 +112,7 @@ export async function getCurrentAttendanceState(
   const state = await invokeFunction<AttendanceState, AttendanceStateRequest>("api", {
     action: "ATTENDANCE_STATE_GET",
 
-    workspace_id: workspaceId,
+    ...(workspaceId ? { workspace_id: workspaceId } : {}),
 
     email,
 

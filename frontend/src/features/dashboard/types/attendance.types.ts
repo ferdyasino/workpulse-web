@@ -67,7 +67,13 @@ export type AttendanceState = {
 };
 
 export type AttendanceStateRequest = {
-  workspace_id: string;
+  /**
+   * Current workspace context.
+   *
+   * Optional because the backend may resolve the workspace
+   * from the authenticated user's membership.
+   */
+  workspace_id?: string;
 
   email: string;
 
@@ -84,7 +90,13 @@ export type AttendanceStateRequest = {
 };
 
 export type SubmitTimeLogRequest = {
-  workspace_id: string;
+  /**
+   * Current workspace context.
+   *
+   * Optional because the backend may resolve the workspace
+   * from the authenticated user's membership.
+   */
+  workspace_id?: string;
 
   user_id: string;
 

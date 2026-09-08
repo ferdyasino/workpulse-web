@@ -11,17 +11,22 @@ export type WorkspaceAccess = {
   authUserId: string;
 
   /**
-   * null for Platform Owner because the Platform Owner
-   * does not require a public.users record.
+   * public.users identity record.
+   *
+   * A Platform Owner may also have a public.users record.
    */
   userId: string | null;
 
   /**
-   * null for Platform Owner because the Platform Owner
-   * is not tied to a single workspace.
+   * Current workspace context.
+   *
+   * Platform Owner may access any workspace.
    */
   workspaceId: string | null;
 
+  /**
+   * Role within the current workspace.
+   */
   role: WorkspaceRole | "PLATFORM_OWNER";
 
   isPlatformOwner: boolean;
@@ -56,24 +61,77 @@ export async function getWorkspaceAccess(
 
   /*
    * ------------------------------------------------------------------------
-   * PLATFORM OWNER
+   * Resolve WorkPulse identity
    * ------------------------------------------------------------------------
    *
-   * The Platform Owner exists only in Supabase Auth.
+   * public.users is the global WorkPulse identity.
    *
-   * They intentionally do NOT require:
-   *
-   * - public.users
-   * - workspace_id
-   * - workspace ownership
-   *
-   * Authority is determined by PLATFORM_OWNER_EMAIL.
+   * We resolve this BEFORE determining Platform Owner status because a
+   * Platform Owner may also have a public.users record.
    */
-  if (isPlatformOwnerEmail(authUser.email)) {
+  const { data: user, error: userError } = await supabaseAdmin
+    .from("users")
+    .select(
+      `
+        id,
+        auth_enabled,
+        employment_status
+      `,
+    )
+    .eq("id", authUser.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (userError) {
+    throw userError;
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * Determine Platform Owner
+   * ------------------------------------------------------------------------
+   *
+   * Platform Owner status is independent of whether public.users exists.
+   *
+   * This is important for your current account:
+   *
+   *   public.users exists
+   *   +
+   *   email matches PLATFORM_OWNER_EMAIL
+   *   =
+   *   Platform Owner with real WorkPulse identity
+   */
+  const platformOwner = isPlatformOwnerEmail(authUser.email);
+
+  /*
+   * ------------------------------------------------------------------------
+   * Platform Owner
+   * ------------------------------------------------------------------------
+   *
+   * Platform Owner can access every workspace.
+   *
+   * We intentionally do NOT resolve a workspace through workspace_members
+   * here because the selected workspace must come from the application
+   * workspace context.
+   *
+   * For now workspaceId remains null until the selected workspace is passed
+   * into the backend context.
+   */
+  if (platformOwner) {
+    if (user) {
+      if (!user.auth_enabled) {
+        throw new Error("This user is not enabled for authentication.");
+      }
+
+      if (user.employment_status !== "ACTIVE") {
+        throw new Error("This user account is not active.");
+      }
+    }
+
     return {
       authUserId: authUser.id,
 
-      userId: null,
+      userId: user?.id ?? null,
 
       workspaceId: null,
 
@@ -85,28 +143,9 @@ export async function getWorkspaceAccess(
 
   /*
    * ------------------------------------------------------------------------
-   * NORMAL WORKSPACE USER
+   * Normal Workspace User
    * ------------------------------------------------------------------------
    */
-
-  const { data: user, error } = await supabaseAdmin
-    .from("users")
-    .select(
-      `
-        id,
-        workspace_id,
-        role,
-        auth_enabled,
-        employment_status
-      `,
-    )
-    .eq("id", authUser.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
 
   if (!user) {
     throw new Error("WorkPulse user account not found.");
@@ -120,8 +159,39 @@ export async function getWorkspaceAccess(
     throw new Error("This user account is not active.");
   }
 
-  if (!user.workspace_id) {
-    throw new Error("User workspace_id is missing.");
+  /*
+   * ------------------------------------------------------------------------
+   * Active Workspace Membership
+   * ------------------------------------------------------------------------
+   *
+   * workspace_members is authoritative for normal users.
+   *
+   * users.workspace_id is intentionally NOT used.
+   *
+   * This remains temporary until explicit current-workspace selection
+   * is passed into the backend.
+   */
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from("workspace_members")
+    .select(
+      `
+          workspace_id,
+          role,
+          status
+        `,
+    )
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw membershipError;
+  }
+
+  if (!membership) {
+    throw new Error("User does not have an active workspace membership.");
   }
 
   return {
@@ -129,9 +199,9 @@ export async function getWorkspaceAccess(
 
     userId: user.id,
 
-    workspaceId: user.workspace_id,
+    workspaceId: membership.workspace_id,
 
-    role: user.role as WorkspaceRole,
+    role: membership.role as WorkspaceRole,
 
     isPlatformOwner: false,
   };
@@ -153,10 +223,10 @@ export function assertWorkspaceAccess(
   }
 
   /*
-   * Normal users are restricted to their assigned workspace.
+   * Normal users are restricted to their current workspace membership.
    */
   if (!access.workspaceId) {
-    throw new Error("User workspace_id is missing.");
+    throw new Error("User has no active workspace membership.");
   }
 
   if (access.workspaceId !== workspaceId) {

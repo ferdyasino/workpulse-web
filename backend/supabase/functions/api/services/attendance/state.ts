@@ -146,6 +146,7 @@ export async function getCurrentAttendanceState(
     authUserId,
     email,
     authProvider ?? null,
+    workspace_id,
   );
 
   if (context.workspace_id !== workspace_id) {

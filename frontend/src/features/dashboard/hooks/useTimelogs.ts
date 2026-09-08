@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getTimelogs, type Timelog } from "../services/timelogs.service";
 
 type Params = {
-  workspace_id: string;
+  workspace_id?: string;
   user_id: string;
   work_date?: string;
 };
@@ -16,7 +16,8 @@ export function useTimelogs(params: Params) {
   const [error, setError] = useState<string>();
 
   const refresh = useCallback(async () => {
-    if (!workspace_id) {
+    if (!user_id) {
+      setTimelogs([]);
       return;
     }
 
@@ -25,7 +26,7 @@ export function useTimelogs(params: Params) {
       setError(undefined);
 
       const data = await getTimelogs({
-        workspace_id,
+        ...(workspace_id ? { workspace_id } : {}),
         user_id,
         work_date,
       });

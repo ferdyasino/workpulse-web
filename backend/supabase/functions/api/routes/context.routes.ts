@@ -1,10 +1,9 @@
 import type { RouteContext } from "./types.ts";
 
-import {
-  getApplicationContext,
-  getPlatformOwnerContext,
-} from "../services/context.ts";
+import { getApplicationContext } from "../services/context.ts";
+
 import { getUserContext } from "../services/users.ts";
+
 import { getSettings, updateSettings } from "../services/settings.ts";
 
 /* -------------------------------------------------------------------------- */
@@ -43,43 +42,59 @@ function getRequestedWorkspaceId(ctx: RouteContext): string | null {
 }
 
 /**
+ * Verify that a workspace exists and is not deleted.
+ *
+ * This is used for Platform Owner operations because Platform Owner access
+ * does not depend on workspace_members.
+ */
+async function verifyWorkspaceExists(
+  ctx: RouteContext,
+  workspaceId: string,
+): Promise<string> {
+  const { data: workspace, error } = await ctx.supabaseAdmin
+    .from("workspaces")
+    .select("id")
+    .eq("id", workspaceId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!workspace) {
+    throw new Error("Workspace not found.");
+  }
+
+  return workspace.id;
+}
+
+/**
  * Resolve the workspace authorized for settings operations.
  *
  * Platform Owner:
- *   Uses explicitly supplied workspace_id when available.
+ *   Explicitly supplied workspace_id is authoritative.
+ *   No workspace membership is required.
  *
  * Normal user:
- *   Uses public.users.workspace_id.
- *   The frontend-supplied workspace_id is ignored.
+ *   Explicitly supplied workspace_id is passed through getUserContext().
+ *   getUserContext() validates the user's active workspace_members row.
+ *
+ * This avoids using users.workspace_id as the authorization source.
  */
 async function resolveSettingsWorkspaceId(ctx: RouteContext): Promise<string> {
+  const workspaceId = getRequestedWorkspaceId(ctx);
+
+  if (!workspaceId) {
+    throw new Error("A workspace must be selected.");
+  }
+
   /* ------------------------------------------------------------------------ */
   /* Platform Owner                                                           */
   /* ------------------------------------------------------------------------ */
 
   if (isPlatformOwner(ctx)) {
-    const workspaceId = getRequestedWorkspaceId(ctx);
-
-    if (!workspaceId) {
-      throw new Error("Platform Owner must specify a workspace_id.");
-    }
-
-    const { data: workspace, error } = await ctx.supabaseAdmin
-      .from("workspaces")
-      .select("id")
-      .eq("id", workspaceId)
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-
-    if (!workspace) {
-      throw new Error("Workspace not found.");
-    }
-
-    return workspace.id;
+    return await verifyWorkspaceExists(ctx, workspaceId);
   }
 
   /* ------------------------------------------------------------------------ */
@@ -91,18 +106,17 @@ async function resolveSettingsWorkspaceId(ctx: RouteContext): Promise<string> {
     ctx.authUserId,
     ctx.email,
     ctx.authProvider,
+    workspaceId,
   );
 
   if (!user.workspace_id) {
-    throw new Error("User workspace_id is missing");
+    throw new Error("User workspace_id is missing.");
   }
 
-  /*
-   * Normal users always use the workspace assigned to their account.
-   *
-   * Do not trust a workspace_id supplied by the frontend as the
-   * authorization source.
-   */
+  if (user.workspace_id !== workspaceId) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
   return user.workspace_id;
 }
 
@@ -117,8 +131,42 @@ export async function handleContextRoutes(ctx: RouteContext) {
     /* ---------------------------------------------------------------------- */
 
     case "USER_CONTEXT_GET": {
+      const requestedWorkspaceId = getRequestedWorkspaceId(ctx);
+
+      console.log(
+        "USER CONTEXT REQUEST:",
+        JSON.stringify({
+          workspace_id: requestedWorkspaceId,
+          auth_user_id: ctx.authUserId,
+          email: ctx.email,
+          platform_owner: isPlatformOwner(ctx),
+        }),
+      );
+
+      /*
+       * Platform Owner:
+       *
+       * No workspace is required during initial authentication.
+       *
+       * If a workspace has already been selected, pass it into
+       * getUserContext() so the real public.users ID and workspace-specific
+       * shift can be resolved.
+       */
       if (isPlatformOwner(ctx)) {
-        return getPlatformOwnerContext(ctx.authUserId, ctx.email);
+        return await getUserContext(
+          ctx.supabaseAdmin,
+          ctx.authUserId,
+          ctx.email,
+          ctx.authProvider,
+          requestedWorkspaceId,
+        );
+      }
+
+      /*
+       * Normal users must resolve against a specific workspace.
+       */
+      if (!requestedWorkspaceId) {
+        throw new Error("A workspace must be selected.");
       }
 
       return await getUserContext(
@@ -126,6 +174,7 @@ export async function handleContextRoutes(ctx: RouteContext) {
         ctx.authUserId,
         ctx.email,
         ctx.authProvider,
+        requestedWorkspaceId,
       );
     }
 
@@ -134,6 +183,16 @@ export async function handleContextRoutes(ctx: RouteContext) {
     /* ---------------------------------------------------------------------- */
 
     case "AUTH_ME": {
+      /*
+       * AUTH_ME must remain workspace-independent.
+       *
+       * This is important during login because a Platform Owner may not
+       * have selected a workspace yet.
+       *
+       * getApplicationContext() is responsible for recognizing the
+       * authenticated Platform Owner and returning a valid application
+       * context without requiring workspace membership.
+       */
       return await getApplicationContext(
         ctx.supabaseAdmin,
         ctx.authUserId,
@@ -149,21 +208,37 @@ export async function handleContextRoutes(ctx: RouteContext) {
     case "WORKSPACE_GET": {
       /*
        * WORKSPACE_GET defines `id`, not `workspace_id`.
-       *
-       * Platform Owner:
-       *   Uses the requested workspace ID.
-       *
-       * Normal user:
-       *   Uses the authenticated user's workspace.
        */
+      const workspaceId = ctx.body.id;
+
+      if (!workspaceId) {
+        throw new Error("Workspace ID is required.");
+      }
+
+      console.log(
+        "WORKSPACE GET REQUEST:",
+        JSON.stringify({
+          workspace_id: workspaceId,
+          auth_user_id: ctx.authUserId,
+          email: ctx.email,
+          platform_owner: isPlatformOwner(ctx),
+        }),
+      );
+
+      /* -------------------------------------------------------------------- */
+      /* Platform Owner                                                       */
+      /* -------------------------------------------------------------------- */
 
       if (isPlatformOwner(ctx)) {
-        const workspaceId = ctx.body.id;
+        const verifiedWorkspaceId = await verifyWorkspaceExists(
+          ctx,
+          workspaceId,
+        );
 
         const { data, error } = await ctx.supabaseAdmin
           .from("workspaces")
           .select("*")
-          .eq("id", workspaceId)
+          .eq("id", verifiedWorkspaceId)
           .is("deleted_at", null)
           .maybeSingle();
 
@@ -185,21 +260,32 @@ export async function handleContextRoutes(ctx: RouteContext) {
       /* Normal user                                                           */
       /* -------------------------------------------------------------------- */
 
+      /*
+       * Do NOT use users.workspace_id here.
+       *
+       * getUserContext() validates the selected workspace against the
+       * user's active workspace_members record.
+       */
       const user = await getUserContext(
         ctx.supabaseAdmin,
         ctx.authUserId,
         ctx.email,
         ctx.authProvider,
+        workspaceId,
       );
 
       if (!user.workspace_id) {
-        throw new Error("User workspace_id is missing");
+        throw new Error("User workspace_id is missing.");
+      }
+
+      if (user.workspace_id !== workspaceId) {
+        throw new Error("User does not belong to this workspace.");
       }
 
       const { data, error } = await ctx.supabaseAdmin
         .from("workspaces")
         .select("*")
-        .eq("id", user.workspace_id)
+        .eq("id", workspaceId)
         .is("deleted_at", null)
         .maybeSingle();
 

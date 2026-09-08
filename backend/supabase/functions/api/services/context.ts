@@ -16,15 +16,19 @@ const platformOwnerEmail = Deno.env
   ?.trim()
   .toLowerCase();
 
+function isPlatformOwnerEmail(authEmail: string | null): boolean {
+  if (!platformOwnerEmail || !authEmail) {
+    return false;
+  }
+
+  return authEmail.trim().toLowerCase() === platformOwnerEmail;
+}
+
 export function getPlatformOwnerContext(
   authUserId: string,
   authEmail: string | null,
 ) {
-  if (
-    !platformOwnerEmail ||
-    !authEmail ||
-    authEmail.trim().toLowerCase() !== platformOwnerEmail
-  ) {
+  if (!isPlatformOwnerEmail(authEmail)) {
     throw new Error("User is not the Platform Owner.");
   }
 
@@ -93,22 +97,183 @@ export async function getApplicationContext(
   authEmail: string | null,
   authProvider: string | null,
 ) {
-  /* ------------------------------------------------------------------------ */
-  /* Platform Owner                                                           */
-  /* ------------------------------------------------------------------------ */
+  /*
+   * ------------------------------------------------------------------------
+   * Check Platform Owner FIRST
+   * ------------------------------------------------------------------------
+   *
+   * Platform Owner is identified by PLATFORM_OWNER_EMAIL.
+   *
+   * A Platform Owner:
+   *
+   *   - does not require workspace_members
+   *   - does not require users.workspace_id
+   *   - may have a public.users record
+   *   - may not have a public.users record
+   *   - may authenticate before selecting a workspace
+   *
+   * If public.users exists, getUserContext() will return the real
+   * WorkPulse user ID while preserving platform_owner=true.
+   *
+   * If public.users does not exist, use the global Platform Owner
+   * fallback context.
+   */
+  if (isPlatformOwnerEmail(authEmail)) {
+    /*
+     * Check whether a real WorkPulse user record exists.
+     *
+     * This is NOT an authorization check.
+     *
+     * It only determines whether we should use the real users.id so
+     * Platform Owner attendance can work when the application user exists.
+     */
+    const { data: existingUser, error: existingUserError } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("id", authUserId)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  if (
-    platformOwnerEmail &&
-    authEmail &&
-    authEmail.trim().toLowerCase() === platformOwnerEmail
-  ) {
+    if (existingUserError) {
+      throw existingUserError;
+    }
+
+    /*
+     * ----------------------------------------------------------------------
+     * Platform Owner with public.users record
+     * ----------------------------------------------------------------------
+     *
+     * IMPORTANT:
+     *
+     * Do NOT require workspace_id here.
+     *
+     * The Platform Owner has not necessarily selected a workspace yet.
+     *
+     * getUserContext() is intentionally called with null workspace_id.
+     * The updated users.ts handles Platform Owner specially and returns
+     * the real application user without requiring workspace membership.
+     */
+    if (existingUser) {
+      const userContext = await getUserContext(
+        supabaseAdmin,
+        authUserId,
+        authEmail,
+        authProvider,
+        null,
+      );
+
+      if (!userContext.user_id) {
+        throw new Error("User WorkPulse record is missing.");
+      }
+
+      /*
+       * No workspace is loaded during AUTH_ME.
+       *
+       * Workspace selection happens separately through the workspace
+       * provider. Workspace-specific operations must provide the selected
+       * workspace_id.
+       */
+      return {
+        user: {
+          auth_user_id: userContext.auth_user_id,
+
+          user_id: userContext.user_id,
+
+          email: userContext.email,
+
+          display_name: userContext.display_name,
+
+          avatar_url: userContext.avatar_url,
+
+          employee_no: userContext.employee_no,
+
+          first_name: userContext.first_name,
+
+          middle_name: userContext.middle_name,
+
+          last_name: userContext.last_name,
+
+          hire_date: userContext.hire_date,
+
+          role: userContext.role,
+
+          employment_status: userContext.employment_status,
+
+          employment_type: userContext.employment_type,
+
+          auth_enabled: userContext.auth_enabled,
+
+          login_provider: userContext.login_provider,
+
+          invited_at: userContext.invited_at,
+
+          last_login_at: userContext.last_login_at,
+
+          workspace_id: null,
+
+          department: userContext.department,
+
+          position: userContext.position,
+
+          shift: null,
+
+          shift_id: undefined,
+
+          meta: {
+            platform_owner: true,
+          },
+        },
+
+        workspace: null,
+      };
+    }
+
+    /*
+     * ----------------------------------------------------------------------
+     * Platform Owner without public.users record
+     * ----------------------------------------------------------------------
+     *
+     * Login is still allowed.
+     *
+     * This is the global Platform Owner context.
+     */
     return getPlatformOwnerContext(authUserId, authEmail);
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Normal Workspace User                                                    */
-  /* ------------------------------------------------------------------------ */
+  /*
+   * ------------------------------------------------------------------------
+   * Normal WorkPulse User
+   * ------------------------------------------------------------------------
+   *
+   * Non-Platform-Owner users must have a public.users record.
+   */
+  const { data: existingUser, error: existingUserError } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("id", authUserId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
+  if (existingUserError) {
+    throw existingUserError;
+  }
+
+  if (!existingUser) {
+    throw new Error("User account is not registered in WorkPulse.");
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * Resolve normal user's application context
+   * ------------------------------------------------------------------------
+   *
+   * getUserContext() requires an active workspace membership for normal
+   * users.
+   *
+   * At this stage AUTH_ME does not receive a workspace_id, so the updated
+   * getUserContext() should resolve the user's normal/default workspace
+   * membership where supported.
+   */
   const userContext = await getUserContext(
     supabaseAdmin,
     authUserId,
@@ -125,18 +290,18 @@ export async function getApplicationContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Workspace                                                                */
+  /* Workspace                                                                 */
   /* ------------------------------------------------------------------------ */
 
-  const { data: workspace, error } = await supabaseAdmin
+  const { data: workspace, error: workspaceError } = await supabaseAdmin
     .from("workspaces")
     .select("*")
     .eq("id", userContext.workspace_id)
     .is("deleted_at", null)
     .single();
 
-  if (error) {
-    throw error;
+  if (workspaceError) {
+    throw workspaceError;
   }
 
   if (!workspace) {

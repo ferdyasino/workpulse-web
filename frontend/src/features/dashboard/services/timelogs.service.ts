@@ -13,14 +13,18 @@ export type Timelog = {
 };
 
 export async function getTimelogs(params: {
-  workspace_id: string;
+  workspace_id?: string;
   user_id: string;
   work_date?: string;
 }) {
   return apiRequest<Timelog[]>({
     action: "TIMELOG_LIST",
 
-    workspace_id: params.workspace_id,
+    ...(params.workspace_id
+      ? {
+          workspace_id: params.workspace_id,
+        }
+      : {}),
 
     user_id: params.user_id,
 

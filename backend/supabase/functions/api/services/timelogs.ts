@@ -8,6 +8,56 @@ import { resolveAttendanceContext } from "./context.ts";
 import { getUserContext } from "./users.ts";
 
 /* -------------------------------------------------------------------------- */
+/* Workspace Membership                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Attendance requires an actual workspace membership.
+ *
+ * Platform Owner access is global, but that does NOT automatically make the
+ * Platform Owner an employee/member of every workspace for attendance.
+ *
+ * This check is intentionally separate from administrative workspace access.
+ */
+async function assertAttendanceWorkspaceMembership(
+  supabaseAdmin: SupabaseClient<Database>,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  if (!userId) {
+    throw new Error("User ID is required.");
+  }
+
+  if (!workspaceId) {
+    throw new Error("Workspace ID is required.");
+  }
+
+  const { data: membership, error } = await supabaseAdmin
+    .from("workspace_members")
+    .select("id, workspace_id, user_id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!membership) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  if (
+    membership.workspace_id !== workspaceId ||
+    membership.user_id !== userId
+  ) {
+    throw new Error("User does not belong to this workspace.");
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Create Time Log                                                            */
 /* -------------------------------------------------------------------------- */
 
@@ -35,26 +85,64 @@ export async function createTimeLog(
     throw new Error("Authenticated user ID is required.");
   }
 
+  if (!payload.workspace_id) {
+    throw new Error("Workspace ID is required.");
+  }
+
   /*
    * ------------------------------------------------------------------------
    * Resolve authenticated application user
    * ------------------------------------------------------------------------
+   *
+   * The selected workspace is explicitly passed to getUserContext().
+   *
+   * For Platform Owner this resolves the real public.users record when
+   * available, but does not by itself grant attendance access.
    */
   const context = await getUserContext(
     supabaseAdmin,
     authUserId,
     authEmail ?? "",
     authProvider,
+    payload.workspace_id,
   );
-
-  if (context.workspace_id !== payload.workspace_id) {
-    throw new Error("User does not belong to this workspace.");
-  }
 
   const userId = context.user_id;
 
   if (!userId) {
     throw new Error("User context does not contain a user ID.");
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * Attendance workspace authorization
+   * ------------------------------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * Platform Owner can administer any workspace, but attendance is only
+   * allowed when the authenticated application user has an ACTIVE
+   * workspace_members record for the selected workspace.
+   *
+   * This prevents:
+   *
+   *   Platform Owner → switch workspace → TIME_IN
+   *
+   * unless the Platform Owner is actually assigned to that workspace.
+   */
+  await assertAttendanceWorkspaceMembership(
+    supabaseAdmin,
+    userId,
+    payload.workspace_id,
+  );
+
+  /*
+   * getUserContext() should already resolve the selected workspace for
+   * workspace-aware requests. Keep this additional check as a defensive
+   * authorization boundary.
+   */
+  if (context.workspace_id !== payload.workspace_id) {
+    throw new Error("User does not belong to this workspace.");
   }
 
   /*
@@ -88,6 +176,9 @@ export async function createTimeLog(
     requestedShiftId: payload.shift_id ?? null,
   });
 
+  /*
+   * Membership exists, but there is no effective shift assignment.
+   */
   if (!attendanceContext) {
     throw new Error("No active user shift found.");
   }
