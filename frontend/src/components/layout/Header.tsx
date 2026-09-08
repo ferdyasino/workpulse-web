@@ -76,6 +76,14 @@ export default function Header({ title, showClock = false }: HeaderProps) {
 
   const activeWorkspaces = workspaces.filter((item) => item.status === "ACTIVE");
 
+  /*
+   * Platform Owners can switch between any active workspace.
+   *
+   * Normal users can switch when they belong to more than one
+   * active workspace.
+   */
+  const canSwitchWorkspace = platformOwner || activeWorkspaces.length > 1;
+
   /* ------------------------------------------------------------------------ */
   /* Page Title                                                               */
   /* ------------------------------------------------------------------------ */
@@ -131,16 +139,21 @@ export default function Header({ title, showClock = false }: HeaderProps) {
   }
 
   function handleWorkspaceChange(id: string) {
-    if (!platformOwner) {
+    const selected = activeWorkspaces.find((item) => item.id === id);
+
+    if (!selected) {
       return;
     }
 
-    const selected = activeWorkspaces.find((item) => item.id === id);
+    /*
+     * setWorkspace is responsible for updating the active workspace.
+     *
+     * This is intentionally not restricted to Platform Owner.
+     * A normal user may switch between their own active memberships.
+     */
+    setWorkspace(selected);
 
-    if (selected) {
-      setWorkspace(selected);
-      closeMenu();
-    }
+    closeMenu();
   }
 
   /* ------------------------------------------------------------------------ */
@@ -478,10 +491,11 @@ export default function Header({ title, showClock = false }: HeaderProps) {
           )}
 
           {/* ============================================================= */}
-          {/* PLATFORM OWNER — SWITCH WORKSPACE                              */}
+          {/* SWITCH WORKSPACE                                                */}
+          {/* Platform Owner OR multi-workspace user                         */}
           {/* ============================================================= */}
 
-          {platformOwner && (
+          {canSwitchWorkspace && (
             <>
               <Typography
                 sx={{

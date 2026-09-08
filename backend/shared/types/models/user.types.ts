@@ -300,6 +300,8 @@ export type UserListItem = {
   position: string | null;
 
   shift: string | null;
+
+  deleted_at: string | null;
 };
 
 /* -------------------------------------------------------------------------- */

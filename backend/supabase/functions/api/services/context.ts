@@ -88,6 +88,144 @@ export function getPlatformOwnerContext(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Workspace Helpers                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Resolve an explicitly requested workspace for a normal user.
+ *
+ * workspace_members is the authoritative source for workspace access.
+ */
+async function resolveNormalUserWorkspace(
+  supabaseAdmin: SupabaseClient<Database>,
+  authUserId: string,
+  requestedWorkspaceId: string | null,
+) {
+  /*
+   * ------------------------------------------------------------------------ *
+   * Explicit workspace selected
+   * ------------------------------------------------------------------------ *
+   *
+   * Validate that the authenticated user actually belongs to the requested
+   * workspace and that the membership is active.
+   */
+  if (requestedWorkspaceId) {
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from("workspace_members")
+      .select(
+        `
+            id,
+            workspace_id,
+            user_id,
+            status,
+            deleted_at
+          `,
+      )
+      .eq("workspace_id", requestedWorkspaceId)
+      .eq("user_id", authUserId)
+      .maybeSingle();
+
+    if (membershipError) {
+      throw membershipError;
+    }
+
+    if (!membership) {
+      throw new Error("User does not belong to this workspace.");
+    }
+
+    if (membership.deleted_at !== null) {
+      throw new Error("User workspace membership has been deleted.");
+    }
+
+    if (membership.status !== "active") {
+      throw new Error("User workspace membership is not active.");
+    }
+
+    return {
+      workspaceId: membership.workspace_id,
+      membership,
+    };
+  }
+
+  /*
+   * ------------------------------------------------------------------------ *
+   * No workspace explicitly selected
+   * ------------------------------------------------------------------------ *
+   *
+   * Find all active memberships.
+   */
+  const { data: memberships, error: membershipsError } = await supabaseAdmin
+    .from("workspace_members")
+    .select(
+      `
+          id,
+          workspace_id,
+          user_id,
+          status,
+          deleted_at,
+          created_at
+        `,
+    )
+    .eq("user_id", authUserId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .order("created_at", {
+      ascending: true,
+    });
+
+  if (membershipsError) {
+    throw membershipsError;
+  }
+
+  if (!memberships || memberships.length === 0) {
+    throw new Error("User does not belong to any active workspace.");
+  }
+
+  /*
+   * One workspace can be selected automatically.
+   */
+  if (memberships.length === 1) {
+    return {
+      workspaceId: memberships[0].workspace_id,
+      membership: memberships[0],
+    };
+  }
+
+  /*
+   * Multiple workspaces require explicit selection.
+   */
+  throw new Error("Multiple workspaces found. A workspace must be selected.");
+}
+
+/**
+ * Resolve a workspace for Platform Owner.
+ *
+ * Platform Owner does not require workspace_members for administrative
+ * workspace access.
+ */
+async function resolvePlatformOwnerWorkspace(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspaceId: string,
+) {
+  const { data: workspace, error: workspaceError } = await supabaseAdmin
+    .from("workspaces")
+    .select("*")
+    .eq("id", workspaceId)
+    .is("deleted_at", null)
+    .single();
+
+  if (workspaceError) {
+    throw workspaceError;
+  }
+
+  if (!workspace) {
+    throw new Error("Workspace not found.");
+  }
+
+  return workspace;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Application Context                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -96,27 +234,23 @@ export async function getApplicationContext(
   authUserId: string,
   authEmail: string | null,
   authProvider: string | null,
+  workspace_id: string | null = null,
 ) {
   /*
-   * ------------------------------------------------------------------------
+   * ------------------------------------------------------------------------ *
    * Check Platform Owner FIRST
-   * ------------------------------------------------------------------------
+   * ------------------------------------------------------------------------ *
    *
    * Platform Owner is identified by PLATFORM_OWNER_EMAIL.
    *
-   * A Platform Owner:
+   * Platform Owner:
    *
    *   - does not require workspace_members
    *   - does not require users.workspace_id
    *   - may have a public.users record
    *   - may not have a public.users record
    *   - may authenticate before selecting a workspace
-   *
-   * If public.users exists, getUserContext() will return the real
-   * WorkPulse user ID while preserving platform_owner=true.
-   *
-   * If public.users does not exist, use the global Platform Owner
-   * fallback context.
+   *   - may explicitly select any active workspace
    */
   if (isPlatformOwnerEmail(authEmail)) {
     /*
@@ -124,8 +258,7 @@ export async function getApplicationContext(
      *
      * This is NOT an authorization check.
      *
-     * It only determines whether we should use the real users.id so
-     * Platform Owner attendance can work when the application user exists.
+     * It only determines whether we should use the real users.id.
      */
     const { data: existingUser, error: existingUserError } = await supabaseAdmin
       .from("users")
@@ -139,40 +272,64 @@ export async function getApplicationContext(
     }
 
     /*
-     * ----------------------------------------------------------------------
-     * Platform Owner with public.users record
-     * ----------------------------------------------------------------------
+     * ---------------------------------------------------------------------- *
+     * Platform Owner without public.users record
+     * ---------------------------------------------------------------------- *
      *
-     * IMPORTANT:
+     * Login is allowed globally.
      *
-     * Do NOT require workspace_id here.
-     *
-     * The Platform Owner has not necessarily selected a workspace yet.
-     *
-     * getUserContext() is intentionally called with null workspace_id.
-     * The updated users.ts handles Platform Owner specially and returns
-     * the real application user without requiring workspace membership.
+     * If no workspace is selected, return the global Platform Owner context.
      */
-    if (existingUser) {
-      const userContext = await getUserContext(
-        supabaseAdmin,
-        authUserId,
-        authEmail,
-        authProvider,
-        null,
-      );
-
-      if (!userContext.user_id) {
-        throw new Error("User WorkPulse record is missing.");
+    if (!existingUser) {
+      if (!workspace_id) {
+        return getPlatformOwnerContext(authUserId, authEmail);
       }
 
       /*
-       * No workspace is loaded during AUTH_ME.
-       *
-       * Workspace selection happens separately through the workspace
-       * provider. Workspace-specific operations must provide the selected
-       * workspace_id.
+       * Platform Owner can select any active workspace.
        */
+      const workspace = await resolvePlatformOwnerWorkspace(
+        supabaseAdmin,
+        workspace_id,
+      );
+
+      const platformContext = getPlatformOwnerContext(authUserId, authEmail);
+
+      return {
+        user: {
+          ...platformContext.user,
+          workspace_id: workspace.id,
+        },
+
+        workspace,
+      };
+    }
+
+    /*
+     * ---------------------------------------------------------------------- *
+     * Platform Owner with public.users record
+     * ---------------------------------------------------------------------- *
+     *
+     * Always resolve the real WorkPulse user identity.
+     */
+    const userContext = await getUserContext(
+      supabaseAdmin,
+      authUserId,
+      authEmail,
+      authProvider,
+      null,
+    );
+
+    if (!userContext.user_id) {
+      throw new Error("User WorkPulse record is missing.");
+    }
+
+    /*
+     * No workspace selected.
+     *
+     * Return global Platform Owner context.
+     */
+    if (!workspace_id) {
       return {
         user: {
           auth_user_id: userContext.auth_user_id,
@@ -229,23 +386,84 @@ export async function getApplicationContext(
     }
 
     /*
-     * ----------------------------------------------------------------------
-     * Platform Owner without public.users record
-     * ----------------------------------------------------------------------
+     * ---------------------------------------------------------------------- *
+     * Platform Owner with selected workspace
+     * ---------------------------------------------------------------------- *
      *
-     * Login is still allowed.
+     * Platform Owner may administer the selected workspace even without a
+     * workspace_members record.
      *
-     * This is the global Platform Owner context.
+     * Attendance authorization is intentionally handled separately and
+     * must still require actual membership.
      */
-    return getPlatformOwnerContext(authUserId, authEmail);
+    const workspace = await resolvePlatformOwnerWorkspace(
+      supabaseAdmin,
+      workspace_id,
+    );
+
+    return {
+      user: {
+        auth_user_id: userContext.auth_user_id,
+
+        user_id: userContext.user_id,
+
+        email: userContext.email,
+
+        display_name: userContext.display_name,
+
+        avatar_url: userContext.avatar_url,
+
+        employee_no: userContext.employee_no,
+
+        first_name: userContext.first_name,
+
+        middle_name: userContext.middle_name,
+
+        last_name: userContext.last_name,
+
+        hire_date: userContext.hire_date,
+
+        role: userContext.role,
+
+        employment_status: userContext.employment_status,
+
+        employment_type: userContext.employment_type,
+
+        auth_enabled: userContext.auth_enabled,
+
+        login_provider: userContext.login_provider,
+
+        invited_at: userContext.invited_at,
+
+        last_login_at: userContext.last_login_at,
+
+        workspace_id: workspace.id,
+
+        department: userContext.department,
+
+        position: userContext.position,
+
+        shift: null,
+
+        shift_id: undefined,
+
+        meta: {
+          platform_owner: true,
+        },
+      },
+
+      workspace,
+    };
   }
 
   /*
-   * ------------------------------------------------------------------------
+   * ------------------------------------------------------------------------ *
    * Normal WorkPulse User
-   * ------------------------------------------------------------------------
+   * ------------------------------------------------------------------------ *
    *
-   * Non-Platform-Owner users must have a public.users record.
+   * The authenticated Supabase Auth ID is authoritative.
+   *
+   * public.users.id must correspond to auth.users.id.
    */
   const { data: existingUser, error: existingUserError } = await supabaseAdmin
     .from("users")
@@ -263,35 +481,57 @@ export async function getApplicationContext(
   }
 
   /*
-   * ------------------------------------------------------------------------
-   * Resolve normal user's application context
-   * ------------------------------------------------------------------------
+   * ------------------------------------------------------------------------ *
+   * Resolve Workspace
+   * ------------------------------------------------------------------------ *
    *
-   * getUserContext() requires an active workspace membership for normal
-   * users.
+   * If workspace_id was supplied, validate that membership.
    *
-   * At this stage AUTH_ME does not receive a workspace_id, so the updated
-   * getUserContext() should resolve the user's normal/default workspace
-   * membership where supported.
+   * If workspace_id was not supplied:
+   *
+   *   - one active workspace -> automatically select it
+   *   - multiple active workspaces -> require explicit selection
+   */
+  const resolvedWorkspace = await resolveNormalUserWorkspace(
+    supabaseAdmin,
+    authUserId,
+    workspace_id,
+  );
+
+  const workspaceId = resolvedWorkspace.workspaceId;
+
+  if (!workspaceId) {
+    throw new Error("User workspace could not be resolved.");
+  }
+
+  /*
+   * ------------------------------------------------------------------------ *
+   * Resolve Workspace-Specific User Context
+   * ------------------------------------------------------------------------ *
+   *
+   * getUserContext() receives the authoritative workspace ID.
    */
   const userContext = await getUserContext(
     supabaseAdmin,
     authUserId,
     authEmail,
     authProvider,
+    workspaceId,
   );
 
   if (!userContext.workspace_id) {
-    throw new Error("User workspace_id is missing");
+    throw new Error("User workspace could not be resolved.");
   }
 
   if (!userContext.user_id) {
     throw new Error("User WorkPulse record is missing.");
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Workspace                                                                 */
-  /* ------------------------------------------------------------------------ */
+  /*
+   * ------------------------------------------------------------------------ *
+   * Workspace
+   * ------------------------------------------------------------------------ *
+   */
 
   const { data: workspace, error: workspaceError } = await supabaseAdmin
     .from("workspaces")
@@ -308,9 +548,11 @@ export async function getApplicationContext(
     throw new Error("User workspace not found.");
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Return Application Context                                               */
-  /* ------------------------------------------------------------------------ */
+  /*
+   * ------------------------------------------------------------------------ *
+   * Return Application Context
+   * ------------------------------------------------------------------------ *
+   */
 
   return {
     user: {

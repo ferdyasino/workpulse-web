@@ -93,9 +93,10 @@ function isActiveShift(item: {
 /**
  * Check whether the user is already a member of the target workspace.
  *
- * Email is NOT globally unique anymore.
+ * Email is NOT globally unique.
  *
- * The same Auth/public.users identity can belong to multiple workspaces.
+ * public.users is the global identity.
+ * workspace_members is the workspace relationship.
  */
 async function ensureUniqueEmail(
   supabaseAdmin: SupabaseClient<Database>,
@@ -105,12 +106,6 @@ async function ensureUniqueEmail(
 ): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
 
-  /*
-   * Find public.users records matching the email.
-   *
-   * We intentionally do not use workspace_id here because the canonical
-   * workspace relationship is now workspace_members.
-   */
   const { data: users, error: userError } = await supabaseAdmin
     .from("users")
     .select("id")
@@ -131,9 +126,6 @@ async function ensureUniqueEmail(
     return;
   }
 
-  /*
-   * Check whether any matching identity already belongs to this workspace.
-   */
   const { data: memberships, error: membershipError } = await supabaseAdmin
     .from("workspace_members")
     .select("id, user_id, status, deleted_at")
@@ -167,8 +159,7 @@ async function ensureUniqueEmail(
 /**
  * Find an existing Supabase Auth user by email.
  *
- * Supabase Admin listUsers() is paginated, so continue until the email
- * is found or all Auth users have been checked.
+ * Supabase Admin listUsers() is paginated.
  */
 async function findAuthUserByEmail(
   supabaseAdmin: SupabaseClient<Database>,
@@ -206,7 +197,7 @@ async function findAuthUserByEmail(
 }
 
 /**
- * Find an existing WorkPulse user using the Supabase Auth ID.
+ * Find the global WorkPulse identity using Supabase Auth ID.
  *
  * public.users.id = auth.users.id
  */
@@ -229,7 +220,9 @@ async function findPublicUserByAuthId(
 }
 
 /**
- * Get the existing workspace membership for a user.
+ * Get one workspace membership.
+ *
+ * workspace_members is authoritative.
  */
 async function getWorkspaceMembership(
   supabaseAdmin: SupabaseClient<Database>,
@@ -267,11 +260,103 @@ async function getWorkspaceMembership(
 }
 
 /**
- * Add an existing WorkPulse user to a workspace.
+ * Get all active workspace memberships for a user.
  *
- * If a soft-deleted membership exists, restore it instead of trying to
- * create a duplicate row because workspace_members has a unique
- * (workspace_id, user_id) constraint.
+ * workspace_members is the authoritative source for workspace access.
+ */
+async function getActiveWorkspaceMemberships(
+  supabaseAdmin: SupabaseClient<Database>,
+  user_id: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("workspace_members")
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      role,
+      department_id,
+      position_id,
+      employee_no,
+      employment_type,
+      employment_status,
+      status,
+      created_at,
+      updated_at,
+      deleted_at
+    `,
+    )
+    .eq("user_id", user_id)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .order("created_at", {
+      ascending: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+/**
+ * Resolve the operational workspace for a normal user.
+ */
+async function resolveNormalUserWorkspace(
+  supabaseAdmin: SupabaseClient<Database>,
+  userId: string,
+  workspace_id: string | null,
+) {
+  if (workspace_id) {
+    const membership = await getWorkspaceMembership(
+      supabaseAdmin,
+      workspace_id,
+      userId,
+    );
+
+    if (!membership) {
+      throw new Error("User does not belong to this workspace.");
+    }
+
+    if (membership.deleted_at !== null) {
+      throw new Error("User workspace membership has been deleted.");
+    }
+
+    if (membership.status !== "active") {
+      throw new Error("User workspace membership is not active.");
+    }
+
+    return {
+      workspace_id,
+      membership,
+    };
+  }
+
+  const memberships = await getActiveWorkspaceMemberships(
+    supabaseAdmin,
+    userId,
+  );
+
+  if (memberships.length === 0) {
+    throw new Error("User does not belong to any active workspace.");
+  }
+
+  if (memberships.length > 1) {
+    throw new Error("Multiple workspaces found. A workspace must be selected.");
+  }
+
+  const membership = memberships[0];
+
+  return {
+    workspace_id: membership.workspace_id,
+    membership,
+  };
+}
+
+/**
+ * Add an existing WorkPulse user to a workspace.
  */
 async function addUserToWorkspace(
   supabaseAdmin: SupabaseClient<Database>,
@@ -286,13 +371,7 @@ async function addUserToWorkspace(
 
   const now = new Date().toISOString();
 
-  /*
-   * Membership already exists.
-   */
   if (existingMembership) {
-    /*
-     * Active membership.
-     */
     if (
       existingMembership.status === "active" &&
       existingMembership.deleted_at === null
@@ -304,12 +383,6 @@ async function addUserToWorkspace(
       };
     }
 
-    /*
-     * Existing membership is inactive/suspended/deleted.
-     *
-     * Restore it because the unique constraint prevents inserting
-     * another workspace_members row for the same user/workspace pair.
-     */
     const { data, error } = await supabaseAdmin
       .from("workspace_members")
       .update({
@@ -354,11 +427,6 @@ async function addUserToWorkspace(
     };
   }
 
-  /*
-   * No membership exists.
-   *
-   * Create the workspace-specific relationship.
-   */
   const { data, error } = await supabaseAdmin
     .from("workspace_members")
     .insert({
@@ -405,10 +473,7 @@ async function addUserToWorkspace(
 }
 
 /**
- * Validate an optional authentication password.
- *
- * Supabase Auth performs its own password validation as well, but validating
- * here gives the API a predictable error before making the Auth request.
+ * Validate optional authentication password.
  */
 function validatePassword(password?: string | null): void {
   if (password === undefined || password === null) {
@@ -429,7 +494,7 @@ function validatePassword(password?: string | null): void {
 }
 
 /**
- * Determine whether a password is required for the selected login provider.
+ * Determine whether password is required.
  */
 function requiresPassword(loginProvider?: string | null): boolean {
   const provider = loginProvider?.trim().toUpperCase();
@@ -438,7 +503,7 @@ function requiresPassword(loginProvider?: string | null): boolean {
 }
 
 /**
- * Never log a password or any authentication secret.
+ * Never log passwords or secrets.
  */
 function getSafeCreateLogPayload(
   payload: CreateUserPayload & {
@@ -464,6 +529,118 @@ function getSafeCreateLogPayload(
   };
 }
 
+/**
+ * Get the global public user plus a workspace membership.
+ *
+ * This is used by workspace-scoped user-management operations.
+ */
+async function getWorkspaceUser(
+  supabaseAdmin: SupabaseClient<Database>,
+  workspace_id: string,
+  user_id: string,
+  options?: {
+    includeInactiveMembership?: boolean;
+  },
+) {
+  const membership = await getWorkspaceMembership(
+    supabaseAdmin,
+    workspace_id,
+    user_id,
+  );
+
+  if (!membership) {
+    return null;
+  }
+
+  if (membership.deleted_at !== null) {
+    return null;
+  }
+
+  if (!options?.includeInactiveMembership && membership.status !== "active") {
+    return null;
+  }
+
+  const { data: user, error } = await supabaseAdmin
+    .from("users")
+    .select(USER_SELECT)
+    .eq("id", user_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    user,
+    membership,
+  };
+}
+
+/**
+ * Resolve workspace department.
+ */
+async function resolveDepartment(
+  supabaseAdmin: SupabaseClient<Database>,
+  department_id: string | null,
+): Promise<UserContext["department"]> {
+  if (!department_id) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("departments")
+    .select("id, name")
+    .eq("id", department_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data
+    ? {
+        id: data.id,
+        name: data.name,
+      }
+    : null;
+}
+
+/**
+ * Resolve workspace position.
+ */
+async function resolvePosition(
+  supabaseAdmin: SupabaseClient<Database>,
+  position_id: string | null,
+): Promise<UserContext["position"]> {
+  if (!position_id) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("positions")
+    .select("id, title")
+    .eq("id", position_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data
+    ? {
+        id: data.id,
+        name: data.title,
+      }
+    : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Authentication / User Context                                              */
 /* -------------------------------------------------------------------------- */
@@ -471,24 +648,22 @@ function getSafeCreateLogPayload(
 /**
  * Resolve the authenticated WorkPulse user.
  *
- * IMPORTANT:
+ * public.users:
+ *   Global identity.
  *
- * public.users is the global identity.
- * workspace_members is the workspace-specific relationship.
+ * workspace_members:
+ *   Workspace-specific relationship.
  *
  * Normal users:
- *   - MUST have a selected workspace.
- *   - MUST have an active workspace_members record.
+ *   - Must have active workspace membership.
+ *   - One workspace -> automatically selected.
+ *   - Multiple workspaces -> explicit workspace_id required.
  *
  * Platform Owner:
- *   - Is identified globally by PLATFORM_OWNER_EMAIL.
- *   - Does NOT require a workspace_members record.
- *   - Does NOT require a selected workspace during login/context creation.
- *   - May select any workspace later.
- *   - Uses the real public.users.id when the public.users record exists.
- *   - Uses the selected workspace for attendance/shift operations.
- *
- * This allows the Platform Owner to log in before selecting a workspace.
+ *   - Identified by PLATFORM_OWNER_EMAIL.
+ *   - Does not require workspace_members.
+ *   - Can operate in any selected workspace.
+ *   - Attendance operations separately enforce actual membership.
  */
 export async function getUserContext(
   supabaseAdmin: SupabaseClient<Database>,
@@ -497,27 +672,8 @@ export async function getUserContext(
   authProvider: string | null = null,
   workspace_id: string | null = null,
 ): Promise<UserContext> {
-  /*
-   * ------------------------------------------------------------------------
-   * STEP 1
-   * Determine Platform Owner from the authenticated email FIRST.
-   *
-   * This is intentionally done before requiring public.users.
-   *
-   * A Platform Owner may exist in Auth without a public.users record.
-   * ------------------------------------------------------------------------
-   */
   const platformOwner = isPlatformOwnerEmail(authEmail);
 
-  /*
-   * ------------------------------------------------------------------------
-   * STEP 2
-   * Find the WorkPulse public.users identity.
-   *
-   * Platform Owner is allowed to continue when this does not exist.
-   * Normal users are not.
-   * ------------------------------------------------------------------------
-   */
   const { data: user, error } = await supabaseAdmin
     .from("users")
     .select(USER_SELECT)
@@ -533,15 +689,6 @@ export async function getUserContext(
    * ------------------------------------------------------------------------
    * PLATFORM OWNER WITHOUT public.users
    * ------------------------------------------------------------------------
-   *
-   * This is valid.
-   *
-   * The authenticated email itself is enough to establish global
-   * Platform Owner privilege.
-   *
-   * There is no real WorkPulse user_id in this situation, so the
-   * context cannot be used for attendance/time logging until a
-   * public.users record exists.
    */
   if (platformOwner && !user) {
     console.log(
@@ -555,10 +702,6 @@ export async function getUserContext(
 
     return {
       auth_user_id: authUserId,
-
-      /*
-       * No public.users identity exists yet.
-       */
       user_id: null,
 
       email: authEmail ?? "",
@@ -574,21 +717,12 @@ export async function getUserContext(
 
       hire_date: null,
 
-      /*
-       * PLATFORM_OWNER is a global privilege and is intentionally
-       * represented through metadata rather than UserRole.
-       *
-       * The UserContext role still needs to satisfy UserRole.
-       */
       role: "OWNER" as UserRole,
 
       employment_status: "ACTIVE" as EmploymentStatus,
 
       employment_type: "FULL_TIME" as EmploymentType,
 
-      /*
-       * The Auth account itself is authenticated.
-       */
       auth_enabled: true,
 
       login_provider:
@@ -598,22 +732,12 @@ export async function getUserContext(
 
       last_login_at: null,
 
-      /*
-       * If no workspace has been selected yet, this remains null.
-       *
-       * Once the Platform Owner selects a workspace, subsequent
-       * workspace-aware requests will provide that workspace_id.
-       */
       workspace_id,
 
       department: null,
 
       position: null,
 
-      /*
-       * There is no public.users identity, therefore there can be
-       * no user_shift assignment.
-       */
       shift: null,
 
       meta: {
@@ -632,11 +756,7 @@ export async function getUserContext(
   }
 
   /*
-   * The email stored in public.users must correspond to the
-   * authenticated Supabase Auth account.
-   *
-   * Platform Owner also goes through this check when a public.users
-   * record exists.
+   * Auth identity and WorkPulse identity must match.
    */
   if (
     authEmail &&
@@ -706,10 +826,6 @@ export async function getUserContext(
       user.last_login_at = now;
     }
   } else {
-    /*
-     * Even when the provider is unavailable, record the successful
-     * application login time.
-     */
     const now = new Date().toISOString();
 
     const { error: loginUpdateError } = await supabaseAdmin
@@ -728,14 +844,11 @@ export async function getUserContext(
   }
 
   /*
-   * ------------------------------------------------------------------------
-   * GLOBAL USER EMPLOYMENT STATUS
-   * ------------------------------------------------------------------------
+   * Global users employment status.
    *
-   * Platform Owner is still allowed to continue if their public.users
-   * record exists, provided that record is active.
+   * Workspace-specific employment status is handled below for normal users.
    */
-  if (user.employment_status !== "ACTIVE") {
+  if (platformOwner && user.employment_status !== "ACTIVE") {
     throw new Error(
       `This user account is ${String(user.employment_status)
         .toLowerCase()
@@ -745,20 +858,8 @@ export async function getUserContext(
 
   /*
    * ------------------------------------------------------------------------
-   * PLATFORM OWNER WITH public.users
+   * PLATFORM OWNER
    * ------------------------------------------------------------------------
-   *
-   * IMPORTANT:
-   *
-   * Platform Owner does NOT need workspace_members.
-   *
-   * If workspace_id is null:
-   *   → login/auth context is still valid.
-   *
-   * If workspace_id exists:
-   *   → selected workspace becomes the operational workspace.
-   *   → shift is resolved using that workspace.
-   *   → membership is NOT checked.
    */
   if (platformOwner) {
     let assignment = null;
@@ -791,10 +892,6 @@ export async function getUserContext(
       );
     }
 
-    /*
-     * Preserve the Platform Owner flag even when public.users.metadata
-     * does not contain it.
-     */
     const metadata =
       user.metadata && typeof user.metadata === "object"
         ? {
@@ -821,12 +918,6 @@ export async function getUserContext(
 
       hire_date: user.hire_date,
 
-      /*
-       * Keep the actual users.role.
-       *
-       * Platform Owner is a global privilege and is represented
-       * through meta.platform_owner.
-       */
       role: user.role as UserRole,
 
       employment_status: user.employment_status as EmploymentStatus,
@@ -841,19 +932,8 @@ export async function getUserContext(
 
       last_login_at: user.last_login_at,
 
-      /*
-       * IMPORTANT:
-       *
-       * This is the SELECTED workspace.
-       *
-       * It is NOT users.workspace_id.
-       */
       workspace_id,
 
-      /*
-       * Platform Owner does not require workspace membership,
-       * so use the global department/position values if available.
-       */
       department: user.department
         ? {
             id: user.department.id,
@@ -889,50 +969,29 @@ export async function getUserContext(
 
   /*
    * ------------------------------------------------------------------------
-   * NORMAL USER WORKSPACE SELECTION
+   * NORMAL USER WORKSPACE RESOLUTION
    * ------------------------------------------------------------------------
-   *
-   * Platform Owner has already returned above.
-   *
-   * Therefore this requirement applies only to normal users.
    */
-  if (!workspace_id) {
-    throw new Error("A workspace must be selected.");
-  }
-
-  /*
-   * ------------------------------------------------------------------------
-   * NORMAL WORKSPACE USER
-   * ------------------------------------------------------------------------
-   *
-   * Normal users MUST belong to the selected workspace.
-   */
-  const membership = await getWorkspaceMembership(
+  const resolvedWorkspace = await resolveNormalUserWorkspace(
     supabaseAdmin,
-    workspace_id,
     user.id,
+    workspace_id,
   );
 
-  if (!membership) {
-    throw new Error("User does not belong to this workspace.");
-  }
+  const selectedWorkspaceId = resolvedWorkspace.workspace_id;
+  const membership = resolvedWorkspace.membership;
 
-  if (membership.deleted_at !== null) {
-    throw new Error("User workspace membership has been deleted.");
-  }
+  console.log(
+    "NORMAL USER WORKSPACE CONTEXT:",
+    JSON.stringify({
+      user_id: user.id,
+      email: user.email,
+      workspace_id: selectedWorkspaceId,
+      workspace_selected_explicitly: Boolean(workspace_id),
+      membership_id: membership.id,
+    }),
+  );
 
-  if (membership.status !== "active") {
-    throw new Error("User workspace membership is not active.");
-  }
-
-  /*
-   * ------------------------------------------------------------------------
-   * WORKSPACE-SPECIFIC USER DATA
-   * ------------------------------------------------------------------------
-   *
-   * These values belong to the membership and therefore override the
-   * legacy/global values from public.users.
-   */
   const employeeNo =
     membership.employee_no !== null ? membership.employee_no : user.employee_no;
 
@@ -946,65 +1005,16 @@ export async function getUserContext(
       ? membership.employment_status
       : user.employment_status;
 
-  /*
-   * Resolve department from the workspace membership.
-   */
-  let department: UserContext["department"] = null;
+  const department = await resolveDepartment(
+    supabaseAdmin,
+    membership.department_id,
+  );
 
-  if (membership.department_id) {
-    const { data: departmentData, error: departmentError } = await supabaseAdmin
-      .from("departments")
-      .select("id, name")
-      .eq("id", membership.department_id)
-      .is("deleted_at", null)
-      .maybeSingle();
+  const position = await resolvePosition(supabaseAdmin, membership.position_id);
 
-    if (departmentError) {
-      throw departmentError;
-    }
-
-    department = departmentData
-      ? {
-          id: departmentData.id,
-          name: departmentData.name,
-        }
-      : null;
-  }
-
-  /*
-   * Resolve position from the workspace membership.
-   */
-  let position: UserContext["position"] = null;
-
-  if (membership.position_id) {
-    const { data: positionData, error: positionError } = await supabaseAdmin
-      .from("positions")
-      .select("id, title")
-      .eq("id", membership.position_id)
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (positionError) {
-      throw positionError;
-    }
-
-    position = positionData
-      ? {
-          id: positionData.id,
-          name: positionData.title,
-        }
-      : null;
-  }
-
-  /*
-   * Resolve the current shift using the selected workspace.
-   *
-   * This is critical for multi-workspace users because shift assignment
-   * must never come from users.workspace_id.
-   */
   const assignment = await getCurrentUserShift(
     supabaseAdmin,
-    workspace_id,
+    selectedWorkspaceId,
     user.id,
   );
 
@@ -1038,7 +1048,7 @@ export async function getUserContext(
 
     last_login_at: user.last_login_at,
 
-    workspace_id,
+    workspace_id: selectedWorkspaceId,
 
     department,
 
@@ -1067,12 +1077,75 @@ export async function getUserContext(
 /* User List                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * List users belonging to a workspace.
+ *
+ * IMPORTANT:
+ *
+ * workspace_members is the authoritative workspace relationship.
+ *
+ * users.workspace_id is intentionally NOT used here.
+ */
 export async function listUsers(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
   includeDeleted = false,
 ): Promise<UserListItem[]> {
-  let query = supabaseAdmin
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 1
+   * Load workspace memberships.
+   * ------------------------------------------------------------------------
+   */
+  let membershipQuery = supabaseAdmin
+    .from("workspace_members")
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      role,
+      department_id,
+      position_id,
+      employee_no,
+      employment_type,
+      employment_status,
+      status,
+      created_at,
+      updated_at,
+      deleted_at
+    `,
+    )
+    .eq("workspace_id", workspace_id)
+    .order("created_at", {
+      ascending: false,
+    });
+
+  if (!includeDeleted) {
+    membershipQuery = membershipQuery
+      .eq("status", "active")
+      .is("deleted_at", null);
+  }
+
+  const { data: memberships, error: membershipError } = await membershipQuery;
+
+  if (membershipError) {
+    throw membershipError;
+  }
+
+  if (!memberships || memberships.length === 0) {
+    return [];
+  }
+
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 2
+   * Load global user identities.
+   * ------------------------------------------------------------------------
+   */
+  const userIds = memberships.map((membership) => membership.user_id);
+
+  const { data: users, error: userError } = await supabaseAdmin
     .from("users")
     .select(
       `
@@ -1092,58 +1165,143 @@ export async function listUsers(
 
       position:positions (
         title
-      ),
-
-      user_shifts (
-        effective_from,
-        effective_to,
-        deleted_at,
-
-        shifts (
-          name
-        )
       )
     `,
     )
-    .eq("workspace_id", workspace_id)
-    .order("created_at", {
-      ascending: false,
-    });
+    .in("id", userIds);
 
-  if (!includeDeleted) {
-    query = query.is("deleted_at", null);
+  if (userError) {
+    throw userError;
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw error;
+  if (!users || users.length === 0) {
+    return [];
   }
 
-  return (data ?? []).map((user) => {
-    const activeShift = user.user_shifts?.find(isActiveShift);
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 3
+   * Load workspace-specific shifts.
+   *
+   * Do not use users.workspace_id.
+   * ------------------------------------------------------------------------
+   */
+  const { data: assignments, error: assignmentError } = await supabaseAdmin
+    .from("user_shifts")
+    .select(
+      `
+      user_id,
+      effective_from,
+      effective_to,
+      deleted_at,
 
-    return {
-      id: user.id,
-      employee_no: user.employee_no,
-      display_name: user.display_name,
-      email: user.email,
-      avatar_url: user.avatar_url,
+      shifts (
+        name
+      )
+    `,
+    )
+    .eq("workspace_id", workspace_id);
 
-      role: user.role as UserRole,
+  if (assignmentError) {
+    throw assignmentError;
+  }
 
-      employment_status: user.employment_status as EmploymentStatus,
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 4
+   * Build lookup maps.
+   * ------------------------------------------------------------------------
+   */
+  const userMap = new Map(users.map((user) => [user.id, user]));
 
-      employment_type: user.employment_type as EmploymentType,
+  const assignmentMap = new Map<
+    string,
+    {
+      effective_from: string;
+      effective_to: string | null;
+      deleted_at: string | null;
+      shifts: {
+        name: string;
+      } | null;
+    }
+  >();
 
-      deleted_at: user.deleted_at,
+  for (const assignment of assignments ?? []) {
+    if (!assignmentMap.has(assignment.user_id)) {
+      assignmentMap.set(assignment.user_id, assignment);
+      continue;
+    }
 
-      department: user.department?.name ?? null,
+    const existing = assignmentMap.get(assignment.user_id);
 
-      position: user.position?.title ?? null,
+    if (existing && assignment.effective_from > existing.effective_from) {
+      assignmentMap.set(assignment.user_id, assignment);
+    }
+  }
 
-      shift: activeShift?.shifts?.name ?? null,
-    };
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 5
+   * Build workspace-scoped user list.
+   * ------------------------------------------------------------------------
+   */
+  return memberships.flatMap((membership): UserListItem[] => {
+    const user = userMap.get(membership.user_id);
+
+    if (!user) {
+      return [];
+    }
+
+    /*
+     * Workspace-specific values come from membership.
+     */
+    const employeeNo =
+      membership.employee_no !== null
+        ? membership.employee_no
+        : user.employee_no;
+
+    const employmentStatus =
+      membership.employment_status !== null
+        ? membership.employment_status
+        : user.employment_status;
+
+    const employmentType =
+      membership.employment_type !== null
+        ? membership.employment_type
+        : user.employment_type;
+
+    const assignment = assignmentMap.get(membership.user_id);
+
+    const activeShift =
+      assignment && isActiveShift(assignment) ? assignment : null;
+
+    return [
+      {
+        id: user.id,
+
+        employee_no: employeeNo,
+
+        display_name: user.display_name,
+
+        email: user.email,
+
+        avatar_url: user.avatar_url,
+
+        role: membership.role as UserRole,
+
+        employment_status: employmentStatus as EmploymentStatus,
+
+        employment_type: employmentType as EmploymentType,
+
+        deleted_at: membership.deleted_at ?? user.deleted_at,
+
+        department: null,
+
+        position: null,
+
+        shift: activeShift?.shifts?.name ?? null,
+      },
+    ];
   });
 }
 
@@ -1151,24 +1309,55 @@ export async function listUsers(
 /* Get User                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Get a user inside a specific workspace.
+ *
+ * Workspace membership is authoritative.
+ */
 export async function getUser(
   supabaseAdmin: SupabaseClient<Database>,
   workspace_id: string,
   id: string,
 ) {
-  const { data, error } = await supabaseAdmin
-    .from("users")
-    .select(USER_SELECT)
-    .eq("workspace_id", workspace_id)
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
+  const result = await getWorkspaceUser(supabaseAdmin, workspace_id, id);
 
-  if (error) {
-    throw error;
+  if (!result) {
+    return null;
   }
 
-  return data;
+  const { user, membership } = result;
+
+  return {
+    ...user,
+
+    /*
+     * Override workspace-specific fields using membership.
+     */
+    workspace_id: membership.workspace_id,
+
+    employee_no:
+      membership.employee_no !== null
+        ? membership.employee_no
+        : user.employee_no,
+
+    role: membership.role,
+
+    employment_status:
+      membership.employment_status !== null
+        ? membership.employment_status
+        : user.employment_status,
+
+    employment_type:
+      membership.employment_type !== null
+        ? membership.employment_type
+        : user.employment_type,
+
+    department_id: membership.department_id,
+
+    position_id: membership.position_id,
+
+    workspace_membership: membership,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1203,10 +1392,8 @@ export async function createUser(
   );
 
   /*
-   * First check whether this email already belongs to the requested
-   * workspace.
-   *
-   * Same email is allowed in different workspaces.
+   * Same email is allowed globally as long as the identity is not
+   * already a member of this workspace.
    */
   await ensureUniqueEmail(supabaseAdmin, payload.workspace_id, email);
 
@@ -1214,8 +1401,6 @@ export async function createUser(
    * ------------------------------------------------------------------------
    * STEP 1
    * Find existing Supabase Auth identity.
-   *
-   * One Auth identity can belong to multiple WorkPulse workspaces.
    * ------------------------------------------------------------------------
    */
   const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email);
@@ -1224,11 +1409,6 @@ export async function createUser(
   let authUserWasCreated = false;
 
   if (existingAuthUser) {
-    /*
-     * Existing Auth identity.
-     *
-     * NEVER create another Auth account.
-     */
     authUserId = existingAuthUser.id;
 
     console.log(
@@ -1242,7 +1422,7 @@ export async function createUser(
     /*
      * ----------------------------------------------------------------------
      * STEP 2
-     * Auth identity does not exist, so create it.
+     * Create Auth identity.
      * ----------------------------------------------------------------------
      */
     const { data: authData, error: authError } =
@@ -1297,9 +1477,7 @@ export async function createUser(
   /*
    * ------------------------------------------------------------------------
    * STEP 3
-   * Check whether this Auth identity already has a public.users record.
-   *
-   * public.users.id = auth.users.id
+   * Check global WorkPulse identity.
    * ------------------------------------------------------------------------
    */
   const existingPublicUser = await findPublicUserByAuthId(
@@ -1311,10 +1489,7 @@ export async function createUser(
    * ------------------------------------------------------------------------
    * EXISTING public.users
    *
-   * The identity already exists globally.
-   *
-   * Do NOT create another public.users row.
-   * Add the existing identity to the requested workspace instead.
+   * Add identity to workspace only.
    * ------------------------------------------------------------------------
    */
   if (existingPublicUser) {
@@ -1358,7 +1533,7 @@ export async function createUser(
       };
     } catch (error) {
       /*
-       * Existing Auth/public.users identities are NEVER deleted here.
+       * Existing Auth/public.users identities are never deleted.
        */
       throw error;
     }
@@ -1366,10 +1541,7 @@ export async function createUser(
 
   /*
    * ------------------------------------------------------------------------
-   * NEW public.users RECORD
-   *
-   * Auth existed but WorkPulse did not yet know about it,
-   * OR both Auth and WorkPulse were newly created.
+   * NEW public.users
    * ------------------------------------------------------------------------
    */
   const now = new Date().toISOString();
@@ -1378,13 +1550,15 @@ export async function createUser(
     id: authUserId,
 
     /*
-     * Keep the existing users.workspace_id temporarily for compatibility
-     * with the current application architecture.
+     * Legacy compatibility field.
      *
-     * workspace_members is the actual workspace relationship.
+     * It is NOT authoritative for workspace access.
      */
     workspace_id: payload.workspace_id,
 
+    /*
+     * Global identity fields.
+     */
     employee_no: payload.employee_no,
 
     first_name: payload.first_name,
@@ -1399,6 +1573,11 @@ export async function createUser(
 
     avatar_url: payload.avatar_url ?? null,
 
+    /*
+     * Keep these populated for compatibility.
+     *
+     * Workspace-specific values are also written to workspace_members.
+     */
     department_id: payload.department_id ?? null,
 
     position_id: payload.position_id ?? null,
@@ -1420,13 +1599,6 @@ export async function createUser(
     updated_at: now,
   };
 
-  /*
-   * IMPORTANT:
-   *
-   * Do NOT add password to insertData.
-   *
-   * Passwords are managed exclusively by Supabase Auth.
-   */
   console.log(
     "CREATE USER INSERT:",
     JSON.stringify({
@@ -1438,7 +1610,7 @@ export async function createUser(
     /*
      * ----------------------------------------------------------------------
      * STEP 4
-     * Create the global public.users record.
+     * Create global identity.
      * ----------------------------------------------------------------------
      */
     const { data, error } = await supabaseAdmin
@@ -1458,12 +1630,6 @@ export async function createUser(
         }),
       );
 
-      /*
-       * Only delete Auth when WE created the Auth account in this request.
-       *
-       * If the Auth identity already existed, it belongs to the user and
-       * must NEVER be deleted because public.users insertion failed.
-       */
       if (authUserWasCreated) {
         const { error: cleanupError } =
           await supabaseAdmin.auth.admin.deleteUser(authUserId);
@@ -1485,7 +1651,7 @@ export async function createUser(
     /*
      * ----------------------------------------------------------------------
      * STEP 5
-     * Create workspace membership.
+     * Create workspace relationship.
      * ----------------------------------------------------------------------
      */
     try {
@@ -1518,13 +1684,6 @@ export async function createUser(
           : "User added to this workspace.",
       };
     } catch (membershipError) {
-      /*
-       * Workspace membership failed after public.users was created.
-       *
-       * If Auth was newly created, clean up both records.
-       *
-       * If Auth already existed, DO NOT delete Auth.
-       */
       console.error(
         "CREATE USER WORKSPACE MEMBERSHIP FAILED:",
         JSON.stringify({
@@ -1538,8 +1697,7 @@ export async function createUser(
       );
 
       /*
-       * Roll back public.users because this is a newly-created
-       * WorkPulse identity.
+       * Roll back newly created global identity.
        */
       const { error: publicUserCleanupError } = await supabaseAdmin
         .from("users")
@@ -1556,9 +1714,6 @@ export async function createUser(
         );
       }
 
-      /*
-       * Only remove Auth when this request created it.
-       */
       if (authUserWasCreated) {
         const { error: cleanupError } =
           await supabaseAdmin.auth.admin.deleteUser(authUserId);
@@ -1594,6 +1749,17 @@ export async function createUser(
 /* Update User                                                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Update a user inside one workspace.
+ *
+ * Global identity fields:
+ *   public.users
+ *
+ * Workspace-specific fields:
+ *   workspace_members
+ *
+ * This prevents changing Workspace A's membership data from Workspace B.
+ */
 export async function updateUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UpdateUserPayload & {
@@ -1601,6 +1767,30 @@ export async function updateUser(
     password?: string;
   },
 ) {
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 1
+   * Validate workspace membership.
+   * ------------------------------------------------------------------------
+   */
+  const existing = await getWorkspaceUser(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.id,
+  );
+
+  if (!existing) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  const { user, membership } = existing;
+
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 2
+   * Validate email uniqueness inside this workspace.
+   * ------------------------------------------------------------------------
+   */
   if (payload.email !== undefined) {
     await ensureUniqueEmail(
       supabaseAdmin,
@@ -1611,9 +1801,10 @@ export async function updateUser(
   }
 
   /*
-   * Password is an Auth-only field.
-   *
-   * It must never be included in public.users updateData.
+   * ------------------------------------------------------------------------
+   * STEP 3
+   * Update password in Supabase Auth only.
+   * ------------------------------------------------------------------------
    */
   if (payload.password !== undefined) {
     validatePassword(payload.password);
@@ -1640,9 +1831,15 @@ export async function updateUser(
     }
   }
 
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 4
+   * Update GLOBAL users fields.
+   *
+   * Do NOT put workspace-specific membership fields here.
+   * ------------------------------------------------------------------------
+   */
   const updateData: Database["public"]["Tables"]["users"]["Update"] = {
-    employee_no: payload.employee_no,
-
     first_name: payload.first_name,
 
     middle_name: payload.middle_name ?? null,
@@ -1658,21 +1855,11 @@ export async function updateUser(
 
     avatar_url: payload.avatar_url ?? null,
 
-    department_id: payload.department_id ?? null,
-
-    position_id: payload.position_id ?? null,
-
-    role: payload.role ?? "EMPLOYEE",
-
-    employment_status: payload.employment_status ?? "ACTIVE",
-
-    employment_type: payload.employment_type ?? "FULL_TIME",
+    hire_date: payload.hire_date ?? null,
 
     auth_enabled: payload.auth_enabled ?? false,
 
     login_provider: payload.login_provider ?? "EMAIL",
-
-    hire_date: payload.hire_date ?? null,
 
     metadata: payload.metadata ?? {},
 
@@ -1680,59 +1867,208 @@ export async function updateUser(
   };
 
   console.log(
-    "USER_UPDATE:",
+    "USER_GLOBAL_UPDATE:",
     JSON.stringify({
       id: payload.id,
       workspace_id: payload.workspace_id,
-      updateData,
       password_changed: payload.password !== undefined,
     }),
   );
 
-  const { data, error } = await supabaseAdmin
+  const { data: updatedUser, error: userUpdateError } = await supabaseAdmin
     .from("users")
     .update(updateData)
-    .eq("id", payload.id)
-    .eq("workspace_id", payload.workspace_id)
+    .eq("id", user.id)
     .is("deleted_at", null)
     .select(USER_SELECT)
     .single();
 
-  if (error) {
+  if (userUpdateError) {
     console.error(
-      "USER_UPDATE DATABASE ERROR:",
+      "USER_GLOBAL_UPDATE DATABASE ERROR:",
       JSON.stringify({
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+        code: userUpdateError.code,
+        message: userUpdateError.message,
+        details: userUpdateError.details,
+        hint: userUpdateError.hint,
       }),
     );
 
-    throw error;
+    throw userUpdateError;
   }
 
-  return data;
+  /*
+   * ------------------------------------------------------------------------
+   * STEP 5
+   * Update WORKSPACE-SPECIFIC membership fields.
+   * ------------------------------------------------------------------------
+   */
+  const membershipUpdateData = {
+    employee_no:
+      payload.employee_no !== undefined
+        ? payload.employee_no
+        : membership.employee_no,
+
+    role: payload.role !== undefined ? payload.role : membership.role,
+
+    department_id:
+      payload.department_id !== undefined
+        ? payload.department_id
+        : membership.department_id,
+
+    position_id:
+      payload.position_id !== undefined
+        ? payload.position_id
+        : membership.position_id,
+
+    employment_type:
+      payload.employment_type !== undefined
+        ? payload.employment_type
+        : membership.employment_type,
+
+    employment_status:
+      payload.employment_status !== undefined
+        ? payload.employment_status
+        : membership.employment_status,
+
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log(
+    "USER_WORKSPACE_MEMBERSHIP_UPDATE:",
+    JSON.stringify({
+      id: payload.id,
+      workspace_id: payload.workspace_id,
+      membership_id: membership.id,
+      updateData: membershipUpdateData,
+    }),
+  );
+
+  const { data: updatedMembership, error: membershipUpdateError } =
+    await supabaseAdmin
+      .from("workspace_members")
+      .update(membershipUpdateData)
+      .eq("id", membership.id)
+      .eq("workspace_id", payload.workspace_id)
+      .eq("user_id", payload.id)
+      .is("deleted_at", null)
+      .select(
+        `
+        id,
+        workspace_id,
+        user_id,
+        role,
+        department_id,
+        position_id,
+        employee_no,
+        employment_type,
+        employment_status,
+        status,
+        created_at,
+        updated_at,
+        deleted_at
+      `,
+      )
+      .single();
+
+  if (membershipUpdateError) {
+    console.error(
+      "USER_WORKSPACE_MEMBERSHIP_UPDATE ERROR:",
+      JSON.stringify({
+        code: membershipUpdateError.code,
+        message: membershipUpdateError.message,
+        details: membershipUpdateError.details,
+        hint: membershipUpdateError.hint,
+      }),
+    );
+
+    throw membershipUpdateError;
+  }
+
+  return {
+    ...updatedUser,
+
+    /*
+     * Return the selected workspace's values.
+     */
+    workspace_id: updatedMembership.workspace_id,
+
+    employee_no:
+      updatedMembership.employee_no !== null
+        ? updatedMembership.employee_no
+        : updatedUser.employee_no,
+
+    role: updatedMembership.role,
+
+    employment_status:
+      updatedMembership.employment_status !== null
+        ? updatedMembership.employment_status
+        : updatedUser.employment_status,
+
+    employment_type:
+      updatedMembership.employment_type !== null
+        ? updatedMembership.employment_type
+        : updatedUser.employment_type,
+
+    department_id: updatedMembership.department_id,
+
+    position_id: updatedMembership.position_id,
+
+    workspace_membership: updatedMembership,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
 /* Activate User                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Activate a user's membership in a workspace.
+ *
+ * This does NOT use users.workspace_id.
+ */
 export async function activateUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
+  const membership = await getWorkspaceMembership(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.id,
+  );
+
+  if (!membership) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
   const { data, error } = await supabaseAdmin
-    .from("users")
+    .from("workspace_members")
     .update({
+      status: "active",
       employment_status: "ACTIVE",
       deleted_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", payload.id)
+    .eq("id", membership.id)
     .eq("workspace_id", payload.workspace_id)
-    .select(USER_SELECT)
+    .eq("user_id", payload.id)
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      role,
+      department_id,
+      position_id,
+      employee_no,
+      employment_type,
+      employment_status,
+      status,
+      created_at,
+      updated_at,
+      deleted_at
+    `,
+    )
     .single();
 
   if (error) {
@@ -1746,20 +2082,51 @@ export async function activateUser(
 /* Deactivate User                                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Deactivate only the user's membership in the selected workspace.
+ */
 export async function deactivateUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
+  const membership = await getWorkspaceMembership(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.id,
+  );
+
+  if (!membership) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
   const { data, error } = await supabaseAdmin
-    .from("users")
+    .from("workspace_members")
     .update({
+      status: "inactive",
       employment_status: "INACTIVE",
       updated_at: new Date().toISOString(),
     })
-    .eq("id", payload.id)
+    .eq("id", membership.id)
     .eq("workspace_id", payload.workspace_id)
+    .eq("user_id", payload.id)
     .is("deleted_at", null)
-    .select(USER_SELECT)
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      role,
+      department_id,
+      position_id,
+      employee_no,
+      employment_type,
+      employment_status,
+      status,
+      created_at,
+      updated_at,
+      deleted_at
+    `,
+    )
     .single();
 
   if (error) {
@@ -1773,18 +2140,38 @@ export async function deactivateUser(
 /* Soft Delete User                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Soft-delete only the user's membership in the selected workspace.
+ *
+ * The global public.users identity remains intact so the user can still
+ * belong to other workspaces.
+ */
 export async function deleteUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
+  const membership = await getWorkspaceMembership(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.id,
+  );
+
+  if (!membership) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  const now = new Date().toISOString();
+
   const { error } = await supabaseAdmin
-    .from("users")
+    .from("workspace_members")
     .update({
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      status: "inactive",
+      deleted_at: now,
+      updated_at: now,
     })
-    .eq("id", payload.id)
+    .eq("id", membership.id)
     .eq("workspace_id", payload.workspace_id)
+    .eq("user_id", payload.id)
     .is("deleted_at", null);
 
   if (error) {
@@ -1796,20 +2183,51 @@ export async function deleteUser(
 /* Restore User                                                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Restore only the user's membership in the selected workspace.
+ */
 export async function restoreUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
+  const membership = await getWorkspaceMembership(
+    supabaseAdmin,
+    payload.workspace_id,
+    payload.id,
+  );
+
+  if (!membership) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
   const { data, error } = await supabaseAdmin
-    .from("users")
+    .from("workspace_members")
     .update({
-      deleted_at: null,
+      status: "active",
       employment_status: "ACTIVE",
+      deleted_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", payload.id)
+    .eq("id", membership.id)
     .eq("workspace_id", payload.workspace_id)
-    .select(USER_SELECT)
+    .eq("user_id", payload.id)
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      role,
+      department_id,
+      position_id,
+      employee_no,
+      employment_type,
+      employment_status,
+      status,
+      created_at,
+      updated_at,
+      deleted_at
+    `,
+    )
     .single();
 
   if (error) {
@@ -1823,14 +2241,40 @@ export async function restoreUser(
 /* Hard Delete User                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Hard-delete the global Auth identity.
+ *
+ * Because public.users.id references auth.users.id ON DELETE CASCADE,
+ * this also removes public.users and its workspace memberships.
+ *
+ * This is intentionally global.
+ */
 export async function hardDeleteUser(
   supabaseAdmin: SupabaseClient<Database>,
   payload: UserActionPayload,
 ) {
   /*
-   * Because public.users.id references auth.users.id ON DELETE CASCADE,
-   * deleting the Auth account also removes the public.users record.
+   * Hard deletion is intentionally different from deleteUser().
+   *
+   * deleteUser() removes the user from ONE workspace.
+   *
+   * hardDeleteUser() removes the GLOBAL identity and therefore all
+   * workspace memberships.
    */
+  const { data: user, error: userError } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("id", payload.id)
+    .maybeSingle();
+
+  if (userError) {
+    throw userError;
+  }
+
+  if (!user) {
+    throw new Error("User account not found.");
+  }
+
   const { error } = await supabaseAdmin.auth.admin.deleteUser(payload.id);
 
   if (error) {
