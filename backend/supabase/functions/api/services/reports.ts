@@ -266,19 +266,11 @@ function getShiftWindow(
 /* Scheduled Minutes                                                          */
 /* -------------------------------------------------------------------------- */
 
-function getScheduledMinutes(
-  // shift: ShiftRow,
-  shiftWindow: {
-    startsAt: Date;
-    endsAt: Date;
-  },
-): number {
-  const shiftSpanMinutes = getMinutesBetweenDates(
-    shiftWindow.startsAt,
-    shiftWindow.endsAt,
-  );
-
-  return shiftSpanMinutes;
+function getScheduledMinutes(shiftWindow: {
+  startsAt: Date;
+  endsAt: Date;
+}): number {
+  return getMinutesBetweenDates(shiftWindow.startsAt, shiftWindow.endsAt);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -314,12 +306,16 @@ function calculateMetrics(
       };
     }
 
-    const breakMinutes = getBreakMinutes(session);
+    /*
+     * Without a shift there is no scheduled target,
+     * so worked time is simply the actual attendance
+     * span.
+     *
+     * Breaks are NOT deducted from worked_minutes.
+     */
+    const workedMinutes = getMinutesBetween(session.time_in, session.time_out);
 
-    const workedMinutes = Math.max(
-      0,
-      getMinutesBetween(session.time_in, session.time_out) - breakMinutes,
-    );
+    const breakMinutes = getBreakMinutes(session);
 
     return {
       worked_minutes: workedMinutes,
@@ -338,9 +334,6 @@ function calculateMetrics(
 
   /*
    * No IN = absent.
-   *
-   * Range reports will never reach this state because
-   * no-activity dates are excluded before the row is built.
    */
   if (!session || !session.time_in) {
     return {
@@ -354,22 +347,20 @@ function calculateMetrics(
     };
   }
 
-  const breakMinutes = getBreakMinutes(session);
-
   /*
-   * Actual worked time:
+   * Break/lunch minutes are reported separately.
    *
-   * attendance elapsed - actual breaks/lunch.
+   * IMPORTANT:
+   *
+   * They are NOT subtracted from worked_minutes.
    */
-  const elapsedMinutes = getMinutesBetween(session.time_in, session.time_out);
-
-  let workedMinutes = Math.max(0, elapsedMinutes - breakMinutes);
+  const breakMinutes = getBreakMinutes(session);
 
   const timeIn = new Date(session.time_in);
 
   if (Number.isNaN(timeIn.getTime())) {
     return {
-      worked_minutes: workedMinutes,
+      worked_minutes: 0,
       break_minutes: breakMinutes,
       scheduled_minutes: scheduledMinutes,
       late_minutes: 0,
@@ -382,55 +373,48 @@ function calculateMetrics(
   const graceMinutes = Math.max(0, shift.grace_minutes ?? 0);
 
   const shiftStartMs = shiftWindow.startsAt.getTime();
-
   const shiftEndMs = shiftWindow.endsAt.getTime();
-
   const timeInMs = timeIn.getTime();
 
-  /*
-   * Actual late minutes.
-   */
+  /* ---------------------------------------------------------------------- */
+  /* Late                                                                   */
+  /* ---------------------------------------------------------------------- */
+
   const actualLateMinutes =
     timeInMs > shiftStartMs ? Math.floor((timeInMs - shiftStartMs) / 60000) : 0;
 
   const lateMinutes =
     actualLateMinutes > graceMinutes ? actualLateMinutes - graceMinutes : 0;
 
-  /*
-   * Grace credit.
-   */
-  if (actualLateMinutes > 0 && actualLateMinutes <= graceMinutes) {
-    workedMinutes += actualLateMinutes;
-  }
+  /* ---------------------------------------------------------------------- */
+  /* Undertime / Overtime                                                   */
+  /* ---------------------------------------------------------------------- */
 
   let undertimeMinutes = 0;
   let overtimeMinutes = 0;
 
-  /*
-   * Undertime is missing attendance span.
-   *
-   * It is NOT:
-   *
-   * scheduled - worked
-   */
   if (session.time_out) {
     const timeOut = new Date(session.time_out);
 
     if (!Number.isNaN(timeOut.getTime())) {
       const timeOutMs = timeOut.getTime();
 
+      /*
+       * Grace-period arrival does not count as late.
+       *
+       * Therefore, when the employee arrives inside
+       * the grace window, the effective start remains
+       * the scheduled shift start.
+       */
       let effectiveAttendanceStartMs = timeInMs;
 
-      /*
-       * Give back grace if arrival
-       * was inside the grace window.
-       */
       if (actualLateMinutes > 0 && actualLateMinutes <= graceMinutes) {
         effectiveAttendanceStartMs = shiftStartMs;
       }
 
       /*
-       * Undertime before shift end.
+       * Undertime is the missing attendance span
+       * before the scheduled shift end.
        */
       if (timeOutMs < shiftEndMs) {
         undertimeMinutes = Math.floor(
@@ -441,17 +425,60 @@ function calculateMetrics(
       }
 
       /*
-       * Overtime after shift end.
+       * Overtime is attendance after the scheduled
+       * shift end.
        */
       if (timeOutMs > shiftEndMs) {
         overtimeMinutes = Math.floor((timeOutMs - shiftEndMs) / 60000);
+
+        overtimeMinutes = Math.max(0, overtimeMinutes);
       }
     }
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* Worked Minutes                                                         */
+  /* ---------------------------------------------------------------------- */
+
   /*
-   * Status priority.
+   * WORKED MINUTES
+   *
+   * Breaks and lunch are intentionally NOT involved.
+   *
+   * Formula:
+   *
+   *   scheduled
+   *   + overtime
+   *   - late
+   *   - undertime
+   *
+   * Examples:
+   *
+   * 8:00 - 4:00
+   *   480 + 0 - 0 - 0 = 480
+   *
+   * 8:15 - 4:00
+   *   480 + 0 - 15 - 0 = 465
+   *
+   * 8:00 - 3:30
+   *   480 + 0 - 0 - 30 = 450
+   *
+   * 8:15 - 4:30
+   *   480 + 30 - 15 - 0 = 495
+   *
+   * A lunch/break does not change this value.
    */
+  const workedMinutes = Math.max(
+    0,
+    Math.floor(
+      scheduledMinutes + overtimeMinutes - lateMinutes - undertimeMinutes,
+    ),
+  );
+
+  /* ---------------------------------------------------------------------- */
+  /* Status                                                                 */
+  /* ---------------------------------------------------------------------- */
+
   let attendanceStatus = "PRESENT";
 
   if (!session.time_out) {
@@ -469,12 +496,21 @@ function calculateMetrics(
   }
 
   return {
-    worked_minutes: Math.max(0, Math.floor(workedMinutes)),
+    worked_minutes: workedMinutes,
+
+    /*
+     * Breaks remain available as their own metric.
+     */
     break_minutes: breakMinutes,
+
     scheduled_minutes: scheduledMinutes,
+
     late_minutes: Math.max(0, lateMinutes),
+
     undertime_minutes: Math.max(0, undertimeMinutes),
+
     overtime_minutes: Math.max(0, overtimeMinutes),
+
     attendance_status: attendanceStatus,
   };
 }
@@ -530,11 +566,8 @@ function findUserShiftForDate(
  *
  * It does NOT split by calendar week.
  *
- * Important:
- *
- * Only attendance rows with actual attendance activity
- * are included. Scheduled-but-unused shift dates do not
- * create ABSENT rows in a range report.
+ * Only dates with actual attendance activity
+ * are included in the range aggregation.
  */
 function buildRangeRows(
   rows: AttendanceReportRowWithShiftTimes[],
@@ -547,10 +580,6 @@ function buildRangeRows(
     /*
      * Range reports only include actual attendance
      * activity.
-     *
-     * This additional guard makes the aggregation
-     * defensive even if a future caller supplies an
-     * ABSENT row.
      */
     const hasAttendanceActivity =
       Boolean(row.time_in) ||
@@ -579,13 +608,6 @@ function buildRangeRows(
 
         department: row.department,
 
-        /*
-         * Keep the existing API field names for
-         * frontend compatibility.
-         *
-         * Semantically these now represent the
-         * selected report range.
-         */
         week_start: dateFrom,
 
         week_end: dateTo,
@@ -851,33 +873,20 @@ export async function getAttendanceReport(
       const logsForDate = logsByUserAndDate.get(`${user.id}:${workDate}`) ?? [];
 
       /*
-       * RANGE/WEEKLY REPORT
+       * RANGE/WEEKLY:
        *
-       * Critical behavior:
-       *
-       * If the employee has no time logs for
-       * this date, DO NOT create an ABSENT row.
-       *
-       * This prevents:
-       *
-       * Aug 31 -> Sep 6
-       * 7 dates × 480 minutes
-       *
-       * from becoming:
-       *
-       * 7 absent days / 3360 scheduled minutes.
+       * Do not create absent rows for dates
+       * with no time logs.
        */
       if (isRangeReport && logsForDate.length === 0) {
         continue;
       }
 
       /*
-       * DAILY/BREAK behavior:
+       * DAILY/BREAK:
        *
        * Keep scheduled employees visible even
        * when they have no attendance.
-       *
-       * This preserves daily ABSENT reporting.
        */
       if (!assignment && logsForDate.length === 0) {
         continue;
@@ -892,18 +901,17 @@ export async function getAttendanceReport(
       const shift = assignment
         ? (shiftsById.get(assignment.shift_id) ?? null)
         : logsForDate.length > 0
-          ? (shiftsById.get(logsForDate[0].user_shift_id) ?? null)
+          ? logsForDate[0].user_shift_id
+            ? (shiftsById.get(logsForDate[0].user_shift_id) ?? null)
+            : null
           : null;
 
       const sessions =
         logsForDate.length > 0 ? buildAttendanceSessions(logsForDate) : [];
 
       /*
-       * Only sessions containing actual IN/OUT
-       * attendance activity count for range reports.
-       *
-       * Break-only/lunch-only records do not make
-       * an employee appear in Range Hours.
+       * Only IN/OUT attendance activity
+       * counts for range reports.
        */
       const hasAttendanceActivity = sessions.some(
         (session) => Boolean(session.time_in) || Boolean(session.time_out),
@@ -1018,13 +1026,6 @@ export async function getAttendanceReport(
   /* Range Hours                                                               */
   /* ------------------------------------------------------------------------ */
 
-  /*
-   * For RANGE/WEEKLY:
-   *
-   * Aggregate ONLY the selected date range.
-   *
-   * Do not calculate calendar-week boundaries.
-   */
   const weeklyRows = isRangeReport
     ? buildRangeRows(rows, date_from, date_to)
     : [];
