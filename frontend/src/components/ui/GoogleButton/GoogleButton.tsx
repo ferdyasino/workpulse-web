@@ -12,44 +12,52 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
   return (
     <Box
       sx={{
-        width: {
-          xs: "100%",
-          sm: 320,
-        },
+        width: "100%",
         maxWidth: 320,
-        height: 40,
+        minWidth: 0,
+
+        mx: "auto",
+
         display: "flex",
-        justifyContent: "center",
         alignItems: "center",
-        overflow: "hidden",
+        justifyContent: "center",
+
         boxSizing: "border-box",
 
         "& > div": {
           width: "100% !important",
-          display: "flex",
+          maxWidth: "320px !important",
+
+          display: "flex !important",
+          alignItems: "center",
           justifyContent: "center",
         },
 
         "& iframe": {
-          maxWidth: "100%",
+          width: "100% !important",
+          maxWidth: "320px !important",
+
+          display: "block",
         },
 
-        "@media (max-width:360px)": {
+        "@media (max-width: 360px)": {
           "& > div": {
             transform: "scale(0.9)",
             transformOrigin: "center",
           },
         },
 
-        "@media (max-width:340px)": {
+        "@media (max-width: 340px)": {
           "& > div": {
             transform: "scale(0.85)",
+            transformOrigin: "center",
           },
         },
 
-        "@media (max-width:320px)": {
+        "@media (max-width: 320px)": {
           "& > div": {
             transform: "scale(0.8)",
+            transformOrigin: "center",
           },
         },
       }}

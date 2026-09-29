@@ -11,7 +11,18 @@ import {
   Restaurant,
   WorkOutlined,
 } from "@mui/icons-material";
-import { Box, Button, Chip, Container, Divider, Paper, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Chip,
+  Collapse,
+  Container,
+  Divider,
+  Paper,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from "@mui/material";
 
 import { Clock } from "@/components/ui";
 import LoginForm from "@/features/auth/components/LoginForm";
@@ -336,14 +347,68 @@ function AttendancePreview() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Login Panel                                                                */
+/* -------------------------------------------------------------------------- */
+
+function LoginPanel() {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <Clock timezone={getBrowserTimezone()} locale="en-US" variant="inline" />
+      </Box>
+
+      <Box sx={{ textAlign: "center" }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 700,
+            mb: 1,
+          }}
+        >
+          Welcome back
+        </Typography>
+
+        <Typography variant="body2" color="text.secondary">
+          Sign in to continue to WorkPulse.
+        </Typography>
+      </Box>
+
+      <Divider />
+
+      <LoginForm />
+    </Box>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Login Page                                                                 */
 /* -------------------------------------------------------------------------- */
 
 export default function LoginPage() {
-  const loginSectionRef = useRef<HTMLDivElement | null>(null);
-  const [showHeaderLogin, setShowHeaderLogin] = useState(false);
+  const theme = useTheme();
 
-  /* Header Login Visibility */
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
+  const loginSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const [showHeaderLogin, setShowHeaderLogin] = useState(false);
+  const [mobileLoginOpen, setMobileLoginOpen] = useState(false);
+
+  /* ------------------------------------------------------------------------ */
+  /* Desktop Header Login Visibility                                         */
+  /* ------------------------------------------------------------------------ */
+
   useEffect(() => {
     const loginSection = loginSectionRef.current;
 
@@ -366,7 +431,10 @@ export default function LoginPage() {
     return () => observer.disconnect();
   }, []);
 
-  /* Section entrance animation */
+  /* ------------------------------------------------------------------------ */
+  /* Section Entrance Animation                                              */
+  /* ------------------------------------------------------------------------ */
+
   useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>("[data-wp-section]");
 
@@ -394,7 +462,16 @@ export default function LoginPage() {
     return () => observer.disconnect();
   }, []);
 
+  /* ------------------------------------------------------------------------ */
+  /* Header Login                                                             */
+  /* ------------------------------------------------------------------------ */
+
   const handleHeaderLogin = () => {
+    if (isMobile) {
+      setMobileLoginOpen((current) => !current);
+      return;
+    }
+
     loginSectionRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
@@ -418,7 +495,6 @@ export default function LoginPage() {
           position: "sticky",
           top: 0,
           width: "100%",
-          height: 72,
           zIndex: 1200,
 
           backgroundColor: theme.palette.background.paper,
@@ -430,10 +506,15 @@ export default function LoginPage() {
           transition: "box-shadow 180ms ease, background-color 180ms ease",
         })}
       >
-        <Container maxWidth="lg" sx={{ height: "100%" }}>
+        <Container
+          maxWidth="lg"
+          sx={{
+            height: 72,
+          }}
+        >
           <Box
             sx={{
-              height: "100%",
+              height: 72,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -476,7 +557,9 @@ export default function LoginPage() {
                 startIcon={<Login />}
                 onClick={handleHeaderLogin}
                 className={
-                  showHeaderLogin ? "wp-header-login wp-header-login-visible" : "wp-header-login"
+                  showHeaderLogin || isMobile
+                    ? "wp-header-login wp-header-login-visible"
+                    : "wp-header-login"
                 }
                 sx={{
                   whiteSpace: "nowrap",
@@ -489,11 +572,69 @@ export default function LoginPage() {
                   },
                 }}
               >
-                Login
+                {isMobile && mobileLoginOpen ? "Close" : "Login"}
               </Button>
             </Box>
           </Box>
         </Container>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Mobile Login Dropdown                                            */}
+        {/* ---------------------------------------------------------------- */}
+
+        <Collapse in={isMobile && mobileLoginOpen} timeout={280} unmountOnExit>
+          <Box
+            sx={{
+              borderTop: 1,
+              borderColor: "divider",
+              backgroundColor: "background.default",
+              px: {
+                xs: 2,
+                sm: 3,
+              },
+              py: 2,
+            }}
+          >
+            <Paper
+              elevation={0}
+              sx={{
+                width: "100%",
+                maxWidth: 520,
+                mx: "auto",
+
+                p: {
+                  xs: 2.5,
+                  sm: 3,
+                },
+
+                border: 1,
+                borderColor: "rgba(255,255,255,0.09)",
+                borderRadius: 3,
+
+                backgroundColor: "background.paper",
+                backgroundImage: "none",
+
+                boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+
+                position: "relative",
+
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(56,189,248,0.7), transparent)",
+                  opacity: 0.8,
+                },
+              }}
+            >
+              <LoginPanel />
+            </Paper>
+          </Box>
+        </Collapse>
       </Box>
 
       {/* ------------------------------------------------------------------ */}
@@ -541,6 +682,7 @@ export default function LoginPage() {
               }}
             >
               {/* Hero Content */}
+
               <Box className="wp-hero-content">
                 <Box
                   sx={{
@@ -611,6 +753,8 @@ export default function LoginPage() {
                     <Chip icon={<Assessment />} label="Reports" variant="outlined" />
                   </Box>
 
+                  {/* Desktop Attendance Preview */}
+
                   <Box
                     sx={{
                       display: {
@@ -626,10 +770,18 @@ export default function LoginPage() {
                 </Box>
               </Box>
 
-              {/* Login Card */}
+              {/* ---------------------------------------------------------------- */}
+              {/* Desktop Login Card                                               */}
+              {/* ---------------------------------------------------------------- */}
+
               <Box
                 ref={loginSectionRef}
                 sx={{
+                  display: {
+                    xs: "none",
+                    md: "block",
+                  },
+
                   position: "relative",
                   height: "100%",
                   scrollMarginTop: 96,
@@ -655,60 +807,21 @@ export default function LoginPage() {
                     backgroundColor: "background.paper",
                     backgroundImage: "none",
 
-                    position: {
-                      xs: "relative",
-                      md: "sticky",
-                    },
-
-                    top: {
-                      xs: "auto",
-                      md: 96,
-                    },
+                    position: "sticky",
+                    top: 96,
 
                     zIndex: 1000,
                   }}
                 >
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 3,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Clock timezone={getBrowserTimezone()} locale="en-US" variant="inline" />
-                    </Box>
-
-                    <Box sx={{ textAlign: "center" }}>
-                      <Typography
-                        variant="h4"
-                        sx={{
-                          fontWeight: 700,
-                          mb: 1,
-                        }}
-                      >
-                        Welcome back
-                      </Typography>
-
-                      <Typography variant="body2" color="text.secondary">
-                        Sign in to continue to WorkPulse.
-                      </Typography>
-                    </Box>
-
-                    <Divider />
-
-                    <LoginForm />
-                  </Box>
+                  <LoginPanel />
                 </Paper>
               </Box>
             </Box>
 
-            {/* Mobile Attendance Preview */}
+            {/* ---------------------------------------------------------------- */}
+            {/* Mobile Attendance Preview                                        */}
+            {/* ---------------------------------------------------------------- */}
+
             <Box
               sx={{
                 display: {
@@ -810,6 +923,9 @@ export default function LoginPage() {
                     height: "100%",
 
                     backgroundImage: "none",
+
+                    transition:
+                      "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
 
                     "&:hover": {
                       transform: "translateY(-5px)",
@@ -961,6 +1077,9 @@ export default function LoginPage() {
                     height: "100%",
 
                     backgroundImage: "none",
+
+                    transition:
+                      "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
 
                     "&:hover": {
                       transform: "translateY(-5px)",

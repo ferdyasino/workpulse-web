@@ -17,19 +17,25 @@ export default function Button({
       disableElevation
       disabled={disabled || loading}
       sx={{
-        width: {
-          xs: "100%",
-          sm: 320,
-        },
+        width: "100%",
+        minWidth: 0,
         maxWidth: 320,
+
         height: 40,
         minHeight: 40,
+
         display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+
         borderRadius: "4px",
         textTransform: "none",
         fontWeight: 500,
+
         px: 2,
         boxSizing: "border-box",
+
+        mx: "auto",
 
         ...sx,
       }}
