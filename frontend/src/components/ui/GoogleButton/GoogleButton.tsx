@@ -13,7 +13,7 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
     <Box
       sx={{
         width: "100%",
-        maxWidth: 320,
+        maxWidth: 280,
         minWidth: 0,
 
         mx: "auto",
@@ -23,47 +23,10 @@ export default function GoogleButton({ onSuccess, onError }: GoogleButtonProps) 
         justifyContent: "center",
 
         boxSizing: "border-box",
-
-        "& > div": {
-          width: "100% !important",
-          maxWidth: "320px !important",
-
-          display: "flex !important",
-          alignItems: "center",
-          justifyContent: "center",
-        },
-
-        "& iframe": {
-          width: "100% !important",
-          maxWidth: "320px !important",
-
-          display: "block",
-        },
-
-        "@media (max-width: 360px)": {
-          "& > div": {
-            transform: "scale(0.9)",
-            transformOrigin: "center",
-          },
-        },
-
-        "@media (max-width: 340px)": {
-          "& > div": {
-            transform: "scale(0.85)",
-            transformOrigin: "center",
-          },
-        },
-
-        "@media (max-width: 320px)": {
-          "& > div": {
-            transform: "scale(0.8)",
-            transformOrigin: "center",
-          },
-        },
       }}
     >
       <GoogleLogin
-        width="320"
+        width="280"
         size="large"
         theme="filled_black"
         text="continue_with"

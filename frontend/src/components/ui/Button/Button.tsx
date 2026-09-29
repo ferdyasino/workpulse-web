@@ -18,8 +18,8 @@ export default function Button({
       disabled={disabled || loading}
       sx={{
         width: "100%",
+        maxWidth: 280,
         minWidth: 0,
-        maxWidth: 320,
 
         height: 40,
         minHeight: 40,
@@ -28,14 +28,14 @@ export default function Button({
         alignItems: "center",
         justifyContent: "center",
 
+        mx: "auto",
+
         borderRadius: "4px",
         textTransform: "none",
         fontWeight: 500,
 
         px: 2,
         boxSizing: "border-box",
-
-        mx: "auto",
 
         ...sx,
       }}
