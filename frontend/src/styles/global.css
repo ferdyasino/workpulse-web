@@ -15,19 +15,14 @@
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
 
-  --glass-bg: rgba(255, 255, 255, 0.08);
-  --glass-bg-strong: rgba(255, 255, 255, 0.12);
-  --glass-border: rgba(255, 255, 255, 0.15);
+  --border: rgba(255, 255, 255, 0.1);
 
   --radius-sm: 12px;
-  --radius-md: 18px;
-  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
 
-  --blur: 14px;
-
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 
 *,
@@ -42,14 +37,30 @@ body,
   height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+
   color: var(--text-main);
-  background: radial-gradient(circle at top, var(--bg-3), var(--bg-1));
-  background-attachment: fixed;
+  background: var(--bg-1);
+
   font-family: Inter, Roboto, Helvetica, Arial, sans-serif;
 }
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scrollbar                                                                  */
+/* -------------------------------------------------------------------------- */
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -59,4 +70,265 @@ body {
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* -------------------------------------------------------------------------- */
+/* WorkPulse landing-page animations                                          */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Sections start slightly lower and transparent.
+ * They become visible when LoginPage's IntersectionObserver
+ * adds .wp-section-visible.
+ */
+
+.wp-section {
+  opacity: 0;
+  transform: translateY(28px);
+
+  transition:
+    opacity 650ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wp-section-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Hero                                                                       */
+/* -------------------------------------------------------------------------- */
+
+.wp-hero-section {
+  opacity: 1;
+  transform: none;
+}
+
+.wp-hero-content {
+  animation: wpHeroContent 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wp-login-card {
+  animation: wpLoginCard 750ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+.wp-hero-chip {
+  animation: wpFadeIn 500ms ease-out 100ms both;
+}
+
+.wp-hero-title {
+  animation: wpFadeUp 650ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+}
+
+.wp-hero-description {
+  animation: wpFadeUp 650ms cubic-bezier(0.22, 1, 0.36, 1) 240ms both;
+}
+
+.wp-hero-chips {
+  animation: wpFadeUp 650ms cubic-bezier(0.22, 1, 0.36, 1) 320ms both;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Attendance preview                                                         */
+/* -------------------------------------------------------------------------- */
+
+.wp-preview-enter {
+  animation: wpPreview 750ms cubic-bezier(0.22, 1, 0.36, 1) 380ms both;
+}
+
+.wp-preview-row {
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.wp-preview-row:hover {
+  transform: translateX(3px);
+  background-color: rgba(56, 189, 248, 0.055);
+  border-color: rgba(56, 189, 248, 0.14);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Header Login                                                               */
+/* -------------------------------------------------------------------------- */
+
+.wp-header-login {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.wp-header-login-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cards                                                                      */
+/* -------------------------------------------------------------------------- */
+
+.wp-card {
+  opacity: 0;
+  transform: translateY(22px);
+
+  transition:
+    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.wp-section-visible .wp-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wp-section-visible .wp-stagger-1 {
+  transition-delay: 80ms;
+}
+
+.wp-section-visible .wp-stagger-2 {
+  transition-delay: 160ms;
+}
+
+.wp-section-visible .wp-stagger-3 {
+  transition-delay: 240ms;
+}
+
+.wp-section-visible .wp-stagger-4 {
+  transition-delay: 320ms;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Icons                                                                      */
+/* -------------------------------------------------------------------------- */
+
+.wp-icon-box {
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.wp-card:hover .wp-icon-box {
+  transform: scale(1.05);
+  background-color: rgba(56, 189, 248, 0.1);
+  color: var(--primary);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Keyframes                                                                  */
+/* -------------------------------------------------------------------------- */
+
+@keyframes wpHeroContent {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wpLoginCard {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wpPreview {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wpFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes wpFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Accessibility                                                              */
+/* -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .wp-section,
+  .wp-card,
+  .wp-hero-content,
+  .wp-login-card,
+  .wp-preview-enter,
+  .wp-hero-chip,
+  .wp-hero-title,
+  .wp-hero-description,
+  .wp-hero-chips {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .wp-header-login {
+    transition: none !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mobile                                                                    */
+/* -------------------------------------------------------------------------- */
+
+@media (max-width: 599px) {
+  .wp-section {
+    transform: translateY(20px);
+  }
+
+  .wp-hero-title {
+    letter-spacing: -1.5px;
+  }
 }

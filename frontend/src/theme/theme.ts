@@ -1,4 +1,4 @@
-import { alpha, createTheme } from "@mui/material/styles";
+import { createTheme } from "@mui/material/styles";
 
 const theme = createTheme({
   palette: {
@@ -26,21 +26,51 @@ const theme = createTheme({
 
     background: {
       default: "#020617",
-      paper: alpha("#ffffff", 0.08),
+      paper: "#0f172a",
     },
 
     text: {
       primary: "#f8fafc",
       secondary: "#cbd5e1",
     },
+
+    divider: "rgba(255,255,255,0.10)",
   },
 
   shape: {
-    borderRadius: 18,
+    borderRadius: 12,
   },
 
   typography: {
     fontFamily: ["Inter", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"].join(","),
+
+    h1: {
+      fontWeight: 800,
+    },
+
+    h2: {
+      fontWeight: 800,
+    },
+
+    h3: {
+      fontWeight: 800,
+    },
+
+    h4: {
+      fontWeight: 700,
+    },
+
+    h5: {
+      fontWeight: 700,
+    },
+
+    h6: {
+      fontWeight: 700,
+    },
+
+    button: {
+      fontWeight: 600,
+    },
   },
 
   components: {
@@ -52,8 +82,7 @@ const theme = createTheme({
 
         body: {
           minHeight: "100vh",
-          background: "radial-gradient(circle at top, #1e293b 0%, #020617 70%)",
-          backgroundAttachment: "fixed",
+          background: "#020617",
         },
 
         "*::-webkit-scrollbar": {
@@ -65,18 +94,20 @@ const theme = createTheme({
           background: "rgba(255,255,255,.15)",
           borderRadius: 999,
         },
+
+        "*::-webkit-scrollbar-track": {
+          background: "transparent",
+        },
       },
     },
 
     MuiPaper: {
       styleOverrides: {
         root: {
-          background: "rgba(255,255,255,.08)",
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
-          border: "1px solid rgba(255,255,255,.15)",
+          backgroundColor: "#0f172a",
           backgroundImage: "none",
-          boxShadow: "0 8px 24px rgba(0,0,0,.25)",
+          border: "1px solid rgba(255,255,255,.10)",
+          boxShadow: "0 4px 16px rgba(0,0,0,.18)",
         },
       },
     },
@@ -88,7 +119,7 @@ const theme = createTheme({
 
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 10,
           textTransform: "none",
           fontWeight: 600,
         },
@@ -104,8 +135,8 @@ const theme = createTheme({
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
-          background: "rgba(255,255,255,.05)",
+          borderRadius: 10,
+          backgroundColor: "#0b1220",
 
           "& fieldset": {
             borderColor: "rgba(255,255,255,.12)",

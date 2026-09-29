@@ -116,6 +116,7 @@ export default function LoginForm() {
           <Button
             variant="contained"
             size="large"
+            fullWidth
             disabled={loading}
             onClick={() => {
               setEmailMode(true);
@@ -165,6 +166,7 @@ export default function LoginForm() {
           <Button
             variant="contained"
             size="large"
+            fullWidth
             disabled={loading}
             onClick={() => {
               void handleEmailLogin();
