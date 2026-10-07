@@ -26,7 +26,7 @@
     "db:diff": "cd backend && npx supabase db diff",
     "db:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase db push",
     "db:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase db push",
-    "types:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoiytv && npx supabase gen types typescript --linked > shared/types/database.ts",
+    "types:dev": "cd backend && npx supabase link --project-ref tgqwhbozmjoexvdoiytv && npx supabase gen types typescript --linked > shared/types/database.ts",
     "types:prod": "cd backend && npx supabase link --project-ref gvpdsmpqrnghcdpckfkl && npx supabase gen types typescript --linked > shared/types/database.ts"
   },
   "engines": {
