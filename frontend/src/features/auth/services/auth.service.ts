@@ -14,13 +14,39 @@ type ApplicationContext = {
 /* Internal helpers                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Resolve the authenticated Supabase session into the WorkPulse user.
+ *
+ * Supabase Auth authentication and WorkPulse authorization are separate:
+ *
+ *   auth.users.id
+ *        ↓
+ *   public.users.id
+ *
+ * A valid Google/Supabase authentication does not automatically mean that
+ * the account is registered in WorkPulse.
+ */
 async function getApplicationUser(): Promise<User> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
   if (!session) {
-    throw new Error("Failed to establish a Supabase session.");
+    throw new Error("Invalid credentials.");
+  }
+
+  /*
+   * Supabase Auth UUID is authoritative.
+   *
+   * Do not use email as a fallback identity.
+   */
+  const authUserId = session.user?.id;
+
+  if (!authUserId) {
+    await supabase.auth.signOut();
+    localStorage.removeItem(STORAGE_KEY);
+
+    throw new Error("Invalid credentials.");
   }
 
   const context = await invokeFunction<
@@ -32,11 +58,40 @@ async function getApplicationUser(): Promise<User> {
     action: "AUTH_ME",
   });
 
+  /*
+   * AUTH_ME has already verified that the authenticated Supabase UUID
+   * corresponds to a valid WorkPulse user, except for the Platform Owner.
+   */
   const user = context.user;
+
+  if (!user) {
+    await supabase.auth.signOut();
+    localStorage.removeItem(STORAGE_KEY);
+
+    throw new Error("Invalid credentials.");
+  }
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
 
   return user;
+}
+
+/**
+ * Reject the authenticated Supabase account and clear the local session.
+ *
+ * Used when authentication succeeded at Supabase level but the account
+ * is not authorized to use WorkPulse.
+ */
+async function rejectApplicationAuthentication(): Promise<never> {
+  localStorage.removeItem(STORAGE_KEY);
+
+  /*
+   * Do not leave an authenticated Supabase session behind when the account
+   * is not registered in WorkPulse.
+   */
+  await supabase.auth.signOut();
+
+  throw new Error("Invalid credentials.");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -44,7 +99,16 @@ async function getApplicationUser(): Promise<User> {
 /* -------------------------------------------------------------------------- */
 
 export async function loginWithGoogle(_workspaceSlug: string, credential: string): Promise<User> {
-  const { error } = await supabase.auth.signInWithIdToken({
+  if (!credential?.trim()) {
+    throw new Error("Invalid Google credentials.");
+  }
+
+  /*
+   * Authenticate with Supabase first.
+   *
+   * This establishes the Supabase Auth UUID.
+   */
+  const { data, error } = await supabase.auth.signInWithIdToken({
     provider: "google",
     token: credential,
   });
@@ -53,7 +117,37 @@ export async function loginWithGoogle(_workspaceSlug: string, credential: string
     throw error;
   }
 
-  return getApplicationUser();
+  /*
+   * A successful signInWithIdToken() must produce a Supabase user.
+   */
+  const authUserId = data.user?.id;
+
+  if (!authUserId) {
+    return rejectApplicationAuthentication();
+  }
+
+  /*
+   * Now ask the backend to resolve the authenticated account.
+   *
+   * Backend authorization rules:
+   *
+   *   Platform Owner:
+   *     public.users record optional
+   *
+   *   Normal user:
+   *     public.users.id MUST equal authUserId
+   */
+  try {
+    return await getApplicationUser();
+  } catch {
+    /*
+     * Google authentication succeeded, but the account is not authorized
+     * for WorkPulse.
+     *
+     * Immediately terminate the Supabase session.
+     */
+    return rejectApplicationAuthentication();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -80,7 +174,11 @@ export async function loginWithEmail(email: string, password: string): Promise<U
     throw error;
   }
 
-  return getApplicationUser();
+  try {
+    return await getApplicationUser();
+  } catch {
+    return rejectApplicationAuthentication();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -180,7 +278,10 @@ export async function getCurrentUser(): Promise<User | null> {
   try {
     return await getApplicationUser();
   } catch {
+    await supabase.auth.signOut();
+
     localStorage.removeItem(STORAGE_KEY);
+
     return null;
   }
 }

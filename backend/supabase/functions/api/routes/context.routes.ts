@@ -2,14 +2,24 @@ import type { RouteContext } from "./types.ts";
 
 import { getApplicationContext } from "../services/context.ts";
 
-import { getUserContext } from "../services/users.ts";
-
 import { getSettings, updateSettings } from "../services/settings.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Determine whether the authenticated Supabase user is the configured
+ * Platform Owner.
+ *
+ * IMPORTANT:
+ *
+ * This only identifies the Platform Owner.
+ *
+ * Actual authentication has already been performed by Supabase Auth.
+ *
+ * The password is NEVER handled here.
+ */
 function isPlatformOwner(ctx: RouteContext): boolean {
   const platformOwnerEmail = Deno.env
     .get("PLATFORM_OWNER_EMAIL")
@@ -42,10 +52,26 @@ function getRequestedWorkspaceId(ctx: RouteContext): string | null {
 }
 
 /**
+ * Require an authenticated Supabase UUID.
+ *
+ * This prevents downstream routes from attempting to authorize a request
+ * using email alone.
+ */
+function requireAuthUserId(ctx: RouteContext): string {
+  const authUserId = ctx.authUserId?.trim();
+
+  if (!authUserId) {
+    throw new Error("Invalid credentials.");
+  }
+
+  return authUserId;
+}
+
+/**
  * Verify that a workspace exists and is not deleted.
  *
- * This is used for Platform Owner operations because Platform Owner access
- * does not depend on workspace_members.
+ * Used by Platform Owner operations because Platform Owner access does not
+ * depend on workspace_members.
  */
 async function verifyWorkspaceExists(
   ctx: RouteContext,
@@ -70,17 +96,52 @@ async function verifyWorkspaceExists(
 }
 
 /**
+ * Resolve the application context for a specific workspace.
+ *
+ * This is the authorization boundary for normal users.
+ *
+ * getApplicationContext() guarantees:
+ *
+ *   auth.users.id
+ *        =
+ *   public.users.id
+ *
+ * and then validates workspace_members.
+ *
+ * Platform Owner is handled by the same function and does not require
+ * workspace_members.
+ */
+async function resolveAuthorizedApplicationContext(
+  ctx: RouteContext,
+  workspaceId: string | null = null,
+) {
+  const authUserId = requireAuthUserId(ctx);
+
+  return await getApplicationContext(
+    ctx.supabaseAdmin,
+    authUserId,
+    ctx.email,
+    ctx.authProvider,
+    workspaceId,
+  );
+}
+
+/**
  * Resolve the workspace authorized for settings operations.
  *
  * Platform Owner:
- *   Explicitly supplied workspace_id is authoritative.
- *   No workspace membership is required.
+ *   Explicit workspace_id is required and is validated directly.
  *
  * Normal user:
- *   Explicitly supplied workspace_id is passed through getUserContext().
- *   getUserContext() validates the user's active workspace_members row.
+ *   getApplicationContext() validates:
  *
- * This avoids using users.workspace_id as the authorization source.
+ *     auth.users.id
+ *          ↓
+ *     public.users.id
+ *          ↓
+ *     workspace_members
+ *
+ * This prevents users.workspace_id from becoming the authorization source.
  */
 async function resolveSettingsWorkspaceId(ctx: RouteContext): Promise<string> {
   const workspaceId = getRequestedWorkspaceId(ctx);
@@ -101,23 +162,24 @@ async function resolveSettingsWorkspaceId(ctx: RouteContext): Promise<string> {
   /* Normal Workspace User                                                    */
   /* ------------------------------------------------------------------------ */
 
-  const user = await getUserContext(
-    ctx.supabaseAdmin,
-    ctx.authUserId,
-    ctx.email,
-    ctx.authProvider,
+  const applicationContext = await resolveAuthorizedApplicationContext(
+    ctx,
     workspaceId,
   );
 
-  if (!user.workspace_id) {
-    throw new Error("User workspace_id is missing.");
+  if (!applicationContext.user.user_id) {
+    throw new Error("Invalid credentials.");
   }
 
-  if (user.workspace_id !== workspaceId) {
+  if (!applicationContext.workspace) {
+    throw new Error("User workspace could not be resolved.");
+  }
+
+  if (applicationContext.user.workspace_id !== workspaceId) {
     throw new Error("User does not belong to this workspace.");
   }
 
-  return user.workspace_id;
+  return workspaceId;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -143,39 +205,57 @@ export async function handleContextRoutes(ctx: RouteContext) {
         }),
       );
 
-      /*
-       * Platform Owner:
-       *
-       * No workspace is required during initial authentication.
-       *
-       * If a workspace has already been selected, pass it into
-       * getUserContext() so the real public.users ID and workspace-specific
-       * shift can be resolved.
-       */
+      /* -------------------------------------------------------------------- */
+      /* Platform Owner                                                       */
+      /* -------------------------------------------------------------------- */
+
       if (isPlatformOwner(ctx)) {
-        return await getUserContext(
-          ctx.supabaseAdmin,
-          ctx.authUserId,
-          ctx.email,
-          ctx.authProvider,
+        /*
+         * Platform Owner can authenticate without a workspace.
+         *
+         * If no workspace has been selected yet, getApplicationContext()
+         * returns the global Platform Owner context.
+         *
+         * If a workspace was selected, it validates that the workspace
+         * exists and returns the appropriate workspace context.
+         */
+        const applicationContext = await resolveAuthorizedApplicationContext(
+          ctx,
           requestedWorkspaceId,
         );
+
+        return applicationContext.user;
       }
 
-      /*
-       * Normal users must resolve against a specific workspace.
-       */
+      /* -------------------------------------------------------------------- */
+      /* Normal User                                                          */
+      /* -------------------------------------------------------------------- */
+
       if (!requestedWorkspaceId) {
         throw new Error("A workspace must be selected.");
       }
 
-      return await getUserContext(
-        ctx.supabaseAdmin,
-        ctx.authUserId,
-        ctx.email,
-        ctx.authProvider,
+      /*
+       * getApplicationContext() is intentionally used instead of calling
+       * getUserContext() directly.
+       *
+       * This guarantees that the authenticated Supabase UUID is validated
+       * against public.users.id before user context is returned.
+       */
+      const applicationContext = await resolveAuthorizedApplicationContext(
+        ctx,
         requestedWorkspaceId,
       );
+
+      if (!applicationContext.user.user_id) {
+        throw new Error("Invalid credentials.");
+      }
+
+      if (applicationContext.user.workspace_id !== requestedWorkspaceId) {
+        throw new Error("User does not belong to this workspace.");
+      }
+
+      return applicationContext.user;
     }
 
     /* ---------------------------------------------------------------------- */
@@ -184,21 +264,41 @@ export async function handleContextRoutes(ctx: RouteContext) {
 
     case "AUTH_ME": {
       /*
-       * AUTH_ME must remain workspace-independent.
+       * AUTH_ME is deliberately workspace-independent.
        *
-       * This is important during login because a Platform Owner may not
-       * have selected a workspace yet.
+       * This is required immediately after login.
        *
-       * getApplicationContext() is responsible for recognizing the
-       * authenticated Platform Owner and returning a valid application
-       * context without requiring workspace membership.
+       * Email/password authentication:
+       *
+       *   signInWithPassword()
+       *          ↓
+       *   Supabase validates password
+       *          ↓
+       *   Supabase session
+       *          ↓
+       *   AUTH_ME
+       *
+       * Google authentication:
+       *
+       *   signInWithIdToken()
+       *          ↓
+       *   Supabase validates Google token
+       *          ↓
+       *   Supabase session
+       *          ↓
+       *   AUTH_ME
+       *
+       * AUTH_ME NEVER receives or validates a password.
+       *
+       * getApplicationContext() then verifies:
+       *
+       *   auth.users.id
+       *        ↓
+       *   public.users.id
+       *
+       * except for the configured Platform Owner.
        */
-      return await getApplicationContext(
-        ctx.supabaseAdmin,
-        ctx.authUserId,
-        ctx.email,
-        ctx.authProvider,
-      );
+      return await resolveAuthorizedApplicationContext(ctx, null);
     }
 
     /* ---------------------------------------------------------------------- */
@@ -209,7 +309,7 @@ export async function handleContextRoutes(ctx: RouteContext) {
       /*
        * WORKSPACE_GET defines `id`, not `workspace_id`.
        */
-      const workspaceId = ctx.body.id;
+      const workspaceId = ctx.body.id?.trim();
 
       if (!workspaceId) {
         throw new Error("Workspace ID is required.");
@@ -257,49 +357,35 @@ export async function handleContextRoutes(ctx: RouteContext) {
       }
 
       /* -------------------------------------------------------------------- */
-      /* Normal user                                                           */
+      /* Normal User                                                          */
       /* -------------------------------------------------------------------- */
 
       /*
-       * Do NOT use users.workspace_id here.
+       * getApplicationContext() validates both:
        *
-       * getUserContext() validates the selected workspace against the
-       * user's active workspace_members record.
+       *   1. public.users.id === authUserId
+       *   2. active workspace_members membership
        */
-      const user = await getUserContext(
-        ctx.supabaseAdmin,
-        ctx.authUserId,
-        ctx.email,
-        ctx.authProvider,
+      const applicationContext = await resolveAuthorizedApplicationContext(
+        ctx,
         workspaceId,
       );
 
-      if (!user.workspace_id) {
-        throw new Error("User workspace_id is missing.");
+      if (!applicationContext.user.user_id) {
+        throw new Error("Invalid credentials.");
       }
 
-      if (user.workspace_id !== workspaceId) {
+      if (applicationContext.user.workspace_id !== workspaceId) {
         throw new Error("User does not belong to this workspace.");
       }
 
-      const { data, error } = await ctx.supabaseAdmin
-        .from("workspaces")
-        .select("*")
-        .eq("id", workspaceId)
-        .is("deleted_at", null)
-        .maybeSingle();
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data) {
+      if (!applicationContext.workspace) {
         throw new Error("Workspace not found.");
       }
 
       return {
         success: true,
-        workspace: data,
+        workspace: applicationContext.workspace,
       };
     }
 

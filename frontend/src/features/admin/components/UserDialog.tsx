@@ -37,23 +37,8 @@ export type UserFormValues = {
   display_name: string;
   email: string;
 
-  /**
-   * Authentication method used by the employee.
-   *
-   * GOOGLE:
-   *   The employee authenticates through Google OAuth.
-   *
-   * PASSWORD:
-   *   The employee authenticates using Supabase email/password auth.
-   */
   auth_method: UserAuthMethod;
 
-  /**
-   * Only supplied when auth_method === "PASSWORD".
-   *
-   * This value must never be stored in public.users.
-   * The backend must pass it to Supabase Auth.
-   */
   password?: string;
 
   role?: UserRole;
@@ -70,27 +55,8 @@ type Props = {
   onClose: () => void;
   onSubmit: (values: UserFormValues) => Promise<void>;
 
-  /**
-   * Existing Employee Nos. currently loaded in the Users table.
-   *
-   * Used only by the frontend Auto-generate function.
-   *
-   * The backend/database remains the final authority for uniqueness.
-   */
   existingEmployeeNumbers?: string[];
 
-  /**
-   * Workspace Employee No. generation format.
-   *
-   * This can later come from ADMIN workspace settings.
-   *
-   * Example:
-   * {
-   *   prefix: "EMP",
-   *   padding: 6,
-   *   separator: "-"
-   * }
-   */
   employeeNumberFormat?: EmployeeNumberFormat;
 };
 
@@ -140,21 +106,30 @@ export default function UserDialog({
   const [email, setEmail] = useState("");
 
   const [authMethod, setAuthMethod] = useState<UserAuthMethod>("GOOGLE");
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
   const [passwordError, setPasswordError] = useState("");
 
   const [role, setRole] = useState<UserRole | "">("");
+
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus | "">("");
+
   const [employmentType, setEmploymentType] = useState<EmploymentType | "">("");
+
   const [departmentId, setDepartmentId] = useState("");
+
   const [positionId, setPositionId] = useState("");
 
   const isLoadingUser = open && loading && !user && !addModeRef.current;
 
   const activeDialogIsEdit = Boolean(user) || isLoadingUser;
 
-  // Preserve the edit/add label while the dialog is closing.
+  /*
+   * Once a user exists, Employee No. and Email
+   * become immutable.
+   */
   const isEdit = open ? activeDialogIsEdit : dialogModeRef.current === "edit";
 
   const isDirty =
@@ -195,43 +170,51 @@ export default function UserDialog({
     }
 
     if (user) {
-      /**
-       * The database/application User model uses `login_provider`
-       * as the canonical authentication provider field.
-       *
-       * The dialog intentionally maps that backend value into the
-       * UI-specific `UserAuthMethod`.
-       */
       const existingAuthMethod: UserAuthMethod =
         user.login_provider.toLowerCase() === "google" ? "GOOGLE" : "PASSWORD";
 
       const values: DialogValues = {
         employeeNo: user.employee_no ?? "",
+
         displayName: user.display_name ?? "",
+
         email: user.email ?? "",
+
         authMethod: existingAuthMethod,
+
         role: user.role ?? "",
+
         employmentStatus: user.employment_status ?? "",
+
         employmentType: user.employment_type ?? "",
+
         departmentId: user.department_id ?? "",
+
         positionId: user.position_id ?? "",
       };
 
       setEmployeeNo(values.employeeNo);
+
       setEmployeeNoError("");
 
       setDisplayName(values.displayName);
+
       setEmail(values.email);
 
       setAuthMethod(values.authMethod);
+
       setPassword("");
       setConfirmPassword("");
       setPasswordError("");
 
       setRole(values.role);
+
       setEmploymentStatus(values.employmentStatus);
+
       setEmploymentType(values.employmentType);
+
       setDepartmentId(values.departmentId);
+
       setPositionId(values.positionId);
 
       initialValuesRef.current = values;
@@ -249,38 +232,46 @@ export default function UserDialog({
       };
 
       setEmployeeNo(values.employeeNo);
+
       setEmployeeNoError("");
 
       setDisplayName(values.displayName);
+
       setEmail(values.email);
 
       setAuthMethod(values.authMethod);
+
       setPassword("");
       setConfirmPassword("");
       setPasswordError("");
 
       setRole(values.role);
+
       setEmploymentStatus(values.employmentStatus);
+
       setEmploymentType(values.employmentType);
+
       setDepartmentId(values.departmentId);
+
       setPositionId(values.positionId);
 
       initialValuesRef.current = values;
     }
   }, [isLoadingUser, open, user]);
 
-  /**
-   * Handle manual Employee No. input.
-   *
-   * Custom Employee Nos. are allowed.
-   *
-   * Examples:
-   *   EMP-000001
-   *   HR-001
-   *   FIN-2026-001
-   *   STAFF-A001
-   */
+  /* ---------------------------------------------------------------------- */
+  /* Employee No.                                                            */
+  /* ---------------------------------------------------------------------- */
+
   const handleEmployeeNoChange = (value: string) => {
+    /*
+     * Employee No. cannot be modified
+     * while editing an existing user.
+     */
+    if (isEdit) {
+      return;
+    }
+
     const normalizedValue = normalizeEmployeeNumber(value);
 
     setEmployeeNo(normalizedValue);
@@ -295,24 +286,19 @@ export default function UserDialog({
     setEmployeeNoError(validation.valid ? "" : (validation.error ?? "Invalid Employee No."));
   };
 
-  /**
-   * Generate the next available Employee No. using the currently loaded
-   * Employee Nos.
-   *
-   * Example:
-   *
-   * Existing:
-   *   EMP-000001
-   *   EMP-000002
-   *   EMP-000005
-   *
-   * Result:
-   *   EMP-000006
-   *
-   * If there are gaps, we deliberately use MAX + 1 rather than filling
-   * an old deleted Employee No.
-   */
+  /* ---------------------------------------------------------------------- */
+  /* Auto Generate Employee No.                                             */
+  /* ---------------------------------------------------------------------- */
+
   const handleAutoGenerate = () => {
+    /*
+     * Never generate a replacement Employee No.
+     * while editing an existing user.
+     */
+    if (isEdit) {
+      return;
+    }
+
     const format = normalizeEmployeeNumberFormat(employeeNumberFormat);
 
     let highestSequence = 0;
@@ -333,12 +319,6 @@ export default function UserDialog({
 
     let nextSequence = highestSequence + 1;
 
-    /**
-     * Safety check against the currently loaded Employee Nos.
-     *
-     * Normally MAX + 1 is already available, but this additionally protects
-     * against unusual data or formatting situations.
-     */
     let generatedEmployeeNo = formatEmployeeNumber(nextSequence, format);
 
     const existingSet = new Set(
@@ -352,8 +332,13 @@ export default function UserDialog({
     }
 
     setEmployeeNo(generatedEmployeeNo);
+
     setEmployeeNoError("");
   };
+
+  /* ---------------------------------------------------------------------- */
+  /* Authentication                                                          */
+  /* ---------------------------------------------------------------------- */
 
   const handleAuthMethodChange = (value: UserAuthMethod) => {
     setAuthMethod(value);
@@ -365,41 +350,51 @@ export default function UserDialog({
     }
   };
 
+  /* ---------------------------------------------------------------------- */
+  /* Submit                                                                  */
+  /* ---------------------------------------------------------------------- */
+
   const handleSubmit = async () => {
     if (isLoadingUser || !displayName.trim() || !email.trim()) {
       return;
     }
 
+    /*
+     * Employee No. is still validated when submitting,
+     * even though it is immutable during edit.
+     */
     const normalizedEmployeeNo = normalizeEmployeeNumber(employeeNo);
 
     const employeeValidation = validateEmployeeNumber(normalizedEmployeeNo);
 
     if (!employeeValidation.valid) {
       setEmployeeNoError(employeeValidation.error ?? "Invalid Employee No.");
+
       return;
     }
 
-    /**
-     * Password validation applies only to PASSWORD authentication.
-     *
-     * On edit, an empty password means:
-     * "keep the existing password".
-     */
+    /* -------------------------------------------------------------------- */
+    /* Password                                                              */
+    /* -------------------------------------------------------------------- */
+
     if (authMethod === "PASSWORD") {
       const isCreatingPasswordAccount = !isEdit;
 
       if (isCreatingPasswordAccount && !password) {
         setPasswordError("Password is required.");
+
         return;
       }
 
       if (password && password.length < 8) {
         setPasswordError("Password must be at least 8 characters.");
+
         return;
       }
 
       if (password !== confirmPassword) {
         setPasswordError("Passwords do not match.");
+
         return;
       }
     }
@@ -407,27 +402,43 @@ export default function UserDialog({
     setPasswordError("");
 
     await onSubmit({
+      /*
+       * These values are unchanged during edit
+       * because the UI prevents modifying them.
+       */
       employee_no: normalizedEmployeeNo,
+
       display_name: displayName.trim(),
+
       email: email.trim(),
+
       auth_method: authMethod,
 
-      /**
-       * Do not send an empty password during edit.
-       *
-       * The backend can interpret an omitted password as:
-       * "do not change the existing password."
-       */
       ...(authMethod === "PASSWORD" && password ? { password } : {}),
 
       ...(role ? { role } : {}),
-      ...(employmentStatus ? { employment_status: employmentStatus } : {}),
-      ...(employmentType ? { employment_type: employmentType } : {}),
+
+      ...(employmentStatus
+        ? {
+            employment_status: employmentStatus,
+          }
+        : {}),
+
+      ...(employmentType
+        ? {
+            employment_type: employmentType,
+          }
+        : {}),
 
       department_id: departmentId || null,
+
       position_id: positionId || null,
     });
   };
+
+  /* ---------------------------------------------------------------------- */
+  /* Close                                                                   */
+  /* ---------------------------------------------------------------------- */
 
   const handleClose = () => {
     if (loading) {
@@ -436,10 +447,12 @@ export default function UserDialog({
 
     setEmployeeNo("");
     setEmployeeNoError("");
+
     setDisplayName("");
     setEmail("");
 
     setAuthMethod("GOOGLE");
+
     setPassword("");
     setConfirmPassword("");
     setPasswordError("");
@@ -447,6 +460,7 @@ export default function UserDialog({
     setRole("");
     setEmploymentStatus("");
     setEmploymentType("");
+
     setDepartmentId("");
     setPositionId("");
 
@@ -489,7 +503,13 @@ export default function UserDialog({
           minHeight: 0,
         }}
       >
-        <DialogTitle sx={{ flexShrink: 0 }}>{isEdit ? "Edit User" : "Add User"}</DialogTitle>
+        <DialogTitle
+          sx={{
+            flexShrink: 0,
+          }}
+        >
+          {isEdit ? "Edit User" : "Add User"}
+        </DialogTitle>
 
         <DialogContent
           dividers
@@ -512,9 +532,9 @@ export default function UserDialog({
             </Box>
           ) : (
             <Stack spacing={2} sx={{ pt: 1 }}>
-              {/* ---------------------------------------------------------------- */}
-              {/* Employee No.                                                     */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Employee No.                                                */}
+              {/* ---------------------------------------------------------- */}
 
               <Stack spacing={0.75}>
                 <Box
@@ -530,15 +550,19 @@ export default function UserDialog({
                     onChange={(event) => handleEmployeeNoChange(event.target.value)}
                     error={Boolean(employeeNoError)}
                     helperText={
-                      employeeNoError || "Leave blank to let the system generate one on save."
+                      employeeNoError ||
+                      (isEdit
+                        ? "Employee No. cannot be changed after the user is created."
+                        : "Leave blank to let the system generate one on save.")
                     }
                     fullWidth
+                    disabled={isEdit}
                   />
 
                   <Button
                     variant="outlined"
                     onClick={handleAutoGenerate}
-                    disabled={loading || isLoadingUser}
+                    disabled={loading || isLoadingUser || isEdit}
                     sx={{
                       minWidth: 130,
                       mt: 1,
@@ -550,9 +574,9 @@ export default function UserDialog({
                 </Box>
               </Stack>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Display Name                                                     */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Display Name                                                 */}
+              {/* ---------------------------------------------------------- */}
 
               <TextField
                 label="Display Name"
@@ -563,9 +587,9 @@ export default function UserDialog({
                 fullWidth
               />
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Email                                                             */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Email                                                         */}
+              {/* ---------------------------------------------------------- */}
 
               <TextField
                 label="Email"
@@ -574,11 +598,15 @@ export default function UserDialog({
                 onChange={(event) => setEmail(event.target.value)}
                 required
                 fullWidth
+                disabled={isEdit}
+                helperText={
+                  isEdit ? "Email cannot be changed after the user is created." : undefined
+                }
               />
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Authentication Method                                            */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Authentication Method                                        */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-auth-method-label">Authentication Method</InputLabel>
@@ -601,9 +629,9 @@ export default function UserDialog({
                 </FormHelperText>
               </FormControl>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Password                                                          */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Password                                                     */}
+              {/* ---------------------------------------------------------- */}
 
               {authMethod === "PASSWORD" && (
                 <Stack spacing={2}>
@@ -613,6 +641,7 @@ export default function UserDialog({
                     value={password}
                     onChange={(event) => {
                       setPassword(event.target.value);
+
                       setPasswordError("");
                     }}
                     required={!isEdit}
@@ -630,6 +659,7 @@ export default function UserDialog({
                     value={confirmPassword}
                     onChange={(event) => {
                       setConfirmPassword(event.target.value);
+
                       setPasswordError("");
                     }}
                     required={!isEdit && authMethod === "PASSWORD"}
@@ -646,9 +676,9 @@ export default function UserDialog({
                 </Stack>
               )}
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Role                                                              */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Role                                                         */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-role-label">Role</InputLabel>
@@ -675,9 +705,9 @@ export default function UserDialog({
                 </Select>
               </FormControl>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Employment Status                                                */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Employment Status                                            */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-employment-status-label">Employment Status</InputLabel>
@@ -706,9 +736,9 @@ export default function UserDialog({
                 </Select>
               </FormControl>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Employment Type                                                  */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Employment Type                                              */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth>
                 <InputLabel id="user-employment-type-label">Employment Type</InputLabel>
@@ -733,9 +763,9 @@ export default function UserDialog({
                 </Select>
               </FormControl>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Department                                                        */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Department                                                   */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={departmentsLoading}>
                 <InputLabel id="user-department-label">Department</InputLabel>
@@ -758,9 +788,9 @@ export default function UserDialog({
                 </Select>
               </FormControl>
 
-              {/* ---------------------------------------------------------------- */}
-              {/* Position                                                          */}
-              {/* ---------------------------------------------------------------- */}
+              {/* ---------------------------------------------------------- */}
+              {/* Position                                                     */}
+              {/* ---------------------------------------------------------- */}
 
               <FormControl fullWidth disabled={positionsLoading}>
                 <InputLabel id="user-position-label">Position</InputLabel>

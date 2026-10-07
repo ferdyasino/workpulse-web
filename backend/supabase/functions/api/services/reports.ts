@@ -30,6 +30,9 @@ type AttendanceSession = ReturnType<typeof buildAttendanceSessions>[number];
 type AttendanceReportRowWithShiftTimes = AttendanceReportRow & {
   shift_start_time: string | null;
   shift_end_time: string | null;
+
+  pre_overtime_minutes: number;
+  post_overtime_minutes: number;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -287,7 +290,11 @@ function calculateMetrics(
   scheduled_minutes: number;
   late_minutes: number;
   undertime_minutes: number;
+
+  pre_overtime_minutes: number;
+  post_overtime_minutes: number;
   overtime_minutes: number;
+
   attendance_status: string;
 } {
   /*
@@ -301,17 +308,20 @@ function calculateMetrics(
         scheduled_minutes: 0,
         late_minutes: 0,
         undertime_minutes: 0,
+        pre_overtime_minutes: 0,
+        post_overtime_minutes: 0,
         overtime_minutes: 0,
         attendance_status: "ABSENT",
       };
     }
 
     /*
-     * Without a shift there is no scheduled target,
-     * so worked time is simply the actual attendance
-     * span.
+     * Without a shift there is no scheduled target.
      *
-     * Breaks are NOT deducted from worked_minutes.
+     * Therefore there is also no meaningful
+     * pre-OT or post-OT boundary.
+     *
+     * Actual attendance span is reported as worked time.
      */
     const workedMinutes = getMinutesBetween(session.time_in, session.time_out);
 
@@ -323,6 +333,8 @@ function calculateMetrics(
       scheduled_minutes: 0,
       late_minutes: 0,
       undertime_minutes: 0,
+      pre_overtime_minutes: 0,
+      post_overtime_minutes: 0,
       overtime_minutes: 0,
       attendance_status: session.time_out ? "PRESENT" : "INCOMPLETE",
     };
@@ -342,6 +354,8 @@ function calculateMetrics(
       scheduled_minutes: scheduledMinutes,
       late_minutes: 0,
       undertime_minutes: 0,
+      pre_overtime_minutes: 0,
+      post_overtime_minutes: 0,
       overtime_minutes: 0,
       attendance_status: "ABSENT",
     };
@@ -349,8 +363,6 @@ function calculateMetrics(
 
   /*
    * Break/lunch minutes are reported separately.
-   *
-   * IMPORTANT:
    *
    * They are NOT subtracted from worked_minutes.
    */
@@ -365,6 +377,8 @@ function calculateMetrics(
       scheduled_minutes: scheduledMinutes,
       late_minutes: 0,
       undertime_minutes: 0,
+      pre_overtime_minutes: 0,
+      post_overtime_minutes: 0,
       overtime_minutes: 0,
       attendance_status: session.time_out ? "PRESENT" : "INCOMPLETE",
     };
@@ -377,7 +391,27 @@ function calculateMetrics(
   const timeInMs = timeIn.getTime();
 
   /* ---------------------------------------------------------------------- */
-  /* Late                                                                   */
+  /* Pre-OT                                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  /*
+   * PRE-OT
+   *
+   * Any attendance before the scheduled shift start
+   * is classified as pre-shift overtime.
+   *
+   * Example:
+   *
+   * Shift   = 8:00 AM
+   * Time In = 7:30 AM
+   *
+   * Pre-OT = 30 minutes
+   */
+  const preOvertimeMinutes =
+    timeInMs < shiftStartMs ? Math.floor((shiftStartMs - timeInMs) / 60000) : 0;
+
+  /* ---------------------------------------------------------------------- */
+  /* Late                                                                    */
   /* ---------------------------------------------------------------------- */
 
   const actualLateMinutes =
@@ -387,11 +421,11 @@ function calculateMetrics(
     actualLateMinutes > graceMinutes ? actualLateMinutes - graceMinutes : 0;
 
   /* ---------------------------------------------------------------------- */
-  /* Undertime / Overtime                                                   */
+  /* Undertime / Post-OT                                                     */
   /* ---------------------------------------------------------------------- */
 
   let undertimeMinutes = 0;
-  let overtimeMinutes = 0;
+  let postOvertimeMinutes = 0;
 
   if (session.time_out) {
     const timeOut = new Date(session.time_out);
@@ -412,6 +446,10 @@ function calculateMetrics(
         effectiveAttendanceStartMs = shiftStartMs;
       }
 
+      /* ------------------------------------------------------------------ */
+      /* Undertime                                                           */
+      /* ------------------------------------------------------------------ */
+
       /*
        * Undertime is the missing attendance span
        * before the scheduled shift end.
@@ -424,20 +462,60 @@ function calculateMetrics(
         undertimeMinutes = Math.max(0, undertimeMinutes);
       }
 
+      /* ------------------------------------------------------------------ */
+      /* Post-OT                                                              */
+      /* ------------------------------------------------------------------ */
+
       /*
-       * Overtime is attendance after the scheduled
-       * shift end.
+       * POST-OT
+       *
+       * Attendance after the scheduled shift end.
+       *
+       * Example:
+       *
+       * Shift    = 8:00 AM - 4:00 PM
+       * Time Out = 5:00 PM
+       *
+       * Post-OT = 60 minutes
        */
       if (timeOutMs > shiftEndMs) {
-        overtimeMinutes = Math.floor((timeOutMs - shiftEndMs) / 60000);
+        postOvertimeMinutes = Math.floor((timeOutMs - shiftEndMs) / 60000);
 
-        overtimeMinutes = Math.max(0, overtimeMinutes);
+        postOvertimeMinutes = Math.max(0, postOvertimeMinutes);
       }
     }
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Worked Minutes                                                         */
+  /* Total OT                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  /*
+   * TOTAL OT
+   *
+   * Pre-OT + Post-OT
+   *
+   * Examples:
+   *
+   * 7:30 AM - 4:00 PM
+   *   Pre-OT  = 30
+   *   Post-OT = 0
+   *   Total   = 30
+   *
+   * 8:00 AM - 5:00 PM
+   *   Pre-OT  = 0
+   *   Post-OT = 60
+   *   Total   = 60
+   *
+   * 7:30 AM - 5:00 PM
+   *   Pre-OT  = 30
+   *   Post-OT = 60
+   *   Total   = 90
+   */
+  const overtimeMinutes = preOvertimeMinutes + postOvertimeMinutes;
+
+  /* ---------------------------------------------------------------------- */
+  /* Worked Minutes                                                          */
   /* ---------------------------------------------------------------------- */
 
   /*
@@ -448,7 +526,7 @@ function calculateMetrics(
    * Formula:
    *
    *   scheduled
-   *   + overtime
+   *   + total OT
    *   - late
    *   - undertime
    *
@@ -466,7 +544,13 @@ function calculateMetrics(
    * 8:15 - 4:30
    *   480 + 30 - 15 - 0 = 495
    *
-   * A lunch/break does not change this value.
+   * 7:30 - 4:00
+   *   480 + 30 - 0 - 0 = 510
+   *
+   * 7:30 - 5:00
+   *   480 + 90 - 0 - 0 = 570
+   *
+   * Break/lunch does not change this value.
    */
   const workedMinutes = Math.max(
     0,
@@ -476,7 +560,7 @@ function calculateMetrics(
   );
 
   /* ---------------------------------------------------------------------- */
-  /* Status                                                                 */
+  /* Status                                                                  */
   /* ---------------------------------------------------------------------- */
 
   let attendanceStatus = "PRESENT";
@@ -498,9 +582,6 @@ function calculateMetrics(
   return {
     worked_minutes: workedMinutes,
 
-    /*
-     * Breaks remain available as their own metric.
-     */
     break_minutes: breakMinutes,
 
     scheduled_minutes: scheduledMinutes,
@@ -508,6 +589,10 @@ function calculateMetrics(
     late_minutes: Math.max(0, lateMinutes),
 
     undertime_minutes: Math.max(0, undertimeMinutes),
+
+    pre_overtime_minutes: Math.max(0, preOvertimeMinutes),
+
+    post_overtime_minutes: Math.max(0, postOvertimeMinutes),
 
     overtime_minutes: Math.max(0, overtimeMinutes),
 
@@ -552,23 +637,6 @@ function findUserShiftForDate(
 /* Range Aggregation                                                          */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Range Hours is an exact user-selected date range.
- *
- * Example:
- *
- * 2026-08-31 -> 2026-09-06
- *
- * produces ONE aggregate row per employee:
- *
- * week_start = 2026-08-31
- * week_end   = 2026-09-06
- *
- * It does NOT split by calendar week.
- *
- * Only dates with actual attendance activity
- * are included in the range aggregation.
- */
 function buildRangeRows(
   rows: AttendanceReportRowWithShiftTimes[],
   dateFrom: string,
@@ -588,7 +656,9 @@ function buildRangeRows(
       row.break_minutes > 0 ||
       row.late_minutes > 0 ||
       row.undertime_minutes > 0 ||
-      row.overtime_minutes > 0;
+      row.overtime_minutes > 0 ||
+      row.pre_overtime_minutes > 0 ||
+      row.post_overtime_minutes > 0;
 
     if (!hasAttendanceActivity) {
       continue;
@@ -818,7 +888,7 @@ export async function getAttendanceReport(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Time Logs                                                                 */
+  /* Time Logs                                                                */
   /* ------------------------------------------------------------------------ */
 
   let logsQuery = supabaseAdmin
@@ -855,7 +925,7 @@ export async function getAttendanceReport(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Report Rows                                                               */
+  /* Report Rows                                                              */
   /* ------------------------------------------------------------------------ */
 
   const rows: AttendanceReportRowWithShiftTimes[] = [];
@@ -875,8 +945,8 @@ export async function getAttendanceReport(
       /*
        * RANGE/WEEKLY:
        *
-       * Do not create absent rows for dates
-       * with no time logs.
+       * Do not create absent rows
+       * for dates with no time logs.
        */
       if (isRangeReport && logsForDate.length === 0) {
         continue;
@@ -885,8 +955,8 @@ export async function getAttendanceReport(
       /*
        * DAILY/BREAK:
        *
-       * Keep scheduled employees visible even
-       * when they have no attendance.
+       * Keep scheduled employees visible
+       * even when they have no attendance.
        */
       if (!assignment && logsForDate.length === 0) {
         continue;
@@ -895,8 +965,9 @@ export async function getAttendanceReport(
       /*
        * Resolve shift from assignment first.
        *
-       * If attendance exists without an assignment,
-       * use the user_shift_id stored on the log.
+       * If attendance exists without an
+       * assignment, use the user_shift_id
+       * stored on the log.
        */
       const shift = assignment
         ? (shiftsById.get(assignment.shift_id) ?? null)
@@ -974,6 +1045,10 @@ export async function getAttendanceReport(
         undertime_minutes: metrics.undertime_minutes,
 
         overtime_minutes: metrics.overtime_minutes,
+
+        pre_overtime_minutes: metrics.pre_overtime_minutes,
+
+        post_overtime_minutes: metrics.post_overtime_minutes,
 
         attendance_status: metrics.attendance_status,
 

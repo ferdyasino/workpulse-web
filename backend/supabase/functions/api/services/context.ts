@@ -24,18 +24,34 @@ function isPlatformOwnerEmail(authEmail: string | null): boolean {
   return authEmail.trim().toLowerCase() === platformOwnerEmail;
 }
 
+/**
+ * Build the synthetic Platform Owner context.
+ *
+ * Platform Owner authentication is based on the authenticated Supabase
+ * identity plus PLATFORM_OWNER_EMAIL.
+ *
+ * A public.users record is NOT required for the Platform Owner.
+ */
 export function getPlatformOwnerContext(
   authUserId: string,
   authEmail: string | null,
+  authProvider: string | null,
 ) {
   if (!isPlatformOwnerEmail(authEmail)) {
-    throw new Error("User is not the Platform Owner.");
+    throw new Error("Invalid credentials.");
   }
 
   return {
     user: {
+      /*
+       * Supabase Auth UUID is always the authoritative authentication
+       * identity, including for the Platform Owner.
+       */
       auth_user_id: authUserId,
 
+      /*
+       * Platform Owner may exist without a public.users record.
+       */
       user_id: null,
 
       email: authEmail,
@@ -60,9 +76,18 @@ export function getPlatformOwnerContext(
 
       employment_type: "FULL_TIME" as const,
 
+      /*
+       * Platform Owner is always considered enabled by the application
+       * authorization layer.
+       *
+       * Supabase Auth still remains responsible for actual authentication.
+       */
       auth_enabled: true,
 
-      login_provider: "GOOGLE" as const,
+      /*
+       * Preserve the authenticated provider when available.
+       */
+      login_provider: authProvider ?? "GOOGLE",
 
       invited_at: null,
 
@@ -101,25 +126,21 @@ async function resolveNormalUserWorkspace(
   authUserId: string,
   requestedWorkspaceId: string | null,
 ) {
-  /*
-   * ------------------------------------------------------------------------ *
-   * Explicit workspace selected
-   * ------------------------------------------------------------------------ *
-   *
-   * Validate that the authenticated user actually belongs to the requested
-   * workspace and that the membership is active.
-   */
+  /* ------------------------------------------------------------------------ */
+  /* Explicit workspace selected                                             */
+  /* ------------------------------------------------------------------------ */
+
   if (requestedWorkspaceId) {
     const { data: membership, error: membershipError } = await supabaseAdmin
       .from("workspace_members")
       .select(
         `
-            id,
-            workspace_id,
-            user_id,
-            status,
-            deleted_at
-          `,
+          id,
+          workspace_id,
+          user_id,
+          status,
+          deleted_at
+        `,
       )
       .eq("workspace_id", requestedWorkspaceId)
       .eq("user_id", authUserId)
@@ -137,7 +158,7 @@ async function resolveNormalUserWorkspace(
       throw new Error("User workspace membership has been deleted.");
     }
 
-    if (membership.status !== "active") {
+    if (membership.status !== "ACTIVE") {
       throw new Error("User workspace membership is not active.");
     }
 
@@ -147,27 +168,24 @@ async function resolveNormalUserWorkspace(
     };
   }
 
-  /*
-   * ------------------------------------------------------------------------ *
-   * No workspace explicitly selected
-   * ------------------------------------------------------------------------ *
-   *
-   * Find all active memberships.
-   */
+  /* ------------------------------------------------------------------------ */
+  /* No workspace explicitly selected                                        */
+  /* ------------------------------------------------------------------------ */
+
   const { data: memberships, error: membershipsError } = await supabaseAdmin
     .from("workspace_members")
     .select(
       `
-          id,
-          workspace_id,
-          user_id,
-          status,
-          deleted_at,
-          created_at
-        `,
+        id,
+        workspace_id,
+        user_id,
+        status,
+        deleted_at,
+        created_at
+      `,
     )
     .eq("user_id", authUserId)
-    .eq("status", "active")
+    .eq("status", "ACTIVE")
     .is("deleted_at", null)
     .order("created_at", {
       ascending: true,
@@ -212,7 +230,7 @@ async function resolvePlatformOwnerWorkspace(
     .select("*")
     .eq("id", workspaceId)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
   if (workspaceError) {
     throw workspaceError;
@@ -229,6 +247,37 @@ async function resolvePlatformOwnerWorkspace(
 /* Application Context                                                        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Resolve the authenticated Supabase identity into a WorkPulse application
+ * context.
+ *
+ * IMPORTANT:
+ *
+ * Password authentication is NOT performed here.
+ *
+ * Email/password:
+ *
+ *   supabase.auth.signInWithPassword()
+ *              ↓
+ *       Supabase validates password
+ *              ↓
+ *       authenticated Supabase session
+ *              ↓
+ *       getApplicationContext()
+ *
+ * Google:
+ *
+ *   supabase.auth.signInWithIdToken()
+ *              ↓
+ *       Supabase validates Google token
+ *              ↓
+ *       authenticated Supabase session
+ *              ↓
+ *       getApplicationContext()
+ *
+ * This function only handles WorkPulse authorization after Supabase
+ * authentication has already succeeded.
+ */
 export async function getApplicationContext(
   supabaseAdmin: SupabaseClient<Database>,
   authUserId: string,
@@ -236,34 +285,43 @@ export async function getApplicationContext(
   authProvider: string | null,
   workspace_id: string | null = null,
 ) {
+  /* ------------------------------------------------------------------------ */
+  /* Authentication Identity Validation                                      */
+  /* ------------------------------------------------------------------------ */
+
   /*
-   * ------------------------------------------------------------------------ *
-   * Check Platform Owner FIRST
-   * ------------------------------------------------------------------------ *
+   * Supabase Auth UUID is the authoritative identity.
    *
-   * Platform Owner is identified by PLATFORM_OWNER_EMAIL.
+   * Never fall back to email matching.
+   */
+  const normalizedAuthUserId = authUserId?.trim();
+
+  if (!normalizedAuthUserId) {
+    throw new Error("Invalid credentials.");
+  }
+
+  const normalizedWorkspaceId = workspace_id?.trim() || null;
+
+  /* ------------------------------------------------------------------------ */
+  /* Platform Owner                                                           */
+  /* ------------------------------------------------------------------------ */
+
+  /*
+   * Platform Owner is the ONLY exception to the requirement that a
+   * WorkPulse user must have a public.users record.
    *
-   * Platform Owner:
-   *
-   *   - does not require workspace_members
-   *   - does not require users.workspace_id
-   *   - may have a public.users record
-   *   - may not have a public.users record
-   *   - may authenticate before selecting a workspace
-   *   - may explicitly select any active workspace
+   * The Platform Owner is identified by the authenticated email configured
+   * in PLATFORM_OWNER_EMAIL.
    */
   if (isPlatformOwnerEmail(authEmail)) {
-    /*
-     * Check whether a real WorkPulse user record exists.
-     *
-     * This is NOT an authorization check.
-     *
-     * It only determines whether we should use the real users.id.
-     */
+    /* ---------------------------------------------------------------------- */
+    /* Check optional public.users record                                     */
+    /* ---------------------------------------------------------------------- */
+
     const { data: existingUser, error: existingUserError } = await supabaseAdmin
       .from("users")
-      .select("id")
-      .eq("id", authUserId)
+      .select("id, auth_enabled")
+      .eq("id", normalizedAuthUserId)
       .is("deleted_at", null)
       .maybeSingle();
 
@@ -271,29 +329,39 @@ export async function getApplicationContext(
       throw existingUserError;
     }
 
-    /*
-     * ---------------------------------------------------------------------- *
-     * Platform Owner without public.users record
-     * ---------------------------------------------------------------------- *
-     *
-     * Login is allowed globally.
-     *
-     * If no workspace is selected, return the global Platform Owner context.
-     */
+    /* ---------------------------------------------------------------------- */
+    /* Platform Owner without public.users                                    */
+    /* ---------------------------------------------------------------------- */
+
     if (!existingUser) {
-      if (!workspace_id) {
-        return getPlatformOwnerContext(authUserId, authEmail);
+      /*
+       * No workspace selected.
+       *
+       * Return global Platform Owner context.
+       */
+      if (!normalizedWorkspaceId) {
+        return getPlatformOwnerContext(
+          normalizedAuthUserId,
+          authEmail,
+          authProvider,
+        );
       }
 
       /*
-       * Platform Owner can select any active workspace.
+       * Platform Owner may administer any active workspace.
+       *
+       * workspace_members is NOT required.
        */
       const workspace = await resolvePlatformOwnerWorkspace(
         supabaseAdmin,
-        workspace_id,
+        normalizedWorkspaceId,
       );
 
-      const platformContext = getPlatformOwnerContext(authUserId, authEmail);
+      const platformContext = getPlatformOwnerContext(
+        normalizedAuthUserId,
+        authEmail,
+        authProvider,
+      );
 
       return {
         user: {
@@ -305,31 +373,33 @@ export async function getApplicationContext(
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* Platform Owner with public.users                                       */
+    /* ---------------------------------------------------------------------- */
+
     /*
-     * ---------------------------------------------------------------------- *
-     * Platform Owner with public.users record
-     * ---------------------------------------------------------------------- *
+     * Platform Owner remains exempt from auth_enabled.
      *
-     * Always resolve the real WorkPulse user identity.
+     * PLATFORM_OWNER_EMAIL + authenticated Supabase identity is the
+     * Platform Owner authorization mechanism.
      */
     const userContext = await getUserContext(
       supabaseAdmin,
-      authUserId,
+      normalizedAuthUserId,
       authEmail,
       authProvider,
       null,
     );
 
     if (!userContext.user_id) {
-      throw new Error("User WorkPulse record is missing.");
+      throw new Error("Invalid credentials.");
     }
 
-    /*
-     * No workspace selected.
-     *
-     * Return global Platform Owner context.
-     */
-    if (!workspace_id) {
+    /* ---------------------------------------------------------------------- */
+    /* Platform Owner without selected workspace                              */
+    /* ---------------------------------------------------------------------- */
+
+    if (!normalizedWorkspaceId) {
       return {
         user: {
           auth_user_id: userContext.auth_user_id,
@@ -377,6 +447,11 @@ export async function getApplicationContext(
           shift_id: undefined,
 
           meta: {
+            ...(userContext.meta &&
+            typeof userContext.meta === "object" &&
+            !Array.isArray(userContext.meta)
+              ? userContext.meta
+              : {}),
             platform_owner: true,
           },
         },
@@ -385,20 +460,20 @@ export async function getApplicationContext(
       };
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* Platform Owner with selected workspace                                 */
+    /* ---------------------------------------------------------------------- */
+
     /*
-     * ---------------------------------------------------------------------- *
-     * Platform Owner with selected workspace
-     * ---------------------------------------------------------------------- *
-     *
-     * Platform Owner may administer the selected workspace even without a
+     * Platform Owner may administer the selected workspace without a
      * workspace_members record.
      *
-     * Attendance authorization is intentionally handled separately and
-     * must still require actual membership.
+     * Attendance authorization remains separate and must still require
+     * actual membership where applicable.
      */
     const workspace = await resolvePlatformOwnerWorkspace(
       supabaseAdmin,
-      workspace_id,
+      normalizedWorkspaceId,
     );
 
     return {
@@ -448,6 +523,11 @@ export async function getApplicationContext(
         shift_id: undefined,
 
         meta: {
+          ...(userContext.meta &&
+          typeof userContext.meta === "object" &&
+          !Array.isArray(userContext.meta)
+            ? userContext.meta
+            : {}),
           platform_owner: true,
         },
       },
@@ -456,19 +536,23 @@ export async function getApplicationContext(
     };
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Normal WorkPulse User                                                    */
+  /* ------------------------------------------------------------------------ */
+
   /*
-   * ------------------------------------------------------------------------ *
-   * Normal WorkPulse User
-   * ------------------------------------------------------------------------ *
+   * Required relationship:
    *
-   * The authenticated Supabase Auth ID is authoritative.
+   *   auth.users.id
+   *          =
+   *   public.users.id
    *
-   * public.users.id must correspond to auth.users.id.
+   * Email is deliberately NOT used as a fallback.
    */
   const { data: existingUser, error: existingUserError } = await supabaseAdmin
     .from("users")
-    .select("id")
-    .eq("id", authUserId)
+    .select("id, auth_enabled")
+    .eq("id", normalizedAuthUserId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -476,26 +560,46 @@ export async function getApplicationContext(
     throw existingUserError;
   }
 
-  if (!existingUser) {
-    throw new Error("User account is not registered in WorkPulse.");
-  }
+  /* ------------------------------------------------------------------------ */
+  /* Authenticated but not registered in WorkPulse                            */
+  /* ------------------------------------------------------------------------ */
 
   /*
-   * ------------------------------------------------------------------------ *
-   * Resolve Workspace
-   * ------------------------------------------------------------------------ *
+   * Supabase authentication succeeding is NOT enough to access WorkPulse.
    *
-   * If workspace_id was supplied, validate that membership.
+   * A normal user must have a matching public.users record.
    *
-   * If workspace_id was not supplied:
-   *
-   *   - one active workspace -> automatically select it
-   *   - multiple active workspaces -> require explicit selection
+   * This prevents Google users from entering WorkPulse merely because
+   * Google authentication succeeded.
    */
+  if (!existingUser) {
+    throw new Error("Invalid credentials.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* WorkPulse Authentication Enabled Check                                   */
+  /* ------------------------------------------------------------------------ */
+
+  /*
+   * auth_enabled is a WorkPulse application-level login control.
+   *
+   * Supabase Auth may have successfully authenticated the user, but the
+   * user is still denied access to WorkPulse when auth_enabled is false.
+   *
+   * Use the generic error to avoid exposing account state.
+   */
+  if (!existingUser.auth_enabled) {
+    throw new Error("Invalid credentials.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Resolve Workspace                                                        */
+  /* ------------------------------------------------------------------------ */
+
   const resolvedWorkspace = await resolveNormalUserWorkspace(
     supabaseAdmin,
-    authUserId,
-    workspace_id,
+    normalizedAuthUserId,
+    normalizedWorkspaceId,
   );
 
   const workspaceId = resolvedWorkspace.workspaceId;
@@ -504,16 +608,13 @@ export async function getApplicationContext(
     throw new Error("User workspace could not be resolved.");
   }
 
-  /*
-   * ------------------------------------------------------------------------ *
-   * Resolve Workspace-Specific User Context
-   * ------------------------------------------------------------------------ *
-   *
-   * getUserContext() receives the authoritative workspace ID.
-   */
+  /* ------------------------------------------------------------------------ */
+  /* Resolve Workspace-Specific User Context                                  */
+  /* ------------------------------------------------------------------------ */
+
   const userContext = await getUserContext(
     supabaseAdmin,
-    authUserId,
+    normalizedAuthUserId,
     authEmail,
     authProvider,
     workspaceId,
@@ -524,21 +625,29 @@ export async function getApplicationContext(
   }
 
   if (!userContext.user_id) {
-    throw new Error("User WorkPulse record is missing.");
+    throw new Error("Invalid credentials.");
   }
 
   /*
-   * ------------------------------------------------------------------------ *
-   * Workspace
-   * ------------------------------------------------------------------------ *
+   * Defense-in-depth:
+   *
+   * getUserContext() and workspace_members must resolve to the same
+   * workspace.
    */
+  if (userContext.workspace_id !== workspaceId) {
+    throw new Error("User does not belong to this workspace.");
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Workspace                                                                */
+  /* ------------------------------------------------------------------------ */
 
   const { data: workspace, error: workspaceError } = await supabaseAdmin
     .from("workspaces")
     .select("*")
-    .eq("id", userContext.workspace_id)
+    .eq("id", workspaceId)
     .is("deleted_at", null)
-    .single();
+    .maybeSingle();
 
   if (workspaceError) {
     throw workspaceError;
@@ -548,11 +657,9 @@ export async function getApplicationContext(
     throw new Error("User workspace not found.");
   }
 
-  /*
-   * ------------------------------------------------------------------------ *
-   * Return Application Context
-   * ------------------------------------------------------------------------ *
-   */
+  /* ------------------------------------------------------------------------ */
+  /* Return Application Context                                               */
+  /* ------------------------------------------------------------------------ */
 
   return {
     user: {
@@ -644,7 +751,7 @@ export type AttendanceContext = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
+/* Attendance Helpers                                                         */
 /* -------------------------------------------------------------------------- */
 
 function getUtcDate(date: Date): string {
@@ -682,6 +789,10 @@ export async function resolveAttendanceContext(
     requestedWorkDate,
   } = options;
 
+  /* ------------------------------------------------------------------------ */
+  /* Input Validation                                                         */
+  /* ------------------------------------------------------------------------ */
+
   if (!workspaceId) {
     throw new Error("Workspace ID is required.");
   }
@@ -695,7 +806,7 @@ export async function resolveAttendanceContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Initial assignment lookup                                                */
+  /* Initial Assignment Lookup                                                */
   /* ------------------------------------------------------------------------ */
 
   const initialLookupDate = requestedWorkDate ?? getUtcDate(timestamp);
@@ -715,7 +826,7 @@ export async function resolveAttendanceContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Determine effective shift timezone                                       */
+  /* Determine Effective Shift Timezone                                       */
   /* ------------------------------------------------------------------------ */
 
   const firstShift = resolved.shift;
@@ -723,7 +834,7 @@ export async function resolveAttendanceContext(
   const timezone = firstShift.timezone;
 
   /* ------------------------------------------------------------------------ */
-  /* Resolve local calendar date                                              */
+  /* Resolve Local Calendar Date                                              */
   /* ------------------------------------------------------------------------ */
 
   const localCalendarDate = getLocalCalendarDate(timestamp, timezone);
@@ -747,7 +858,7 @@ export async function resolveAttendanceContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Validate requested shift                                                 */
+  /* Validate Requested Shift                                                 */
   /* ------------------------------------------------------------------------ */
 
   if (requestedShiftId && requestedShiftId !== shift.id) {
@@ -757,7 +868,7 @@ export async function resolveAttendanceContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Permanent user_shift reference                                           */
+  /* Permanent user_shift Reference                                           */
   /* ------------------------------------------------------------------------ */
 
   const userShiftId = resolved.user_shift_id;
@@ -775,7 +886,7 @@ export async function resolveAttendanceContext(
   }
 
   /* ------------------------------------------------------------------------ */
-  /* Resolve actual work window                                               */
+  /* Resolve Actual Work Window                                               */
   /* ------------------------------------------------------------------------ */
 
   const window = resolveWorkWindow({
@@ -787,7 +898,7 @@ export async function resolveAttendanceContext(
   });
 
   /* ------------------------------------------------------------------------ */
-  /* Return authoritative attendance context                                  */
+  /* Return Authoritative Attendance Context                                  */
   /* ------------------------------------------------------------------------ */
 
   return {
